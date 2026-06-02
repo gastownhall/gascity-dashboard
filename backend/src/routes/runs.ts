@@ -75,12 +75,20 @@ export function runsRouter(
       return;
     }
     try {
-      const { raw } = await getRunWithRuntimeState(
-        gc,
-        parsed.runId,
-        parsed.scope ?? defaultRunScope(gc.cityName),
+      const scope = parsed.scope ?? defaultRunScope(gc.cityName);
+      // Reuse the cached detail assemble — it already carries executionPath —
+      // so the diff endpoint never re-pays the supervisor's all-store scan that
+      // the detail endpoint just paid. On a run-detail page the two fetches
+      // fire together and share one scan via the cache's single-flight; repeat
+      // loads are served from memory (gascity-dashboard-wqsk). `?refresh=1`
+      // forces a fresh assemble in lockstep with the detail refresh.
+      const force = req.query.refresh === '1';
+      const cacheKey = runDetailCacheKey(parsed.runId, scope);
+      const detail = await detailCache.get(
+        cacheKey,
+        () => assembleRunDetail(gc, parsed.runId, scope, opts),
+        { force },
       );
-      const detail = enrichFormulaRun(raw, baseEnrichOptions(opts));
       const diff = await readRunGitDiff(detail.executionPath, opts.runCwdAllowedRoots ?? []);
       res.json(diff);
     } catch (err) {
@@ -322,12 +330,6 @@ function parseRunRequest(
 
 function defaultRunScope(cityName: string): { scopeKind: RunScopeKind; scopeRef: string } {
   return { scopeKind: 'city', scopeRef: cityName };
-}
-
-function baseEnrichOptions(opts: RunsRouterOptions): { rigRoot?: string } {
-  return {
-    ...(opts.rigRoot !== undefined ? { rigRoot: opts.rigRoot } : {}),
-  };
 }
 
 function enrichOptions(

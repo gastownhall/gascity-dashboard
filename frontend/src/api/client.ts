@@ -487,7 +487,7 @@ export const api = {
   },
   runDiff(
     runId: string,
-    params?: { scopeKind?: RunScopeKind; scopeRef?: string },
+    params?: { scopeKind?: RunScopeKind; scopeRef?: string; refresh?: boolean },
   ): Promise<RunDiffResponse> {
     const qs = runQuery(params);
     return request('GET', cityPath(`/runs/${encodeURIComponent(runId)}/diff${qs}`), decodeRunDiff);

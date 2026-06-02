@@ -41,6 +41,10 @@ export function useRunDiff(
     key,
     () => loadRunDiff(runId, scopeKind, scopeRef),
     {
+      // Explicit refresh forces the backend to re-assemble (bypassing the
+      // shared run-detail cache the diff now reads from) so a deliberate
+      // refresh re-fetches in lockstep with the detail (gascity-dashboard-wqsk).
+      refreshFetcher: () => loadRunDiff(runId, scopeKind, scopeRef, true),
       onError: (err) => {
         if (runId !== undefined) reportRunDiffError('load diff', runId, err);
       },
@@ -64,11 +68,13 @@ async function loadRunDiff(
   runId: string | undefined,
   scopeKind?: RunScopeKind,
   scopeRef?: string,
+  refresh?: boolean,
 ): Promise<RunDiffPayload> {
   if (!runId) return { kind: 'unrequested' };
-  const params: { scopeKind?: RunScopeKind; scopeRef?: string } = {};
+  const params: { scopeKind?: RunScopeKind; scopeRef?: string; refresh?: boolean } = {};
   if (scopeKind !== undefined) params.scopeKind = scopeKind;
   if (scopeRef !== undefined) params.scopeRef = scopeRef;
+  if (refresh) params.refresh = true;
   const diff = await api.runDiff(runId, params);
   return { kind: 'loaded', diff };
 }

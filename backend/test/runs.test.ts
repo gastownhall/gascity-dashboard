@@ -961,6 +961,33 @@ describe('runs detail route', () => {
     }
   });
 
+  test('the diff endpoint shares the detail cache: detail then diff hits the supervisor once', async () => {
+    fake.setHandler((req, res) => {
+      res.setHeader('content-type', 'application/json');
+      if (respondFormulaDetail(req, res)) return;
+      if (req.url === '/v0/city/racoon-city/sessions') {
+        res.end(JSON.stringify({ items: [], total: 0 }));
+        return;
+      }
+      res.end(JSON.stringify(supervisorWireBody(graphV2Snapshot())));
+    });
+    const { url, close } = await startApp(buildApp(fake.baseUrl));
+    const workflowReqs = () =>
+      fake.requests.filter((u) => u.startsWith('/v0/city/racoon-city/workflow/gc-root')).length;
+    try {
+      const detail = await fetch(`${url}/api/runs/gc-root?scope_kind=city&scope_ref=racoon-city`);
+      assert.equal(detail.status, 200);
+      assert.equal(workflowReqs(), 1);
+      // The diff endpoint reuses the cached detail (it only needs
+      // executionPath) instead of re-scanning every store.
+      const diff = await fetch(`${url}/api/runs/gc-root/diff?scope_kind=city&scope_ref=racoon-city`);
+      assert.equal(diff.status, 200);
+      assert.equal(workflowReqs(), 1, `unexpected upstream requests: ${fake.requests.join(', ')}`);
+    } finally {
+      await close();
+    }
+  });
+
   test('?refresh=1 bypasses the cache and re-fetches from the supervisor', async () => {
     fake.setHandler((req, res) => {
       res.setHeader('content-type', 'application/json');
