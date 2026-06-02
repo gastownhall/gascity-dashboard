@@ -4,8 +4,8 @@ import { api, apiErrorParts, formatApiError } from '../api/client';
 import { useNow } from '../contexts/NowContext';
 
 // Shared fetch state for a single bead's detail surface
-// (gascity-dashboard-6frc). Both the BeadDetailModal (list view) and the
-// board's BeadDetailRail render the same bead body, so the "fetch by id
+// (gascity-dashboard-6frc). The BeadDetailModal renders this from both the
+// Beads board and the AgentDetail assigned-beads list, so the "fetch by id
 // when the cached row lacks a description" logic lives here once rather
 // than in each surface.
 

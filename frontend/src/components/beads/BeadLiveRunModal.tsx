@@ -5,7 +5,7 @@ import { Modal } from '../Modal';
 // Pop-out of a bead's live agent run (gascity-dashboard-6frc). Pure
 // composition over the same Modal + LiveSessionPeek the Agents-tab peek
 // uses, so the bead board and the agents list share one live-stream body.
-// The bead → session resolution happens in the caller (BeadDetailRail);
+// The bead → session resolution happens in the caller (BeadDetailModal);
 // this component only renders the resolved session's stream.
 
 interface BeadLiveRunModalProps {

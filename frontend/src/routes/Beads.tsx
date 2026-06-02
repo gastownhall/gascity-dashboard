@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GC_EVENT_PREFIX, type GcBead } from 'gas-city-dashboard-shared';
 import { api, formatApiError } from '../api/client';
 import { BeadBoardSection } from '../components/beads/BeadBoardSection';
-import { BeadDetailRail } from '../components/beads/BeadDetailRail';
+import { BeadDetailModal } from '../components/BeadDetailModal';
 import { Button } from '../components/Button';
 import { FilterChips } from '../components/FilterChips';
 import { ListSearchBar } from '../components/ListSearchBar';
@@ -130,6 +130,14 @@ export function BeadsPage() {
     () => matched.find((b) => b.id === selectedId) ?? null,
     [matched, selectedId],
   );
+  // Resolved graph node for the open bead, so the detail pop-out can render
+  // its needs/blocks tree. Null when the bead is outside the current window
+  // (e.g. a re-centred related bead): the modal still shows the body, just
+  // without dependencies.
+  const selectedNode = useMemo(
+    () => (selectedId !== null ? graph.nodes.get(selectedId) ?? null : null),
+    [graph, selectedId],
+  );
 
   const runAction = useCallback(
     async (
@@ -256,30 +264,30 @@ export function BeadsPage() {
               : 'Nothing on the queue right now.'}
         </p>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-x-10 gap-y-8">
-          <div className="space-y-12">
-            {filters.groups.map((g) => (
-              <BeadBoardSection
-                key={g.projectKey}
-                label={g.project}
-                count={g.totalInProject}
-                graph={graph}
-                ids={groupIds.get(g.projectKey) ?? EMPTY_IDS}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-              />
-            ))}
-          </div>
-          <div className="xl:sticky xl:top-6 xl:self-start">
-            <BeadDetailRail
-              beadId={selectedId}
-              initialBead={selectedBead}
-              sessions={sessionItems}
-              onOpenBead={setSelectedId}
+        <div className="space-y-12">
+          {filters.groups.map((g) => (
+            <BeadBoardSection
+              key={g.projectKey}
+              label={g.project}
+              count={g.totalInProject}
+              graph={graph}
+              ids={groupIds.get(g.projectKey) ?? EMPTY_IDS}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
             />
-          </div>
+          ))}
         </div>
       )}
+
+      <BeadDetailModal
+        open={selectedId !== null}
+        onClose={() => setSelectedId(null)}
+        beadId={selectedId}
+        initialBead={selectedBead}
+        depNode={selectedNode}
+        sessions={sessionItems}
+        onOpenBead={setSelectedId}
+      />
 
       <Modal
         open={closing !== null}

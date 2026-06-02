@@ -64,25 +64,17 @@ describe('BeadBoard', () => {
     expect(onSelect).toHaveBeenCalledWith('A');
   });
 
-  it('expands needs/blocks sub-rows for the selected bead and re-centres on click', () => {
-    const onSelect = vi.fn();
-    // A is closed (done column); B needs A so B is ready (ready column). The
-    // selected bead B shows its upstream dependency A as a typeset sub-row
-    // inside its own column, distinct from A's own row in the done column.
-    renderBoard(
-      [bead('A', 'closed'), bead('B', 'open', { needs: ['A'] })],
-      'B',
-      onSelect,
-    );
-    const ready = screen.getByRole('region', { name: 'ready' });
-    fireEvent.click(within(ready).getByTitle('Select A'));
-    expect(onSelect).toHaveBeenCalledWith('A');
+  it('annotates a row with its dependency neighbourhood (full tree lives in the modal)', () => {
+    // B needs A: B carries a `needs 1` annotation; A (downstream) carries
+    // `blocks 1`. The navigable tree itself moved to BeadDependencies — see
+    // BeadDependencies.test — so the row only summarises the counts.
+    renderBoard([bead('A', 'closed'), bead('B', 'open', { needs: ['A'] })]);
+    expect(screen.getByText(/needs 1/)).toBeTruthy();
+    expect(screen.getByText(/blocks 1/)).toBeTruthy();
   });
 
-  it('renders an unresolved upstream edge without a navigation target', () => {
+  it('flags an unresolved upstream edge on the row summary', () => {
     renderBoard([bead('B', 'open', { needs: ['GHOST'] })], 'B');
-    // Two "unresolved" marks: the row summary + the sub-row label. Neither
-    // points anywhere (no Select GHOST button).
     expect(screen.queryByTitle('Select GHOST')).toBeNull();
     expect(screen.getAllByText('unresolved').length).toBeGreaterThan(0);
   });
