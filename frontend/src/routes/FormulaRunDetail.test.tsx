@@ -12,6 +12,8 @@ import {
   type RunDiffResponse,
   type FormulaRunDetail,
   type RunScopeKind,
+  type DashboardSnapshot,
+  type RunLane,
 } from 'gas-city-dashboard-shared';
 import rawFormulaRunDetailFixture from '../test/fixtures/formula-run-detail.json';
 
@@ -105,6 +107,36 @@ describe('FormulaRunDetailPage', () => {
     const refreshButton = screen.getByRole('button', { name: /^refresh$/i }) as HTMLButtonElement;
     expect(refreshButton.disabled).toBe(true);
     expect(screen.queryByRole('button', { name: /^refreshing$/i })).toBeNull();
+  });
+
+  it('renders an optimistic stage-ladder skeleton from the snapshot lane while detail loads', async () => {
+    // The first load of a run is bounded by the supervisor's all-store scan
+    // (gascity-dashboard-wqsk). When the operator arrives from /runs the
+    // snapshot cache already holds this run's lane, so the page shows its
+    // title + phase stages instantly instead of a blank spinner. Here the
+    // detail (and diff) fetch hangs while the snapshot resolves with a lane.
+    invalidate('snapshot');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/city/test-city/snapshot')) {
+        return jsonResponse(snapshotWithActiveLane());
+      }
+      // Everything run-specific (detail, diff, links) hangs → stay in loading.
+      return new Promise<Response>(() => {});
+    }));
+
+    renderPage();
+
+    const ladder = await screen.findByRole('list', { name: /pending adoption run stages/i });
+    const stageRows = within(ladder)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent?.replace(/\s+/g, ' ').trim());
+    expect(stageRows).toEqual(['◆ Intake', '⬣ Implementation', '· Review']);
+    expect(screen.getByText(/^Loading run detail\.$/i)).toBeTruthy();
+    // The plain spinner is replaced by the skeleton, and the heavy detail
+    // diagram has not rendered yet.
+    expect(screen.queryByText(/^Loading formula run\.$/i)).toBeNull();
+    expect(screen.queryByRole('heading', { name: /local changes/i })).toBeNull();
   });
 
   it('does not repeat missing formula metadata as formula detail and a partial banner', async () => {
@@ -608,6 +640,85 @@ function RouteControls() {
       Clear node query
     </button>
   );
+}
+
+// A snapshot whose runs source carries one lane matching the route's runId, so
+// the detail page can render an optimistic skeleton while the full detail
+// loads. city/resources are error states — the skeleton only reads runs.lanes.
+function snapshotWithActiveLane(): DashboardSnapshot {
+  const lane: RunLane = {
+    id: 'gc-adopt-pr-active',
+    title: 'Pending adoption run',
+    formula: { status: 'known', name: 'mol-adopt-pr-v2' },
+    scope: { status: 'available', kind: 'city', ref: 'racoon-city', rootStoreRef: 'city:racoon-city' },
+    external: { status: 'unavailable', error: 'external unavailable in test' },
+    phase: 'implementation',
+    phaseLabel: 'Implementation',
+    statusCounts: { in_progress: 1 },
+    activeAssignees: [],
+    updatedAt: { status: 'available', at: '2026-05-27T22:01:00Z' },
+    stages: [
+      { key: 'intake', label: 'Intake', status: 'complete' },
+      { key: 'implementation', label: 'Implementation', status: 'active' },
+      { key: 'review', label: 'Review', status: 'pending' },
+    ],
+    progress: { status: 'unavailable', error: 'active run step unavailable' },
+    formulaStageResolved: false,
+    health: {
+      status: 'available',
+      data: {
+        phaseConfidence: 'known',
+        needsOperator: false,
+        stuckNode: { status: 'unavailable', error: 'run stuck node unavailable' },
+        thrashingDetected: false,
+        session: { status: 'unresolved', error: 'run session unresolved' },
+      },
+    },
+  };
+  return {
+    generatedAt: '2026-05-25T00:00:00.000Z',
+    config: {
+      cityName: 'test-city',
+      cityRoot: '/tmp/example-city',
+      useFixtures: false,
+      enabledModules: null,
+      defaultView: null,
+    },
+    headline: {
+      activeAgents: { status: 'unavailable', source: 'city', error: 'city unavailable in test' },
+      maxAgents: { status: 'unavailable', source: 'city', error: 'city unavailable in test' },
+      activeSessions: { status: 'unavailable', source: 'city', error: 'city unavailable in test' },
+      activeRuns: { status: 'available', value: 1 },
+    },
+    sources: {
+      city: { source: 'city', status: 'error', error: 'city unavailable in test' },
+      resources: { source: 'resources', status: 'error', error: 'resources unavailable in test' },
+      runs: {
+        source: 'runs',
+        status: 'fresh',
+        fetchedAt: '2026-05-25T00:00:00.000Z',
+        staleAt: '2026-05-25T00:01:00.000Z',
+        error: { kind: 'none' },
+        data: {
+          totalActive: 1,
+          totalHistorical: 0,
+          historicalLanes: [],
+          runCounts: {
+            total: 1,
+            visible: 1,
+            prReview: 0,
+            designReview: 0,
+            bugfix: 0,
+            blocked: 0,
+            other: 1,
+          },
+          lanes: [lane],
+          recentChanges: [],
+          census: { status: 'unavailable', error: 'run health has not been derived' },
+        },
+      },
+    },
+  };
 }
 
 function jsonResponse(payload: unknown): Response {

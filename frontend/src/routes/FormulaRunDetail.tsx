@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { GC_EVENT_PREFIX, SCOPE_REF_RE } from 'gas-city-dashboard-shared';
 import type {
@@ -25,6 +25,8 @@ import { useRunNodeSelection } from '../hooks/useRunNodeSelection';
 import { useFormulaRunDetail } from '../hooks/useFormulaRunDetail';
 import { useRunDiff } from '../hooks/useRunDiff';
 import { useEntityLinks } from '../hooks/useEntityLinks';
+import { useCachedData } from '../hooks/useCachedData';
+import { api } from '../api/client';
 import { NEEDS_YOU_VIEW_PARAM } from '../views/modules/maintainer/needsYou';
 
 const RUN_DETAIL_EVENT_PREFIXES = [
@@ -96,6 +98,25 @@ export function FormulaRunDetailPage() {
   const [viewingBeadId, setViewingBeadId] = useState<string | null>(null);
   const now = useNow();
 
+  // Optimistic skeleton (gascity-dashboard-wqsk): the first load of a run is
+  // bounded by the supervisor's all-store scan (seconds). The snapshot cache —
+  // already warm when the operator arrives from /runs — carries this run's lane
+  // (title + phase stages), so render that instantly instead of a blank spinner
+  // while the full detail assembles. Shares the 'snapshot' cache key with the
+  // Runs list, so list→detail navigation pays no extra fetch; a cold deep-link
+  // does one cheap snapshot GET and falls back to the plain spinner if the lane
+  // isn't present.
+  const snapshot = useCachedData('snapshot', () => api.snapshot());
+  const skeletonLane = useMemo(() => {
+    if (!runId) return null;
+    const runs = snapshot.data?.sources.runs;
+    const runsData =
+      runs && (runs.status === 'fresh' || runs.status === 'stale' || runs.status === 'fixture')
+        ? runs.data
+        : null;
+    return runsData?.lanes.find((lane) => lane.id === runId) ?? null;
+  }, [snapshot.data, runId]);
+
   const synopsis = detail
     ? `${detail.progress.visibleNodeCount} nodes. ${summarizeNodeStatuses(detail.progress)}. Local changes are shown for the run execution folder.`
     : initialLoading && !routeError
@@ -153,7 +174,14 @@ export function FormulaRunDetailPage() {
       />
 
       {loading && !routeError && !detail ? (
-        <p className="text-body text-fg-muted italic">Loading formula run.</p>
+        skeletonLane ? (
+          <>
+            <StageLadder stages={skeletonLane.stages} label={skeletonLane.title} />
+            <p className="text-body text-fg-muted italic mt-8">Loading run detail.</p>
+          </>
+        ) : (
+          <p className="text-body text-fg-muted italic">Loading formula run.</p>
+        )
       ) : pageError && !detail ? (
         <p className="text-body text-accent" role="alert">{pageError}</p>
       ) : readyRun ? (
