@@ -19,6 +19,7 @@ import { mailRouter } from '../routes/mail.js';
 import { mailSendRouter } from '../routes/mail-send.js';
 import { createDoltNomsSampler, doltRouter, type DoltNomsSampler } from '../routes/dolt.js';
 import { eventsRouter } from '../routes/events.js';
+import { homePendingRouter } from '../routes/home-pending.js';
 import { snapshotRouter } from '../routes/snapshot.js';
 import { createSnapshotService } from '../snapshot/service.js';
 import { ALL_MODULES } from '../views/registry.js';
@@ -148,6 +149,10 @@ export function createCityRuntime(opts: CreateCityRuntimeOptions): CityRuntime {
 
   const snapshotService = createSnapshotService({ gc, config: dashboardConfig });
   router.use('/snapshot', snapshotRouter(snapshotService));
+  // Home-view pending-decision SSE (gascity-dashboard-26zl). Streams this
+  // runtime's pending aggregator; the consumer count lazily activates the
+  // aggregator's per-session fan-out.
+  router.use('/home/pending', homePendingRouter(snapshotService));
 
   // SSE routes. session-stream + events proxy the supervisor's city-scoped
   // streams; both read this runtime's gc. Mounted on the per-city router so

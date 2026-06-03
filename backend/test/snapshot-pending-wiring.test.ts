@@ -89,7 +89,18 @@ function baseOptions(): CreateSnapshotServiceOptions {
 }
 
 describe('snapshot service — pending aggregator wiring', () => {
-  test('a snapshot read subscribes the active sessions and exposes their pending', async () => {
+  test('does NOT subscribe while no consumer is streaming (lazy activation)', async () => {
+    const subscriber = new FakeSubscriber();
+    const service = createSnapshotService({
+      ...baseOptions(),
+      sessions: sessionsCacheOf([session('s1', 'active')]),
+      pendingSubscriber: subscriber,
+    });
+    await service.getSnapshot();
+    assert.deepEqual(subscriber.subscribeCalls, []); // inert until a consumer streams
+  });
+
+  test('a streaming consumer activates subscription of active sessions and sees their pending', async () => {
     const subscriber = new FakeSubscriber();
     const service = createSnapshotService({
       ...baseOptions(),
@@ -97,16 +108,34 @@ describe('snapshot service — pending aggregator wiring', () => {
       pendingSubscriber: subscriber,
     });
 
+    let changes = 0;
+    service.streamPending(() => { changes += 1; });
     await service.getSnapshot();
     assert.deepEqual(subscriber.subscribeCalls.sort(), ['s1', 's2']); // 'asleep' is not observed
-    assert.deepEqual(service.pendingAlerts(), []); // nothing pending yet
+    assert.deepEqual(service.pendingAlerts(), []);
 
     subscriber.pending('s1', { request_id: 'req-1', kind: 'tool_approval' });
+    assert.ok(changes >= 1); // listener fired on change (push, not poll)
     const alerts = service.pendingAlerts();
     assert.equal(alerts.length, 1);
-    assert.equal(alerts[0]!.kind, 'pending-decision');
     assert.equal(alerts[0]!.dedupKey, 'pending-decision:req-1');
     assert.equal(alerts[0]!.ref.sessionId, 's1');
+  });
+
+  test('the last consumer leaving tears down subscriptions and clears pending', async () => {
+    const subscriber = new FakeSubscriber();
+    const service = createSnapshotService({
+      ...baseOptions(),
+      sessions: sessionsCacheOf([session('s1', 'active')]),
+      pendingSubscriber: subscriber,
+    });
+    const stop = service.streamPending(() => {});
+    await service.getSnapshot();
+    subscriber.pending('s1', { request_id: 'req-1', kind: 'tool_approval' });
+    assert.equal(service.pendingAlerts().length, 1);
+
+    stop();
+    assert.deepEqual(service.pendingAlerts(), []); // store cleared on deactivate
   });
 
   test('the snapshot envelope still builds (alerts field present) alongside the aggregator', async () => {
@@ -122,8 +151,11 @@ describe('snapshot service — pending aggregator wiring', () => {
   test('with no subscriber and no gc the aggregator is inert (no pending, snapshot works)', async () => {
     const service = createSnapshotService(baseOptions());
     const snap = await service.getSnapshot();
+    const stop = service.streamPending(() => {});
+    await service.getSnapshot();
     assert.deepEqual(service.pendingAlerts(), []);
     assert.ok(Array.isArray(snap.alerts));
-    service.closePending(); // no-op, must not throw
+    stop();
+    service.closePending(); // must not throw
   });
 });

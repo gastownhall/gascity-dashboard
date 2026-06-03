@@ -55,6 +55,8 @@ export interface PendingSubscriptionManagerOptions {
   store: PendingStore;
   now?: () => Date;
   scheduleReconnect?: ReconnectScheduler;
+  /** Invoked after any change to the store's pending set (push for Layer 3). */
+  onChange?: () => void;
 }
 
 interface SessionSub {
@@ -68,6 +70,7 @@ export class PendingSubscriptionManager {
   private readonly store: PendingStore;
   private readonly now: () => Date;
   private readonly scheduleReconnect: ReconnectScheduler;
+  private readonly onChange: () => void;
   private readonly subs = new Map<string, SessionSub>();
 
   constructor(options: PendingSubscriptionManagerOptions) {
@@ -75,6 +78,7 @@ export class PendingSubscriptionManager {
     this.store = options.store;
     this.now = options.now ?? (() => new Date());
     this.scheduleReconnect = options.scheduleReconnect ?? defaultReconnectScheduler;
+    this.onChange = options.onChange ?? (() => {});
   }
 
   /** Number of sessions currently subscribed (live or awaiting reconnect). */
@@ -96,7 +100,7 @@ export class PendingSubscriptionManager {
     for (const sessionId of active) {
       if (!this.subs.has(sessionId)) this.open(sessionId, 0);
     }
-    this.store.retainActive(active);
+    if (this.store.retainActive(active) > 0) this.onChange();
   }
 
   /** Close every subscription and cancel pending reconnects (e.g. shutdown). */
@@ -121,6 +125,7 @@ export class PendingSubscriptionManager {
     } else {
       this.store.observe(sessionId, pending, this.now().toISOString());
     }
+    this.onChange();
   }
 
   private handleError(sessionId: string, _error: Error): void {

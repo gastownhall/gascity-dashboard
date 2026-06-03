@@ -89,7 +89,15 @@ export interface SnapshotService {
    * Layer 3 (26zl) streams this to the home view.
    */
   pendingAlerts: () => readonly AlertItem[];
-  /** Tear down the pending aggregator's subscriptions (process shutdown). */
+  /**
+   * Register a live pending-feed consumer (gascity-dashboard-26zl, Layer 3).
+   * The aggregator activates (starts subscribing to active sessions) while ≥1
+   * consumer is registered and tears down when the last unsubscribes — so no
+   * SSE fan-out runs without a consumer. `listener` fires on every change; read
+   * the current set via pendingAlerts(). Returns an unsubscribe function.
+   */
+  streamPending: (listener: () => void) => () => void;
+  /** Tear down the pending aggregator's subscriptions + consumers (shutdown). */
   closePending: () => void;
 }
 
@@ -157,6 +165,10 @@ export function createSnapshotService(
   // persisted state (R13) and is reconciled to the active-session set on each
   // read, so a gone session's pending cannot linger.
   const pendingStore = new PendingStore();
+  const pendingListeners = new Set<() => void>();
+  const notifyPending = (): void => {
+    for (const listener of pendingListeners) listener();
+  };
   const pendingSubscriber =
     options.pendingSubscriber ??
     (options.gc !== undefined && !options.config.useFixtures
@@ -166,8 +178,35 @@ export function createSnapshotService(
       : undefined);
   const pendingManager =
     pendingSubscriber !== undefined
-      ? new PendingSubscriptionManager({ subscriber: pendingSubscriber, store: pendingStore, now })
+      ? new PendingSubscriptionManager({
+          subscriber: pendingSubscriber,
+          store: pendingStore,
+          now,
+          onChange: notifyPending,
+        })
       : undefined;
+  // Lazy activation: the aggregator only fans out per-session SSE while at least
+  // one consumer is streaming (Layer 3), so a backend with no home viewer opens
+  // no connections. Snapshot reads reconcile the active set only while active.
+  let pendingConsumers = 0;
+  const pendingActive = (): boolean => pendingConsumers > 0;
+  const activatePending = (): void => {
+    if (pendingManager === undefined) return;
+    // Kick an immediate sessions read + sync so a new consumer needn't wait for
+    // the next snapshot poll. Best-effort; a sessions failure degrades to quiet.
+    void sessionsCache
+      .get()
+      .then((state) => {
+        if (pendingActive() && sourceIsAvailable(state)) {
+          pendingManager.syncActiveSessions(activeSessionIds(state.data.items));
+        }
+      })
+      .catch(() => {});
+  };
+  const deactivatePending = (): void => {
+    pendingManager?.closeAll();
+    pendingStore.retainActive([]); // drop stale pending so re-activation starts clean
+  };
 
   let lastSnapshotAt: string | null = null;
   let lastSnapshotDurationMs: number | null = null;
@@ -235,7 +274,7 @@ export function createSnapshotService(
     // synchronous and runs OUTSIDE enrichRuns, preserving that function's
     // load-bearing no-`await` invariant. A sessions read failure leaves the
     // current subscriptions untouched (degrade-to-quiet, not blank).
-    if (pendingManager !== undefined && sourceIsAvailable(sessionsState)) {
+    if (pendingManager !== undefined && pendingActive() && sourceIsAvailable(sessionsState)) {
       pendingManager.syncActiveSessions(activeSessionIds(sessionsState.data.items));
     }
     const snapshot = buildSnapshot(
@@ -277,7 +316,21 @@ export function createSnapshotService(
     // reconciles every read. A liveness-aware provenance (degraded when the
     // dashboard stream / subscriptions are dark) is Layer 3's job (26zl, R16).
     pendingAlerts: () => pendingStore.alerts('fresh'),
-    closePending: () => pendingManager?.closeAll(),
+    streamPending: (listener) => {
+      pendingListeners.add(listener);
+      pendingConsumers += 1;
+      if (pendingConsumers === 1) activatePending();
+      return () => {
+        if (!pendingListeners.delete(listener)) return;
+        pendingConsumers -= 1;
+        if (pendingConsumers === 0) deactivatePending();
+      };
+    },
+    closePending: () => {
+      pendingListeners.clear();
+      pendingConsumers = 0;
+      pendingManager?.closeAll();
+    },
   };
 }
 
