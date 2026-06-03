@@ -36,6 +36,13 @@ export default defineConfig({
           });
         },
       },
+      // Browser supervisor client transport. The dashboard backend forwards
+      // this prefix without parsing supervisor DTOs, avoiding cross-origin
+      // dev setup while keeping GC resources off dashboard /api routes.
+      '/gc-supervisor': {
+        target: BACKEND_TARGET,
+        changeOrigin: true,
+      },
     },
   },
   build: {

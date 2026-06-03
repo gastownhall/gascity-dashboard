@@ -302,6 +302,12 @@
               "null"
             ]
           },
+          "MouseMode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "Name": {
             "type": "string"
           },
@@ -516,6 +522,7 @@
           "DependsOn",
           "ResumeCommand",
           "WakeMode",
+          "MouseMode",
           "PreStartAppend",
           "SessionSetupAppend",
           "SessionLiveAppend",
@@ -563,6 +570,30 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "AgentPrimeBody": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "description": "Resolved agent identity.",
+            "type": "string"
+          },
+          "bytes": {
+            "description": "Prompt byte length.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "prompt": {
+            "description": "Composed behavioural prompt.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "prompt",
+          "bytes"
+        ],
         "type": "object"
       },
       "AgentResponse": {
@@ -876,6 +907,10 @@
           },
           "title": {
             "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
           }
         },
         "required": [
@@ -892,6 +927,17 @@
         "properties": {
           "assignee": {
             "description": "Assignee name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BeadCloseBody": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Operator-readable reason to persist as metadata.close_reason.",
+            "maxLength": 1024,
             "type": "string"
           }
         },
@@ -2053,6 +2099,9 @@
           },
           {
             "$ref": "#/components/schemas/OutboundEventPayload"
+          },
+          {
+            "$ref": "#/components/schemas/PostgresCredentialResolvedPayload"
           },
           {
             "$ref": "#/components/schemas/ProjectIdentityStampedPayload"
@@ -4687,6 +4736,38 @@
           "DrainTimeout",
           "OnDeath",
           "OnBoot"
+        ],
+        "type": "object"
+      },
+      "PostgresCredentialResolvedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "string"
+          },
+          "scope_kind": {
+            "type": "string"
+          },
+          "scope_name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope_kind",
+          "scope_name",
+          "source",
+          "host",
+          "port",
+          "user"
         ],
         "type": "object"
       },
@@ -7330,6 +7411,7 @@
             "order.completed": "#/components/schemas/TypedEventStreamEnvelopeOrderCompleted",
             "order.failed": "#/components/schemas/TypedEventStreamEnvelopeOrderFailed",
             "order.fired": "#/components/schemas/TypedEventStreamEnvelopeOrderFired",
+            "pg.credential_resolved": "#/components/schemas/TypedEventStreamEnvelopePgCredentialResolved",
             "project.identity.stamped": "#/components/schemas/TypedEventStreamEnvelopeProjectIdentityStamped",
             "provider.swapped": "#/components/schemas/TypedEventStreamEnvelopeProviderSwapped",
             "request.failed": "#/components/schemas/TypedEventStreamEnvelopeRequestFailed",
@@ -7450,6 +7532,9 @@
           },
           {
             "$ref": "#/components/schemas/TypedEventStreamEnvelopeOrderFired"
+          },
+          {
+            "$ref": "#/components/schemas/TypedEventStreamEnvelopePgCredentialResolved"
           },
           {
             "$ref": "#/components/schemas/TypedEventStreamEnvelopeProjectIdentityStamped"
@@ -8070,7 +8155,8 @@
                 "extmsg.outbound",
                 "events.rotated",
                 "gc.store.maintenance.done",
-                "gc.store.maintenance.failed"
+                "gc.store.maintenance.failed",
+                "pg.credential_resolved"
               ]
             },
             "type": "string"
@@ -8927,6 +9013,48 @@
           "payload"
         ],
         "title": "TypedEventStreamEnvelope order.fired",
+        "type": "object"
+      },
+      "TypedEventStreamEnvelopePgCredentialResolved": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/PostgresCredentialResolvedPayload"
+          },
+          "seq": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "ts": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "const": "pg.credential_resolved",
+            "type": "string"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/WorkflowEventProjection"
+          }
+        },
+        "required": [
+          "seq",
+          "type",
+          "ts",
+          "actor",
+          "payload"
+        ],
+        "title": "TypedEventStreamEnvelope pg.credential_resolved",
         "type": "object"
       },
       "TypedEventStreamEnvelopeProjectIdentityStamped": {
@@ -9972,6 +10100,7 @@
             "order.completed": "#/components/schemas/TypedTaggedEventStreamEnvelopeOrderCompleted",
             "order.failed": "#/components/schemas/TypedTaggedEventStreamEnvelopeOrderFailed",
             "order.fired": "#/components/schemas/TypedTaggedEventStreamEnvelopeOrderFired",
+            "pg.credential_resolved": "#/components/schemas/TypedTaggedEventStreamEnvelopePgCredentialResolved",
             "project.identity.stamped": "#/components/schemas/TypedTaggedEventStreamEnvelopeProjectIdentityStamped",
             "provider.swapped": "#/components/schemas/TypedTaggedEventStreamEnvelopeProviderSwapped",
             "request.failed": "#/components/schemas/TypedTaggedEventStreamEnvelopeRequestFailed",
@@ -10092,6 +10221,9 @@
           },
           {
             "$ref": "#/components/schemas/TypedTaggedEventStreamEnvelopeOrderFired"
+          },
+          {
+            "$ref": "#/components/schemas/TypedTaggedEventStreamEnvelopePgCredentialResolved"
           },
           {
             "$ref": "#/components/schemas/TypedTaggedEventStreamEnvelopeProjectIdentityStamped"
@@ -10759,7 +10891,8 @@
                 "extmsg.outbound",
                 "events.rotated",
                 "gc.store.maintenance.done",
-                "gc.store.maintenance.failed"
+                "gc.store.maintenance.failed",
+                "pg.credential_resolved"
               ]
             },
             "type": "string"
@@ -11697,6 +11830,52 @@
           "city"
         ],
         "title": "TypedTaggedEventStreamEnvelope order.fired",
+        "type": "object"
+      },
+      "TypedTaggedEventStreamEnvelopePgCredentialResolved": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/PostgresCredentialResolvedPayload"
+          },
+          "seq": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "ts": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "const": "pg.credential_resolved",
+            "type": "string"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/WorkflowEventProjection"
+          }
+        },
+        "required": [
+          "seq",
+          "type",
+          "ts",
+          "actor",
+          "payload",
+          "city"
+        ],
+        "title": "TypedTaggedEventStreamEnvelope pg.credential_resolved",
         "type": "object"
       },
       "TypedTaggedEventStreamEnvelopeProjectIdentityStamped": {
@@ -13981,6 +14160,68 @@
         "summary": "Stream agent output in real time"
       }
     },
+    "/v0/city/{cityName}/agent/{base}/prime": {
+      "get": {
+        "operationId": "get-v0-city-by-city-name-agent-by-base-prime",
+        "parameters": [
+          {
+            "description": "City name.",
+            "in": "path",
+            "name": "cityName",
+            "required": true,
+            "schema": {
+              "description": "City name.",
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Agent name (unqualified, no rig).",
+            "in": "path",
+            "name": "base",
+            "required": true,
+            "schema": {
+              "description": "Agent name (unqualified, no rig).",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPrimeBody"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-GC-Request-Id": {
+                "$ref": "#/components/headers/X-GC-Request-Id"
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error",
+            "headers": {
+              "X-GC-Request-Id": {
+                "$ref": "#/components/headers/X-GC-Request-Id"
+              }
+            }
+          }
+        },
+        "summary": "Get v0 city by city name agent by base prime"
+      }
+    },
     "/v0/city/{cityName}/agent/{base}/{action}": {
       "post": {
         "operationId": "post-v0-city-by-city-name-agent-by-base-by-action",
@@ -14027,7 +14268,8 @@
               "description": "Action to perform.",
               "enum": [
                 "suspend",
-                "resume"
+                "resume",
+                "nudge"
               ],
               "type": "string"
             }
@@ -14557,6 +14799,78 @@
         "summary": "Stream agent output in real time (qualified name)"
       }
     },
+    "/v0/city/{cityName}/agent/{dir}/{base}/prime": {
+      "get": {
+        "operationId": "get-v0-city-by-city-name-agent-by-dir-by-base-prime",
+        "parameters": [
+          {
+            "description": "City name.",
+            "in": "path",
+            "name": "cityName",
+            "required": true,
+            "schema": {
+              "description": "City name.",
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Agent directory (rig name).",
+            "in": "path",
+            "name": "dir",
+            "required": true,
+            "schema": {
+              "description": "Agent directory (rig name).",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Agent base name.",
+            "in": "path",
+            "name": "base",
+            "required": true,
+            "schema": {
+              "description": "Agent base name.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPrimeBody"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "X-GC-Request-Id": {
+                "$ref": "#/components/headers/X-GC-Request-Id"
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error",
+            "headers": {
+              "X-GC-Request-Id": {
+                "$ref": "#/components/headers/X-GC-Request-Id"
+              }
+            }
+          }
+        },
+        "summary": "Get v0 city by city name agent by dir by base prime"
+      }
+    },
     "/v0/city/{cityName}/agent/{dir}/{base}/{action}": {
       "post": {
         "operationId": "post-v0-city-by-city-name-agent-by-dir-by-base-by-action",
@@ -14613,7 +14927,8 @@
               "description": "Action to perform.",
               "enum": [
                 "suspend",
-                "resume"
+                "resume",
+                "nudge"
               ],
               "type": "string"
             }
@@ -15225,6 +15540,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeadCloseBody"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

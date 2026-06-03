@@ -82,14 +82,11 @@ built-in dashboard exposes directly against the supervisor API.
 
 The root cause is architectural. The built-in dashboard calls a broad slice of
 `/v0` supervisor endpoints directly from the browser. The standalone dashboard
-uses a translating backend and currently exposes a narrower mutation surface:
+is being migrated to the same model for GC-owned reads; the remaining custom
+dashboard service surface is narrower and focused on dashboard-local writes or
+host/GitHub functionality:
 
-- `POST /api/beads/:id/claim`
-- `POST /api/beads/:id/close`
-- `POST /api/beads/:id/nudge`
-- `POST /api/mail-send`
 - `POST /api/snapshot/refresh`
-- `POST /api/sessions/:id/peek`
 - `POST /api/maintainer/sling`
 - `POST /api/client-errors`
 
@@ -99,8 +96,9 @@ Highest-impact validated gaps before product disposition:
 2. Convoys.
 3. Rig, service, escalation, assigned-work, and queue administration.
 4. Supervisor/no-city fleet mode and `gc dashboard` launch integration.
-5. Supervisor/city event timeline.
-6. Mail reply/archive/read-state/all-traffic workflows.
+5. Mail clock-based window filtering and recipient ergonomics.
+6. Activity actor/severity event filters, if text search plus dedicated type
+   filtering proves too coarse.
 
 ### Gap Matrix
 
@@ -110,12 +108,12 @@ Highest-impact validated gaps before product disposition:
 | 2 | Supervisor/fleet scope | No-city mode shows supervisor-level state, managed city tabs, and disabled city-scoped actions until a city is selected. | Bare `/` redirects to the first known city; most app routes are city-scoped under `/city/:cityName`. | **High** | Multi-city operators lose the fleet overview and safe "no city selected" landing state. |
 | 3 | Stopped-city guardrails | City tabs and panels distinguish stopped/error cities and disable city-scoped forms with explicit copy. | No equivalent stopped-city command-center state; failed city data appears through route errors/partial state instead. | **Medium** | Operators get less immediate guidance when a city is stopped or unavailable. |
 | 4 | Convoys | Convoy list, detail, creation, progress breakdown, issue add/remove/check/close paths, and convoy status chips. | No convoy route, API client, backend route, or UI module. Existing references are incidental filtering/generated supervisor types, not user functionality. | **High** | Operators cannot coordinate grouped work from the dashboard. |
-| 5 | Bead lifecycle | Create bead, close/reopen, set priority/labels, assign/reassign/unassign, sling to target, dependency/ready/blocked views, rig filters. | Bead list/detail/board/dependency graph exist, plus claim/close/nudge. No generic create, reopen, priority/label edit, generic assign, or generic sling. | **Critical** | The dashboard cannot manage the main work queue end to end. Operators must fall back to CLI/API for routine work changes. |
+| 5 | Bead lifecycle | Create bead, close/reopen, set priority/labels, assign/reassign/unassign, sling to target, dependency/ready/blocked views, rig filters. | Bead list/detail/board/dependency graph exist, plus supervisor-query rig filtering, generated-client claim/close/nudge, and targeted create-and-sling to a selected rig + agent through the generated supervisor client. No generic reopen, priority/label edit, generic assign/reassign/unassign, or broader sling/admin surface. | **High** | Operators can filter, create, and dispatch new work from the dashboard, but still fall back to CLI/API for full lifecycle administration. |
 | 6 | Escalations, assigned work, queues | Admin panels show escalations, assigned work, and queues with acknowledge/resolve/reassign/unassign/clear controls. | No escalation, assigned-work admin, or queue administration views. | **High** | Urgent or stuck work cannot be triaged from the dashboard. |
 | 7 | Rig/service operations | Services panel restarts services; Rigs panel suspend/resume/restart rigs and exposes status/action controls. | No service or rig admin routes/panels/endpoints in the standalone dashboard. | **High** | Operators cannot perform common operational recovery actions from the UI. |
-| 8 | Agent/crew operations | Crew, rigged-agent, and pooled-agent panels separate agent populations, show pending interaction signals, provide attach-command copy, and expose log/transcript drawers with older-history loading. | Agents list/detail and session/run inspection exist, but the crew/rigged/pooled operational split, attach-copy affordance, pending-question surface, and back-paging drawer ergonomics are not present. | **Medium** | Agent supervision is more observational and less optimized for intervention. |
-| 9 | Mail operations | Inbox plus all-traffic mode, open-thread/message flows, reply, archive, mark read/unread, compose, and recipient options. | Mail list/thread reading and send-new-mail exist. No all-traffic view, reply endpoint/control, archive, mark read, or mark unread. | **High** | Mail triage cannot be completed from the dashboard; operators can read and compose but not process threads. |
-| 10 | Event activity timeline | Supervisor and city event timeline backed by `/v0/events` and `/v0/city/{city}/events`, with filtering and live refresh. | `/api/events/stream` exists as an SSE proxy for refreshing views, and `/activity` shows git/deploy activity, but there is no human-facing supervisor/city event console. | **High** | Operators lose the canonical chronological audit/debug view for city and supervisor events. |
+| 8 | Agent/crew operations | Crew, rigged-agent, and pooled-agent panels separate agent populations, show pending interaction signals, provide attach-command copy, and expose log/transcript drawers with older-history loading. | Agents list/detail, session/run inspection, generated pending-interaction reads, Home/nav needs-you attention, copy-attach affordances, and generated supervisor approve/deny responses exist. The crew/rigged/pooled operational split and back-paging drawer ergonomics are not present. | **Medium** | Agent supervision now surfaces and answers pending questions, but the legacy crew split is intentionally not recreated. |
+| 9 | Mail operations | Inbox plus all-traffic mode, open-thread/message flows, reply, archive, mark read/unread, compose, and recipient options. | Mail list/thread reading, all-traffic mode, generated-query history-depth expansion, send, reply, archive, and mark read/unread use the generated supervisor client directly. Clock-based history windows and richer recipient options remain open. | **Medium** | Core mail triage is available, and operators can expand the fetched history depth, but clock-window review and recipient ergonomics still lag the built-in dashboard. |
+| 10 | Event activity timeline | Supervisor and city event timeline backed by `/v0/events` and `/v0/city/{city}/events`, with filtering and live refresh. | Views refresh from the direct supervisor city event stream, and `/activity` has Project activity plus Supervisor events modes. The event timeline reads `/v0/city/{city}/events` through the generated supervisor client with time-window controls, a generated-query type filter, and text filtering. Actionable event classes contribute Activity attention in Home/nav and deep-link to filtered event views. Dedicated actor/severity controls remain optional. | **Low** | Operators can inspect chronological city events, see event-derived attention, and jump from attention to the matching event class. |
 | 11 | Command palette and raw inspectors | Keyboard/open-button command palette can open common forms and inspect raw supervisor/city JSON. | No command palette or raw inspector surface. | **Medium** | Power users lose fast navigation, action discovery, and live debugging shortcuts. |
 | 12 | One-screen command center | Built-in dashboard keeps status, crew, activity, mail, beads, admin panels, convoys, and output in one dense page. | Standalone uses route-specific pages: Home, Agents, Beads, Runs, Mail, Activity, Health, Maintainer. | **Medium** | Cross-domain monitoring requires navigation instead of a single command-center scan. |
 | 13 | Status banner alerts | Status panel aggregates running agents, assigned/open work, convoy count, unread mail, stuck agents, stale assignments, high-priority issues, dead sessions, and partial API failure. | Standalone has health/concern surfaces but not the same always-visible operational alert banner. | **Medium** | Operators lose at-a-glance warnings for several urgent conditions. |
@@ -136,29 +134,39 @@ The legacy dashboard exposes the full work-item lifecycle: create, close,
 reopen, priority/label edit, assign/reassign/unassign, sling, ready/blocked
 views, rig filters, and dedicated convoy list/detail/create/add controls. The
 standalone dashboard has stronger read-side Beads visibility, but a narrower
-write surface: claim, close, and nudge.
+write surface: generated-client claim/close/nudge and generated-client targeted
+create-and-sling.
 
 **Operational control: Agents, Rigs, and Services**
 
 The legacy dashboard separates crew, rigged agents, and pooled agents; surfaces
 pending interaction signals; provides attach-command copy; exposes transcript
 drawers; and includes service/rig controls. The standalone dashboard has Agents
-list/detail, Peek/live run context, and Formula Run drilldown, but not the same
-agent-intervention or service/rig admin surface.
+list/detail, Peek/live run context, Formula Run drilldown, generated pending
+interaction reads, needs-you attention, and copy-attach actions, but not the
+same crew split, in-dashboard response controls, transcript back-paging, or
+service/rig admin surface.
 
 **Mail**
 
 The legacy mail panel supports inbox, all-traffic, thread/message opening,
 reply, archive, read/unread, compose, and recipient options. The standalone
-Mail view supports mailbox/thread reading, operator send, and read-only
-impersonation, but not reply/archive/read-state/all-traffic.
+Mail view supports direct-supervisor mailbox/thread reading, all-traffic mode,
+operator send, reply, archive, mark read/unread, read-only impersonation, and
+attention highlighting in both mailbox rows and opened thread messages.
+Clock-based history windows and richer recipient options remain open; explicit
+generated-query history depth is implemented.
 
 **Events and observability**
 
 The legacy Activity panel exposes supervisor and city event history. The
-standalone backend proxies city event streams for reactive refresh, and the
-current Activity route shows git/deploy activity, but there is no human-facing
-supervisor/city event timeline.
+standalone frontend consumes supervisor city event streams for reactive
+refresh through the generated supervisor transport path, and the Activity route
+now has a supervisor/city event timeline beside git/deploy activity. Event
+attention deep-links into `/activity?mode=events&type=...`, and Activity sends
+that type filter through the generated supervisor query. Dedicated
+actor/severity filters remain optional if plain text filtering proves too
+coarse.
 
 **Power-user and feedback affordances**
 
@@ -173,13 +181,14 @@ error, and stream states.
   Ready/blocked capability is counted only where it is user-reachable through
   the bead work surfaces.
 - The standalone repo contains generated supervisor client functions for many
-  legacy endpoints, including convoys and mail archive/reply. Those generated
-  functions are not counted as implemented dashboard features until routed
-  through the backend and UI.
+  legacy endpoints, including convoys. Generated functions are not counted as
+  implemented dashboard features until routed through the frontend UI.
 - Standalone `POST /api/maintainer/sling` is maintainer-specific. It does not
   close the gap for generic bead/admin sling workflows.
-- Standalone `/activity` is a git/deploy activity route, not the legacy
-  supervisor/city event timeline.
+- Standalone `/activity` includes git/deploy activity and a generated-client
+  supervisor/city event timeline. Event-derived Home/nav attention is
+  implemented for known actionable/watch event classes, and those items
+  deep-link to the matching generated-query event type filter.
 
 ## Section 2: Principles and Decisions
 
@@ -267,16 +276,18 @@ unless the accepted Beads status/kanban workflow needs them.
 - Surface pending questions / needs-you state.
 - Highlight abnormal agent states.
 - Add copy/open attach affordance.
-- Add in-dashboard respond only if the supervisor endpoint is safe and fits the
-  backend security model.
+- Add in-dashboard respond through the supervisor endpoint. **Implemented for
+  approve/deny pending interactions.**
 - Use grouping/filtering inside Agents instead of legacy crew/rigged/pooled
   panels.
 
 **Beads**
 
 - Keep status/kanban as the core workspace.
-- Preserve existing useful claim/close/nudge behavior.
-- Add create-and-sling a new bead to a specific rig + agent.
+- Preserve useful claim/close/nudge behavior on the generated supervisor
+  client.
+- Add create-and-sling a new bead to a specific rig + agent. **Implemented
+  through generated supervisor `create bead` and `sling` writes.**
 - Add rig filters where data supports them.
 - Do not add full generic bead admin parity now.
 
@@ -289,17 +300,18 @@ unless the accepted Beads status/kanban workflow needs them.
 
 **Mail**
 
-- Add all-traffic/history.
-- Add reply, archive, mark read, and mark unread.
+- Keep generated-query history-depth expansion.
+- Add clock-based history windows only if the supervisor API grows that query.
+- Refine recipient options.
 - Preserve current viewing-as model.
-- Highlight outstanding mail, but keep full time-windowed mail visible and
+- Highlight outstanding mail, but keep full selected-history mail visible and
   actionable.
 
 **Activity**
 
 - Keep current commits/deploy log.
-- Add supervisor/city event timeline as a separate mode.
-- Let actionable events contribute attention/watch items.
+- Add dedicated actor/severity event filters only if text search plus the
+  generated-query type filter proves too coarse.
 
 **Health**
 
@@ -338,8 +350,8 @@ Detailed execution plan: [`plans/feature-gap-remediation-plan.md`](plans/feature
 
 1. Build the client attention foundation.
 2. Wire domain attention contributors.
-3. Complete Mail as a workspace.
-4. Add Activity event history.
+3. Complete remaining Mail history/recipient ergonomics.
+4. Add Activity filtered event deep links if needed.
 5. Improve Agents intervention ergonomics.
 6. Trim Beads work to accepted status/kanban plus create-and-sling scope.
 7. Tighten Health highlighting and local write feedback.

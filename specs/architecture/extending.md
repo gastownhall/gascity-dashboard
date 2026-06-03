@@ -1,4 +1,14 @@
-# Extending — adding a view, a route, an exec wrapper
+# Extending — adding a view, a local route, or a supervisor capability
+
+The target architecture is direct-supervisor-first. Before adding any backend
+route, decide who owns the capability:
+
+- If it is GC-owned data or a GC-owned mutation, add or use a GC supervisor API
+  endpoint and consume it through the generated browser supervisor client.
+- If it is local dashboard evidence (`git`, `gh`, host/process/dolt-noms,
+  build logs, client-error telemetry), add a dashboard-service `/api/*` route.
+- If standalone development needs same-origin supervisor access, add a
+  transport-only proxy. Do not add DTO mapping or field stripping to that proxy.
 
 ## Adding a new view
 
@@ -11,27 +21,42 @@ A new view's UI and copy must follow `DESIGN.md`, the binding visual contract (s
 1. Add the route component under `frontend/src/routes/MyView.tsx`.
 2. Add `frontend/src/views/modules/my-view.module.tsx` exporting a `FrontendViewDescriptor`. See `views/modules/health.module.tsx` — `lazy(() => import(...))` keeps the chunk out of the first-paint bundle.
 3. Register it in `frontend/src/views/registry.ts` by adding to `ALL_VIEWS`.
-4. If the view shows backend data, add `backend/src/views/modules/my-view.module.ts` exporting a `BackendModule<Deps>` and register it in `backend/src/views/registry.ts`. The iterator in `backend/src/app.ts` mounts it at `/api/<module-id>` automatically.
+4. If the view shows GC-owned data, add a hook/client wrapper over the generated
+   supervisor client. If the view shows dashboard-local data, add
+   `backend/src/views/modules/my-view.module.ts` exporting a `BackendModule<Deps>`
+   and register it in `backend/src/views/registry.ts`. The iterator in
+   `backend/src/app.ts` mounts it at `/api/<module-id>` automatically.
 
 ### Legacy (still the path for routes not yet ported)
 
 1. Add the route component under `frontend/src/routes/MyView.tsx`.
 2. Add the route in `frontend/src/App.tsx`.
 3. Add the nav entry in `frontend/src/components/Header.tsx` — append to `EXPLICIT_ROUTES` with an `order` value that interleaves cleanly with the registry-driven entries.
-4. If the view shows data the backend has to fetch + process, add a backend route under `backend/src/routes/myview.ts` and register it in `app.ts`.
+4. If the view shows dashboard-local data the backend has to fetch + process,
+   add a backend route under `backend/src/routes/myview.ts` and register it in
+   `app.ts`. If the data is GC-owned, add it to the supervisor API instead.
 
-## Adding a backend route
+## Adding a supervisor-backed feature
+
+1. Check whether the supervisor OpenAPI already exposes the resource.
+2. If it does, regenerate/update the browser supervisor client and consume the
+   generated types directly from the frontend.
+3. If it does not, update
+   [`../gc-supervisor-api-gaps.md`](../gc-supervisor-api-gaps.md) and implement
+   the endpoint/schema in `gastownhall/gascity`.
+4. Add frontend tests against the generated-client wrapper or hook. Do not add a
+   dashboard-server mirror route as the permanent fix.
+
+## Adding a dashboard-local backend route
 
 `backend/src/routes/foo.ts`:
 
 ```ts
 import { Router } from 'express';
-import type { GcClient } from '../gc-client.js';
-
-export function fooRouter(gc: GcClient): Router {
+export function fooRouter(): Router {
   const router = Router();
   router.get('/', async (_req, res) => {
-    // ...
+    // Local dashboard evidence only: git, gh, host, build log, telemetry, etc.
     res.json({ items: [...] });
   });
   return router;
@@ -46,22 +71,29 @@ import { fooRouter } from './routes/foo.js';
 writeRouter.use('/foo', fooRouter(gc));
 ```
 
-The `writeRouter` mount already wraps routes in `csrfValidate` for state-changing methods. GETs pass through.
+The `writeRouter` mount already wraps routes in `csrfValidate` for
+dashboard-service state-changing methods. GETs pass through. GC mutations
+belong on the supervisor API and should not be routed through a dashboard-local
+CSRF wrapper unless this is a temporary migration path with a deletion condition.
 
 ## Adding a new whitelisted exec command
 
 **Every** privileged invocation MUST route through `backend/src/exec.ts`. There is no general-purpose exec helper outside that file.
 
-To add a new command (e.g. `gc dolt size`):
+Only add commands for local evidence the supervisor should not own, principally
+`git` and `gh`. Do not add new `gc` subprocess wrappers; add or fix the
+supervisor API instead.
+
+To add a new command (e.g. a constrained `git` evidence query):
 
 1. **Define the param schema.** What inputs are allowed? Bead-id, session-id, agent-alias — or pure literal command? Add a regex if it takes a parameter.
 2. **Export a named wrapper** in `exec.ts`:
 
 ```ts
-export async function execDoltSize(): Promise<ExecResult> {
+export async function execGitSomething(): Promise<ExecResult> {
   await acquireSlot();
   try {
-    return await runExec('gc', ['dolt', 'size'], 5_000);
+    return await runExec('git', ['status', '--porcelain=v1'], 5_000);
   } finally {
     releaseSlot();
   }
@@ -79,7 +111,10 @@ What you MUST NOT do:
 
 ## Adding a new shared type
 
-Edit `shared/src/index.ts`, add the interface, then `npm run build:shared`. Both backend and frontend pick it up via the workspace.
+Add shared types only for dashboard-owned service DTOs, UI/module contracts, or
+local view models. Do not add shared mirrors for supervisor resources already
+covered by generated OpenAPI types. If a supervisor shape is missing or
+inaccurate, fix the supervisor OpenAPI source.
 
 ## Running just one workspace
 
@@ -93,8 +128,9 @@ npm --workspace shared run build    # types only (build:shared also at root)
 
 `scripts/snap-peek.mjs --test` is the regression guard for the Peek modal — it
 catches transparency regressions (the modal must render opaque against the
-scrim, per `Modal.tsx`) and CSRF / Vite-changeOrigin regressions (the POST to
-`/api/sessions/<id>/peek` must return 200, not 403).
+scrim, per `Modal.tsx`) and direct-supervisor transcript regressions (the
+browser must fetch `/gc-supervisor/v0/city/<city>/session/<id>/transcript`,
+not the deleted dashboard `/api/.../sessions/<id>/peek` mirror).
 
 ```bash
 # Backend + frontend must both be up:

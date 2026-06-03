@@ -1,19 +1,23 @@
 import { runExec } from '../exec-core.js';
 import { errorMessage } from '../logging.js';
-import {
-  parseVersion,
-  type VersionProbe,
-  type VersionProbeResult,
-} from './health-diagnostics.js';
 
-// gascity-dashboard-1cob: the gc supervisor API exposes no Dolt or Beads
-// binary version (see gascity-dashboard-1cob.1), so the dashboard probes them
-// locally on the 127.0.0.1 backend host via `dolt version` / `bd version`.
-// This is the IO edge; parsing + diagnostics translation are pure (see
-// health-diagnostics.ts). A failed probe is surfaced as `error` with a reason,
+// The gc supervisor API exposes no Dolt or Beads binary version, so the
+// dashboard probes them locally on the 127.0.0.1 backend host via
+// `dolt version` / `bd version`. A failed probe is surfaced with a reason,
 // never swallowed into a fake version string.
 
 const VERSION_PROBE_TIMEOUT_MS = 3_000;
+const SEMVER_RE = /(\d+\.\d+\.\d+)/;
+
+export type VersionProbeResult =
+  | { kind: 'ok'; version: string }
+  | { kind: 'error'; reason: string };
+
+export type VersionProbe = () => Promise<VersionProbeResult>;
+
+export function parseVersion(stdout: string): string | null {
+  return SEMVER_RE.exec(stdout)?.[1] ?? null;
+}
 
 async function probeVersion(cmd: string): Promise<VersionProbeResult> {
   try {

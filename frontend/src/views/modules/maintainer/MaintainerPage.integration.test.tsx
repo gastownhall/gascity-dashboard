@@ -37,16 +37,23 @@ vi.mock('../../../api/client', () => ({
     maintainerTriage: vi.fn(),
     maintainerRefresh: vi.fn(),
     maintainerSling: vi.fn(),
-    listSessions: vi.fn(),
-    listMail: vi.fn(),
   },
   ApiClientError: class extends Error {},
 }));
 
+const mockListSupervisorSessions = vi.hoisted(() => vi.fn());
+const mockListSupervisorMail = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../supervisor/sessionReads', () => ({
+  listSupervisorSessions: mockListSupervisorSessions,
+}));
+
+vi.mock('../../../supervisor/mailReads', () => ({
+  listSupervisorMail: mockListSupervisorMail,
+}));
+
 const mockTriage = api.maintainerTriage as Mock;
 const mockSling = api.maintainerSling as Mock;
-const mockListSessions = api.listSessions as Mock;
-const mockListMail = api.listMail as Mock;
 
 // MaintainerPage opens an EventSource on /api/maintainer/events for SSE
 // refresh. jsdom has no EventSource — stub a no-op so the mount doesn't
@@ -121,8 +128,8 @@ function syntheticEnvelope(): MaintainerTriage {
 beforeEach(() => {
   mockTriage.mockReset();
   mockSling.mockReset();
-  mockListSessions.mockReset();
-  mockListMail.mockReset();
+  mockListSupervisorSessions.mockReset();
+  mockListSupervisorMail.mockReset();
   // The MaintainerPage's useCachedData hook reads from a module-level
   // in-memory cache (api/cache.ts). Without clearing between tests, a
   // later test would skip the mockTriage call entirely and seed off the
@@ -134,8 +141,8 @@ beforeEach(() => {
   // ViewingAsProvider doesn't fire loadAliases unless asked, but the
   // visibilitychange effect still mounts. Resolve the two prefetch
   // entry-points to safe defaults in case anything calls them.
-  mockListSessions.mockResolvedValue({ items: [] });
-  mockListMail.mockResolvedValue({ items: [] });
+  mockListSupervisorSessions.mockResolvedValue({ items: [] });
+  mockListSupervisorMail.mockResolvedValue({ items: [] });
   // Stub EventSource for MaintainerPage's /api/maintainer/events subscribe.
   // jsdom doesn't provide it; without this the mount throws.
   (globalThis as unknown as { EventSource: typeof NoopEventSource }).EventSource =

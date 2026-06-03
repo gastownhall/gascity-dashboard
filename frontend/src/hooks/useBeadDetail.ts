@@ -1,7 +1,7 @@
-import type { GcBead } from 'gas-city-dashboard-shared';
 import { useEffect, useState } from 'react';
-import { api, apiErrorParts, formatApiError } from '../api/client';
 import { useNow } from '../contexts/NowContext';
+import { fetchSupervisorBead, type SupervisorBead } from '../supervisor/beadReads';
+import { SupervisorApiError } from '../supervisor/client';
 
 // Shared fetch state for a single bead's detail surface
 // (gascity-dashboard-6frc). The BeadDetailModal renders this from both the
@@ -10,7 +10,7 @@ import { useNow } from '../contexts/NowContext';
 // than in each surface.
 
 export interface BeadDetailState {
-  bead: GcBead | null;
+  bead: SupervisorBead | null;
   loading: boolean;
   error: string | null;
   /** Live clock (ms) for RelatedEntities staleness / "as of". */
@@ -26,9 +26,9 @@ export interface BeadDetailState {
 export function useBeadDetail(
   active: boolean,
   beadId: string | null,
-  initialBead: GcBead | null = null,
+  initialBead: SupervisorBead | null = null,
 ): BeadDetailState {
-  const [bead, setBead] = useState<GcBead | null>(initialBead);
+  const [bead, setBead] = useState<SupervisorBead | null>(initialBead);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const now = useNow();
@@ -50,15 +50,14 @@ export function useBeadDetail(
     let cancelled = false;
     void (async () => {
       try {
-        const result = await api.getBead(beadId);
+        const result = await fetchSupervisorBead(beadId);
         if (!cancelled) setBead(result);
       } catch (err) {
         if (cancelled) return;
-        const parts = apiErrorParts(err, 'fetch failed');
         setError(
-          parts.status === 404
+          err instanceof SupervisorApiError && err.status === 404
             ? 'Bead not found in the supervisor.'
-            : formatApiError(err, 'fetch failed'),
+            : formatSupervisorError(err),
         );
       } finally {
         if (!cancelled) setLoading(false);
@@ -70,4 +69,12 @@ export function useBeadDetail(
   }, [active, beadId, initialBead]);
 
   return { bead, loading, error, now };
+}
+
+function formatSupervisorError(err: unknown): string {
+  if (err instanceof SupervisorApiError) {
+    return err.status === undefined ? err.message : `${err.status} ${err.message}`;
+  }
+  if (err instanceof Error) return err.message;
+  return 'fetch failed';
 }

@@ -15,13 +15,19 @@ const SGR_MOUSE = /\x1b\[<(\d+);\d+;\d+[Mm]/g;
 /**
  * Calls `onWheel(-1)` on wheel-up and `onWheel(1)` on wheel-down. No-op when
  * the terminal can't do raw mode (piped output) — keyboard nav still works.
+ *
+ * `enabled` gates the mouse grab: when false, the TUI never enables mouse
+ * reporting, so tmux keeps the mouse (drag-resize, click-to-focus, native
+ * scrollback). Used by the pinned-beside-the-mayor launch (`--no-mouse`), where
+ * a drag-resizable panel beats wheel scrolling. Keyboard nav is unaffected
+ * either way (Ink owns raw mode for keypresses).
  */
-export function useMouseWheel(onWheel: (direction: -1 | 1) => void): void {
+export function useMouseWheel(onWheel: (direction: -1 | 1) => void, enabled = true): void {
   const { stdin, setRawMode, isRawModeSupported } = useStdin();
   const { stdout } = useStdout();
 
   useEffect(() => {
-    if (!isRawModeSupported || !stdin) return;
+    if (!enabled || !isRawModeSupported || !stdin) return;
     setRawMode(true);
     stdout.write(ENABLE);
 
@@ -42,5 +48,5 @@ export function useMouseWheel(onWheel: (direction: -1 | 1) => void): void {
       stdout.write(DISABLE);
     };
     // onWheel is captured fresh each render via the dependency.
-  }, [stdin, stdout, setRawMode, isRawModeSupported, onWheel]);
+  }, [stdin, stdout, setRawMode, isRawModeSupported, onWheel, enabled]);
 }

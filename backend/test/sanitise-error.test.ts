@@ -89,9 +89,9 @@ describe('writeExecError — Express response adapter', () => {
 
     writeExecError(
       res,
-      new ExecError('spawn failed: spawn /private/bin/gc ENOENT', 'spawn'),
-      LOG_COMPONENT.agents,
-      '/api/agents/mayor/prime',
+      new ExecError('spawn failed: spawn /private/bin/git ENOENT', 'spawn'),
+      LOG_COMPONENT.git,
+      '/api/git/commits',
       { log: (component, message) => logs.push(`${component}:${message}`) },
     );
 

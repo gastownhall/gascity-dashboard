@@ -7,9 +7,16 @@ The durable conventions, invariants, and gotchas an agent must load to contribut
 An editorial-typographic ambient dashboard surfacing live state from a [Gas City](https://github.com/gastownhall/gascity) (`gc`) supervisor over its HTTP API. npm workspaces: `backend` (Node + Express + TS), `frontend` (React + Vite + Tailwind), and `shared`.
 
 - **This repository is temporary.** It is the standalone workspace for the next Gas City dashboard and is intended to replace the existing `gc dashboard` implementation in `gastownhall/gascity` once it is ready to fold back into the main `gc` codebase.
-- **`shared` is the single source of truth for dashboard `/api/*` DTOs.** Both sides import it, so a dashboard contract mismatch is a compile error, not a runtime `undefined`. GC supervisor wire types are backend-only generated artifacts from OpenAPI; translate them at the backend edge before data enters `shared` DTOs.
+- **Use the GC supervisor API directly for GC-owned resources.** The frontend
+  uses the generated supervisor OpenAPI client for sessions, agents, beads,
+  mail, events, health, cities, formula feeds, and formula-run snapshots. The
+  dashboard service should own only dashboard-local host capabilities such as
+  git/gh/diff/build/dolt-noms reads and the transport-only `/gc-supervisor/*`
+  proxy. Do not add new dashboard DTO mirrors or backend route facades for
+  supervisor-owned data.
+- **`shared` is the single source of truth for dashboard-owned `/api/*` DTOs and UI contracts.** Both sides import it, so a dashboard contract mismatch is a compile error, not a runtime `undefined`. Do not mirror supervisor wire shapes in `shared` when the generated supervisor client can carry them directly.
 - **The backend binds `127.0.0.1` only, by design.** For remote dev, forward the Vite port over SSH; never expose the backend.
-- **User-facing product language is Formula / Run / Formula Run.** The GC supervisor API still uses `workflow` in some wire paths and field names. Keep that vocabulary at the edge and translate to dashboard-owned run/formula-run DTOs before data flows through the app.
+- **User-facing product language is Formula / Run / Formula Run.** The GC supervisor API still uses `workflow` in some wire paths and field names. Keep that vocabulary at UI boundaries and in dashboard-owned projections; do not hide or duplicate supervisor wire fields with a backend DTO layer.
 
 ## The contracts (they outrank assumed conventions)
 
@@ -41,7 +48,7 @@ Use npm workspaces from the repo root:
 For GC supervisor OpenAPI work:
 
 - `npm run openapi:gc-supervisor:update` refreshes `backend/openapi/gc-supervisor.openapi.json`.
-- `npm run openapi:gc-supervisor:generate` regenerates the backend-only supervisor client artifacts.
+- `npm run openapi:gc-supervisor:generate` regenerates the backend and frontend supervisor client artifacts.
 - `npm run openapi:gc-supervisor:check` verifies the generated supervisor client is current.
 
 Do **not** hand-edit generated supervisor API artifacts. Change the OpenAPI schema or generator inputs, regenerate, and commit the generated result.

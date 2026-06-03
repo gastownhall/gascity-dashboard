@@ -3,8 +3,8 @@ import type {
   RunScopeKind,
 } from 'gas-city-dashboard-shared';
 import { errorMessage } from 'gas-city-dashboard-shared';
-import { api } from '../api/client';
 import { reportClientError } from '../lib/clientErrorReporting';
+import { loadSupervisorFormulaRunDetail } from '../supervisor/runDetail';
 import { useCachedData } from './useCachedData';
 
 interface FormulaRunDetailState {
@@ -44,10 +44,6 @@ export function useFormulaRunDetail(
     key,
     () => loadFormulaRunDetail(runId, scopeKind, scopeRef),
     {
-      // Explicit refresh (manual button + SSE bead events) forces the backend
-      // run-detail cache to re-fetch from the supervisor rather than serving a
-      // cached assemble (gascity-dashboard-wqsk).
-      refreshFetcher: () => loadFormulaRunDetail(runId, scopeKind, scopeRef, true),
       onError: (err) => {
         if (runId !== undefined) reportRunDetailError('load detail', runId, err);
       },
@@ -71,14 +67,12 @@ async function loadFormulaRunDetail(
   runId: string | undefined,
   scopeKind?: RunScopeKind,
   scopeRef?: string,
-  refresh?: boolean,
 ): Promise<FormulaRunDetailPayload> {
   if (!runId) return { kind: 'unrequested' };
-  const params: { scopeKind?: RunScopeKind; scopeRef?: string; refresh?: boolean } = {};
+  const params: { scopeKind?: RunScopeKind; scopeRef?: string } = {};
   if (scopeKind !== undefined) params.scopeKind = scopeKind;
   if (scopeRef !== undefined) params.scopeRef = scopeRef;
-  if (refresh) params.refresh = true;
-  const detail = await api.formulaRun(runId, params);
+  const detail = await loadSupervisorFormulaRunDetail(runId, params.scopeKind, params.scopeRef);
   return { kind: 'loaded', detail };
 }
 

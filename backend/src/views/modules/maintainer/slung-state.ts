@@ -149,7 +149,7 @@ function isValidStateMap(v: unknown): v is PrenormalizedSlungStateMap {
     if (!('bead_id' in e) || (e.bead_id !== null && typeof e.bead_id !== 'string')) return false;
     // gascity-dashboard-djpk: bead_id flows to the wire as TriageItem.run_id
     // and into a run-detail link, so validate it against the same allowlist the write
-    // side uses (routes/beads.ts, runs.ts) at this disk-read trust boundary rather
+    // side uses (runs.ts / link parsing) at this disk-read trust boundary rather
     // than relying solely on the downstream route validator.
     if (typeof e.bead_id === 'string' && !BEAD_ID_RE.test(e.bead_id)) return false;
     // gascity-dashboard-oc4l: resolved_session_name is OPTIONAL on disk.

@@ -123,8 +123,8 @@ describe('prioritizeAliases', () => {
   });
 
   it('treats alias casing in mail vs sessions as the same identity', () => {
-    // Mail corpus emits 'Mayor' sometimes (per filterByBox in routes/mail.ts
-    // — case-insensitive on the wire). The session alias is 'mayor'. They
+    // Mail corpus emits 'Mayor' sometimes, while supervisor mail filtering is
+    // case-insensitive on the wire. The session alias is 'mayor'. They
     // are the same identity; do not produce two rows.
     const result = prioritizeAliases({
       operator: OPERATOR,

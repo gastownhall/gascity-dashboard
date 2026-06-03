@@ -118,6 +118,10 @@ export function useCity(baseUrl: string, city: string): CityState {
         if (cancelled) return;
         retryDelayMs = 1_000;
         setState((prev) => ({ ...prev, conn: 'open' }));
+        // Resync on (re)connect: a stream that dropped (e.g. the backend
+        // restarted) may have missed events, so the snapshot/sessions could be
+        // stale. Coalesced, so the initial mount refresh + this don't double up.
+        scheduleRefresh();
       };
       const handle = (msg: MessageEvent<string>): void => {
         if (cancelled) return;

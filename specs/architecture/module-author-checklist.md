@@ -12,6 +12,11 @@ frontend `ViewDescriptor`. Both live in their own directories under
 The `id` is the URL slug, the log namespace, the MODULES_ENABLED toggle, and
 the directory name — keep them identical.
 
+Architecture note: backend modules are for dashboard-local capabilities. If a
+view needs GC-owned data or mutations, use the generated browser supervisor
+client or add the missing capability to the GC supervisor API. Do not add a new
+backend module merely to mirror supervisor DTOs through `/api/*`.
+
 ## 1. The contract
 
 Every field's semantic invariant lives on the JSDoc at the type definition.

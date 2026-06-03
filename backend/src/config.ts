@@ -49,11 +49,7 @@ export interface AdminConfig {
   gcSupervisorUrl: string;
   /** Name of the city this admin dashboard manages. */
   cityName: string;
-  /**
-   * Optional absolute path to the city directory, passed as `gc prime --city=<path>`.
-   * When unset, `gc` walks up from cwd to discover the city. Set via GC_CITY_PATH
-   * for headless / systemd contexts where cwd is unrelated to the city tree.
-   */
+  /** Optional absolute path to the city directory for dashboard-local host probes. */
   cityPath: string;
   /**
    * Opt-in path-prefix allowlist for run-detail git reads (gascity-dashboard-k2b8).

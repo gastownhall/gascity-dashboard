@@ -2,15 +2,19 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import {
   GC_EVENT_PREFIX,
-  type DashboardSnapshot,
+  type RunSummary,
   type SourceStatus,
   type RunLane,
+  type SourceState,
 } from 'gas-city-dashboard-shared';
-import { api } from '../api/client';
+import { setActiveCity } from '../api/cityBase';
 import { invalidateKey } from '../api/cache';
+import { AttentionProvider } from '../attention/context';
+import type { AttentionContributor } from '../attention/compose';
 import { RunsPage } from './Runs';
 import { MemoryRouter } from 'react-router-dom';
 import { NowProvider } from '../contexts/NowContext';
+import { loadSupervisorRunSummarySource } from '../supervisor/runSummary';
 
 // gascity-dashboard-bqn: regression coverage for the live-updates wiring
 // on /runs. The actual SSE / coalesce / reconnect behavior lives in
@@ -21,21 +25,16 @@ import { NowProvider } from '../contexts/NowContext';
 // What's pinned here:
 //   - useGcEventRefresh is called with GC_EVENT_PREFIX.bead and a function.
 //   - <SseIndicator state={...} /> renders inside PageHeader meta.
-//   - The manual Refresh button calls api.snapshotRefresh(['runs']),
-//     NOT api.snapshot() — fixes the pre-existing bug where the button
-//     served stale data within the backend's 60s runs cache TTL.
+//   - The manual Refresh button refetches the direct supervisor run summary,
+//     not the dashboard snapshot facade.
 //   - A burst of synthetic SSE matches within the in-component debounce
-//     window produces AT MOST one snapshotRefresh call (architect H2
+//     window produces AT MOST one direct run-summary refresh (architect H2
 //     upstream-load protection).
 //   - The SSE callback no-ops when runs.status !== 'fresh' so
 //     fixture-fallback mode isn't hammered (architect H1).
 
-vi.mock('../api/client', () => ({
-  api: {
-    snapshot: vi.fn(),
-    snapshotRefresh: vi.fn(),
-  },
-  ApiClientError: class extends Error {},
+vi.mock('../supervisor/runSummary', () => ({
+  loadSupervisorRunSummarySource: vi.fn(),
 }));
 
 // Capture the prefixes + onMatch passed to useGcEventRefresh so each
@@ -54,57 +53,33 @@ vi.mock('../hooks/useGcEvents', () => ({
   }),
 }));
 
-const mockSnapshot = api.snapshot as Mock;
-const mockSnapshotRefresh = api.snapshotRefresh as Mock;
+const mockLoadRunSummary = loadSupervisorRunSummarySource as Mock;
 
-function buildEnvelope(
+function buildRunSource(
   runsStatus: Exclude<SourceStatus, 'error'> = 'fresh',
-): DashboardSnapshot {
+): SourceState<RunSummary> {
   return {
-    generatedAt: '2026-05-25T00:00:00.000Z',
-    alerts: [],
-    config: {
-      cityName: 'racoon-city',
-      cityRoot: '/tmp/example-city',
-      useFixtures: false,
-      enabledModules: null,
-      defaultView: null,
-    },
-    headline: {
-      activeAgents: { status: 'unavailable', source: 'city', error: 'city unavailable in test' },
-      maxAgents: { status: 'unavailable', source: 'city', error: 'city unavailable in test' },
-      activeSessions: { status: 'unavailable', source: 'city', error: 'city unavailable in test' },
-      activeRuns: { status: 'available', value: 0 },
-      workInProgress: { status: 'unavailable', source: 'work', error: 'work unavailable in test' },
-    },
-    sources: {
-      city: { source: 'city', status: 'error', error: 'city unavailable in test' },
-      resources: { source: 'resources', status: 'error', error: 'resources unavailable in test' },
-      work: { source: 'work', status: 'error', error: 'work unavailable in test' },
-      runs: {
-        source: 'runs',
-        status: runsStatus,
-        fetchedAt: '2026-05-25T00:00:00.000Z',
-        staleAt: '2026-05-25T00:01:00.000Z',
-        error: { kind: 'none' },
-        data: {
-          totalActive: 0,
-          totalHistorical: 0,
-          historicalLanes: [],
-          runCounts: {
-            total: 0,
-            visible: 0,
-            prReview: 0,
-            designReview: 0,
-            bugfix: 0,
-            blocked: 0,
-            other: 0,
-          },
-          lanes: [],
-          recentChanges: [],
-          census: { status: 'unavailable', error: 'run health has not been derived' },
-        },
+    source: 'runs',
+    status: runsStatus,
+    fetchedAt: '2026-05-25T00:00:00.000Z',
+    staleAt: '2026-05-25T00:01:00.000Z',
+    error: { kind: 'none' },
+    data: {
+      totalActive: 0,
+      totalHistorical: 0,
+      historicalLanes: [],
+      runCounts: {
+        total: 0,
+        visible: 0,
+        prReview: 0,
+        designReview: 0,
+        bugfix: 0,
+        blocked: 0,
+        other: 0,
       },
+      lanes: [],
+      recentChanges: [],
+      census: { status: 'unavailable', error: 'run health has not been derived' },
     },
   };
 }
@@ -157,22 +132,48 @@ function completedLane(): RunLane {
   };
 }
 
-function requireRunData(envelope: DashboardSnapshot) {
-  const runs = envelope.sources.runs;
-  if (runs.status === 'error') {
-    throw new Error(runs.error);
-  }
-  return runs.data;
+function requireRunData(source: SourceState<RunSummary>) {
+  if (source.status === 'error') throw new Error(source.error);
+  return source.data;
+}
+
+function activeLane(overrides: Partial<RunLane> = {}): RunLane {
+  return {
+    ...completedLane(),
+    id: 'active-root',
+    title: 'Active formula run',
+    phase: 'implementation',
+    phaseLabel: 'implementation',
+    statusCounts: { in_progress: 1 },
+    health: {
+      status: 'available',
+      data: {
+        phaseConfidence: 'known',
+        needsOperator: false,
+        stuckNode: { status: 'unavailable', error: 'run stuck node unavailable' },
+        thrashingDetected: false,
+        session: { status: 'unresolved', error: 'run session unresolved' },
+      },
+    },
+    ...overrides,
+  };
+}
+
+function contributor(items: ReturnType<AttentionContributor['getItems']>): AttentionContributor {
+  return {
+    id: 'runs:test',
+    domain: 'runs',
+    getItems: () => items,
+  };
 }
 
 beforeEach(() => {
-  mockSnapshot.mockReset();
-  mockSnapshotRefresh.mockReset();
+  setActiveCity('racoon-city');
+  mockLoadRunSummary.mockReset();
   lastHookCall.prefixes = null;
   lastHookCall.onMatch = null;
-  invalidateKey('snapshot');
-  mockSnapshot.mockResolvedValue(buildEnvelope('fresh'));
-  mockSnapshotRefresh.mockResolvedValue(buildEnvelope('fresh'));
+  invalidateKey('runs:summary:racoon-city');
+  mockLoadRunSummary.mockResolvedValue(buildRunSource('fresh'));
 });
 
 afterEach(() => {
@@ -180,14 +181,19 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function mount(initialPath = '/runs') {
+function mount(
+  initialPath = '/runs',
+  contributors: readonly AttentionContributor[] = [],
+) {
   return render(
     <MemoryRouter
       initialEntries={[initialPath]}
       future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
     >
       <NowProvider intervalMs={1_000_000}>
-        <RunsPage />
+        <AttentionProvider contributors={contributors}>
+          <RunsPage />
+        </AttentionProvider>
       </NowProvider>
     </MemoryRouter>,
   );
@@ -219,14 +225,61 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     expect(screen.getByText(/^live$/i)).toBeTruthy();
   });
 
+  it('marks run lanes that match composed run attention without hiding other runs', async () => {
+    const source = buildRunSource('fresh');
+    const runs = requireRunData(source);
+    const blocked = activeLane({
+      id: 'blocked-root',
+      title: 'Blocked formula run',
+      phase: 'blocked',
+      phaseLabel: 'blocked',
+      statusCounts: { blocked: 1 },
+      health: {
+        status: 'available',
+        data: {
+          phaseConfidence: 'known',
+          needsOperator: true,
+          stuckNode: { status: 'unavailable', error: 'run stuck node unavailable' },
+          thrashingDetected: false,
+          session: { status: 'unresolved', error: 'run session unresolved' },
+        },
+      },
+    });
+    const calm = activeLane({
+      id: 'calm-root',
+      title: 'Calm formula run',
+      phase: 'implementation',
+      phaseLabel: 'implementation',
+      statusCounts: { in_progress: 1 },
+    });
+    runs.totalActive = 2;
+    runs.runCounts.total = 2;
+    runs.runCounts.blocked = 1;
+    runs.lanes = [blocked, calm];
+    mockLoadRunSummary.mockResolvedValue(source);
+
+    mount('/runs', [
+      contributor([{
+        id: 'runs:blocked-root:needs-operator',
+        domain: 'runs',
+        severity: 'attention',
+        title: 'Blocked formula run needs operator',
+      }]),
+    ]);
+
+    const blockedLink = await screen.findByRole('link', { name: /Blocked formula run/i });
+    const calmLink = await screen.findByRole('link', { name: /Calm formula run/i });
+
+    expect(blockedLink.closest('li')?.getAttribute('data-attention-severity')).toBe('attention');
+    expect(calmLink.closest('li')?.getAttribute('data-attention-severity')).toBeNull();
+  });
+
   it('does not flatten an unavailable run count into zero', async () => {
-    const envelope = buildEnvelope('fresh');
-    envelope.headline.activeRuns = {
-      status: 'unavailable',
+    mockLoadRunSummary.mockResolvedValue({
       source: 'runs',
+      status: 'error',
       error: 'run collector unavailable in test',
-    };
-    mockSnapshot.mockResolvedValue(envelope);
+    } satisfies SourceState<RunSummary>);
 
     mount();
     await waitForMount();
@@ -241,10 +294,9 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
   // not the default-visible `lanes`. The test below pins the new contract;
   // see the toggle tests further down for the ?history=1 reveal path.
   it('yh5i: hides completed formula runs from default view, shows them under ?history=1', async () => {
-    const envelope = buildEnvelope('fresh');
+    const source = buildRunSource('fresh');
     const lane = completedLane();
-    const runs = requireRunData(envelope);
-    envelope.headline.activeRuns = { status: 'available', value: 0 };
+    const runs = requireRunData(source);
     runs.totalActive = 0;
     runs.totalHistorical = 1;
     runs.lanes = [];
@@ -268,7 +320,7 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
         thrashing: 0,
       },
     };
-    mockSnapshot.mockResolvedValue(envelope);
+    mockLoadRunSummary.mockResolvedValue(source);
 
     // Default view (/runs): historical lane is hidden, empty-state
     // trailer hints at the count.
@@ -295,8 +347,8 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
   });
 
   it('7hek: groups active lanes by rig under section headers and shows each root bead id', async () => {
-    const envelope = buildEnvelope('fresh');
-    const runs = requireRunData(envelope);
+    const source = buildRunSource('fresh');
+    const runs = requireRunData(source);
     const laneA: RunLane = {
       ...completedLane(),
       id: 'gc-aaa',
@@ -316,10 +368,9 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
         rootStoreRef: 'rig:gascity-packs',
       },
     };
-    envelope.headline.activeRuns = { status: 'available', value: 2 };
     runs.totalActive = 2;
     runs.lanes = [laneA, laneB];
-    mockSnapshot.mockResolvedValue(envelope);
+    mockLoadRunSummary.mockResolvedValue(source);
 
     mount();
     await waitForMount();
@@ -332,7 +383,7 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
   });
 
   it('yh5i: toggle button is disabled when totalHistorical is 0', async () => {
-    // Default envelope has totalHistorical = 0.
+    // Default run source has totalHistorical = 0.
     mount();
     await waitForMount();
     const toggle = screen.getByRole('button', {
@@ -356,28 +407,25 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     expect(screen.getByText(/No completed runs in the current window/i)).toBeTruthy();
   });
 
-  it('manual Refresh button calls api.snapshotRefresh([runs]), not api.snapshot()', async () => {
+  it('manual Refresh button refetches the direct supervisor run summary', async () => {
     mount();
     await waitForMount();
     // Reset to ignore the mount-effect call.
-    mockSnapshot.mockClear();
-    mockSnapshotRefresh.mockClear();
+    mockLoadRunSummary.mockClear();
 
     const btn = screen.getByRole('button', { name: /refresh/i }) as HTMLButtonElement;
     await act(async () => {
       btn.click();
     });
 
-    expect(mockSnapshotRefresh).toHaveBeenCalledTimes(1);
-    expect(mockSnapshotRefresh).toHaveBeenCalledWith(['runs']);
-    expect(mockSnapshot).not.toHaveBeenCalled();
+    expect(mockLoadRunSummary).toHaveBeenCalledTimes(1);
   });
 
-  it('coalesces a burst of SSE matches to AT MOST one snapshotRefresh within the debounce window', async () => {
+  it('coalesces a burst of SSE matches to AT MOST one run-summary refresh within the debounce window', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mount();
     await waitForMount();
-    mockSnapshotRefresh.mockClear();
+    mockLoadRunSummary.mockClear();
 
     // Simulate a busy slung pipeline: 5 onMatch calls within 1s. The
     // 10s in-component debounce floor must collapse this to a single
@@ -395,10 +443,10 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     // `toBe(1)` rather than `toBeLessThanOrEqual(1)` so a regression
     // that suppresses the leading edge entirely (count would be 0) is
     // caught loudly.
-    expect(mockSnapshotRefresh.mock.calls.length).toBe(1);
+    expect(mockLoadRunSummary.mock.calls.length).toBe(1);
   });
 
-  it('fires a second snapshotRefresh once the debounce window elapses', async () => {
+  it('fires a second run-summary refresh once the debounce window elapses', async () => {
     // Pins the trailing edge of the in-component debounce. The burst
     // test above proves we collapse a flurry to one POST; this test
     // proves we DON'T accidentally latch the gate shut forever. If a
@@ -409,13 +457,13 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mount();
     await waitForMount();
-    mockSnapshotRefresh.mockClear();
+    mockLoadRunSummary.mockClear();
 
     // Leading edge: one event, one POST.
     await act(async () => {
       lastHookCall.onMatch?.();
     });
-    expect(mockSnapshotRefresh.mock.calls.length).toBe(1);
+    expect(mockLoadRunSummary.mock.calls.length).toBe(1);
 
     // Advance past the 10s debounce floor (REFRESH_DEBOUNCE_MS = 10_000
     // in Runs.tsx; +100ms cushion so we're unambiguously past it).
@@ -427,32 +475,32 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     await act(async () => {
       lastHookCall.onMatch?.();
     });
-    expect(mockSnapshotRefresh.mock.calls.length).toBe(2);
+    expect(mockLoadRunSummary.mock.calls.length).toBe(2);
   });
 
   it('SSE callback no-ops when runs source status is not fresh', async () => {
-    // First load returns a fixture-status envelope (gc supervisor is
-    // down, snapshot is serving committed fixtures). SSE-driven force
+    // First load returns a fixture-status source (gc supervisor is
+    // down, committed fixtures are serving). SSE-driven force
     // refresh must NOT fire in this state — otherwise we hammer
     // loadFixture every coalesce-tick during a gc outage.
-    mockSnapshot.mockResolvedValue(buildEnvelope('fixture'));
+    mockLoadRunSummary.mockResolvedValue(buildRunSource('fixture'));
     mount();
     await waitForMount();
-    mockSnapshotRefresh.mockClear();
+    mockLoadRunSummary.mockClear();
 
     await act(async () => {
       lastHookCall.onMatch?.();
     });
 
-    expect(mockSnapshotRefresh).not.toHaveBeenCalled();
+    expect(mockLoadRunSummary).not.toHaveBeenCalled();
   });
 });
 
 describe('RunsPage — partial lane set (gascity-dashboard-n6f1)', () => {
   it('surfaces a "runs partial" degraded signal when lanesPartial is set', async () => {
-    const envelope = buildEnvelope('fresh');
-    requireRunData(envelope).lanesPartial = true;
-    mockSnapshot.mockResolvedValue(envelope);
+    const source = buildRunSource('fresh');
+    requireRunData(source).lanesPartial = true;
+    mockLoadRunSummary.mockResolvedValue(source);
 
     mount();
     await waitForMount();
@@ -462,7 +510,7 @@ describe('RunsPage — partial lane set (gascity-dashboard-n6f1)', () => {
     expect(marker.getAttribute('role')).toBe('status');
   });
 
-  it('omits the partial signal on a clean (non-partial) snapshot', async () => {
+  it('omits the partial signal on a clean direct run source', async () => {
     mount();
     await waitForMount();
 

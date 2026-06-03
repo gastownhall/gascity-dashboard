@@ -1,6 +1,6 @@
-import type { GcMailItem } from 'gas-city-dashboard-shared';
 import { formatRelative } from '../../hooks/time';
 import { PROMPT_INJECTION_NOTICE } from '../../lib/constants';
+import type { SupervisorMailItem } from '../../supervisor/mailReads';
 
 export function AgentChatThread({
   messages,
@@ -8,7 +8,7 @@ export function AgentChatThread({
   error,
   now,
 }: {
-  messages: ReadonlyArray<GcMailItem>;
+  messages: ReadonlyArray<SupervisorMailItem>;
   loading: boolean;
   error: string | null;
   now: number;

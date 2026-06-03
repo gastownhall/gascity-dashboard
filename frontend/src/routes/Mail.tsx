@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { GcMailItem } from 'gas-city-dashboard-shared';
-import { api } from '../api/client';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { formatApiError } from '../api/client';
 import { useCachedData } from '../hooks/useCachedData';
+import { useAttentionModel } from '../attention/context';
+import {
+  attentionRowProps,
+  resourceAttentionSeverity,
+} from '../attention/routeHighlight';
 import { Button } from '../components/Button';
 import { FilterChips } from '../components/FilterChips';
 import { GroupedTable } from '../components/GroupedTable';
@@ -12,21 +17,36 @@ import { type TableColumn } from '../components/Table';
 import { AgentPanel } from '../components/AgentPanel';
 import { ComposeModal } from '../components/mail/ComposeModal';
 import { ThreadMessage } from '../components/mail/ThreadMessage';
+import { Field } from '../components/Field';
 import { useNow } from '../contexts/NowContext';
 import { useViewingAs, OPERATOR_ALIAS } from '../contexts/ViewingAsContext';
 import { displayLabel } from '../hooks/aliasPriority';
 import { useListFilters, type FilterChip } from '../hooks/useListFilters';
 import { mailProject } from '../hooks/projectOf';
 import { formatRelative } from '../hooks/time';
+import {
+  DEFAULT_MAIL_HISTORY_LIMIT,
+  fetchSupervisorMailThread,
+  listSupervisorMail,
+  MAIL_HISTORY_LIMITS,
+  type MailHistoryLimit,
+  type SupervisorMailItem,
+} from '../supervisor/mailReads';
+import {
+  archiveSupervisorMail,
+  markSupervisorMailRead,
+  markSupervisorMailUnread,
+  replySupervisorMail,
+} from '../supervisor/mailWrites';
 
 // Mail chips operate on read-state. "Sent" box has no unread concept;
 // the chips still render but their match predicates are box-aware.
-const MAIL_CHIPS: ReadonlyArray<FilterChip<GcMailItem>> = [
+const MAIL_CHIPS: ReadonlyArray<FilterChip<SupervisorMailItem>> = [
   { id: 'unread', label: 'unread', match: (m) => !m.read },
   { id: 'read', label: 'read', match: (m) => m.read },
 ];
 
-const MAIL_SEARCH_FIELDS = (m: GcMailItem): ReadonlyArray<string | undefined> => [
+const MAIL_SEARCH_FIELDS = (m: SupervisorMailItem): ReadonlyArray<string | undefined> => [
   m.from,
   m.to,
   m.subject,
@@ -37,9 +57,14 @@ const MAIL_SEARCH_FIELDS = (m: GcMailItem): ReadonlyArray<string | undefined> =>
   m.body.split('\n')[0],
 ];
 
-type MailBox = 'inbox' | 'sent';
+type MailBox = 'inbox' | 'sent' | 'all';
+type MailAction = 'archive' | 'read' | 'reply' | 'unread';
+const DEEP_LINK_MAIL_HISTORY_LIMIT: MailHistoryLimit = 1000;
 
 export function MailPage() {
+  const attention = useAttentionModel();
+  const [searchParams] = useSearchParams();
+  const selectedMessageParam = normalizeSelectedMessageParam(searchParams.get('message'));
   const {
     viewingAs,
     setAlias,
@@ -49,7 +74,10 @@ export function MailPage() {
     sessionsUnavailable,
     loadAliases,
   } = useViewingAs();
-  const [box, setBox] = useState<MailBox>('inbox');
+  const [box, setBox] = useState<MailBox>(() => selectedMessageParam === null ? 'inbox' : 'all');
+  const [historyLimit, setHistoryLimit] = useState<MailHistoryLimit>(
+    () => selectedMessageParam === null ? DEFAULT_MAIL_HISTORY_LIMIT : DEEP_LINK_MAIL_HISTORY_LIMIT,
+  );
 
   // Lazy alias prefetch — Mail is the only consumer of the dropdown, so
   // non-Mail routes don't pay the cost (code-reviewer HIGH-1). Idempotent
@@ -60,8 +88,8 @@ export function MailPage() {
   const now = useNow();
 
   const { data: mailData, loading, error: mailError, refresh } = useCachedData(
-    `mail:${box}:${viewingAs.alias}`,
-    () => api.listMail(box, viewingAs.alias),
+    `mail:${box}:${viewingAs.alias}:${historyLimit}`,
+    () => listSupervisorMail(box, viewingAs.alias, historyLimit),
   );
   const items = useMemo(() => mailData?.items ?? [], [mailData]);
   const [error, setError] = useState<string | null>(null);
@@ -71,20 +99,25 @@ export function MailPage() {
     if (mailError) setError(mailError);
   }, [mailError]);
 
-  const [threadFor, setThreadFor] = useState<GcMailItem | null>(null);
-  const [threadItems, setThreadItems] = useState<GcMailItem[]>([]);
+  const [threadFor, setThreadFor] = useState<SupervisorMailItem | null>(null);
+  const [threadItems, setThreadItems] = useState<SupervisorMailItem[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
+  const openedMessageParam = useRef<string | null>(null);
+  const [replyBody, setReplyBody] = useState('');
+  const [actionInFlight, setActionInFlight] = useState<MailAction | null>(null);
 
   const [composing, setComposing] = useState(false);
 
   const openThread = useCallback(
-    async (mail: GcMailItem) => {
+    async (mail: SupervisorMailItem) => {
       setThreadFor(mail);
       setThreadItems([]);
+      setReplyBody('');
+      setError(null);
       if (!mail.thread_id) return;
       setThreadLoading(true);
       try {
-        const data = await api.getThread(mail.thread_id, viewingAs.alias);
+        const data = await fetchSupervisorMailThread(mail.thread_id, viewingAs.alias, historyLimit);
         setThreadItems(data.items);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'thread failed');
@@ -92,10 +125,59 @@ export function MailPage() {
         setThreadLoading(false);
       }
     },
-    [viewingAs.alias],
+    [historyLimit, viewingAs.alias],
   );
 
-  const columns = useMemo<ReadonlyArray<TableColumn<GcMailItem>>>(() => [
+  useEffect(() => {
+    if (selectedMessageParam === null) {
+      openedMessageParam.current = null;
+      return;
+    }
+    if (openedMessageParam.current === selectedMessageParam) return;
+    const selectedMessage = items.find((mail) => mail.id === selectedMessageParam);
+    if (selectedMessage === undefined) return;
+    openedMessageParam.current = selectedMessageParam;
+    void openThread(selectedMessage);
+  }, [items, openThread, selectedMessageParam]);
+
+  const runMailAction = useCallback(
+    async (action: MailAction) => {
+      const message = threadFor;
+      if (message === null) return;
+      setActionInFlight(action);
+      setError(null);
+      try {
+        if (action === 'read') {
+          await markSupervisorMailRead(message);
+          setThreadFor({ ...message, read: true });
+        } else if (action === 'unread') {
+          await markSupervisorMailUnread(message);
+          setThreadFor({ ...message, read: false });
+        } else if (action === 'archive') {
+          await archiveSupervisorMail(message);
+          setThreadFor(null);
+          setThreadItems([]);
+        } else {
+          const body = replyBody.trim();
+          if (body.length === 0) return;
+          await replySupervisorMail(message, { body });
+          setReplyBody('');
+          if (message.thread_id) {
+            const data = await fetchSupervisorMailThread(message.thread_id, viewingAs.alias, historyLimit);
+            setThreadItems(data.items);
+          }
+        }
+        await refresh();
+      } catch (err) {
+        setError(formatApiError(err, `${action} failed`));
+      } finally {
+        setActionInFlight(null);
+      }
+    },
+    [historyLimit, refresh, replyBody, threadFor, viewingAs.alias],
+  );
+
+  const columns = useMemo<ReadonlyArray<TableColumn<SupervisorMailItem>>>(() => [
     {
       key: 'from',
       label: 'From',
@@ -139,25 +221,39 @@ export function MailPage() {
   );
 
   const synopsis = useMemo(() => {
-    const noun = box === 'inbox' ? 'inbox' : 'sent';
+    const noun = box === 'all' ? 'all mail' : box === 'inbox' ? 'inbox' : 'sent';
     if (items.length === 0) return `${capitalize(noun)} empty for ${aliasLabel}.`;
-    const unread = box === 'inbox' ? items.filter((m) => !m.read).length : 0;
+    const unread = box === 'sent' ? 0 : items.filter((m) => !m.read).length;
     if (unread > 0) return `${items.length} in ${noun}, ${unread} unread.`;
     return `${items.length} in ${noun}.`;
   }, [box, items, aliasLabel]);
 
   // Mail view key includes box so collapsed-project state is independent
   // between inbox and sent (different mental models).
-  const filters = useListFilters<GcMailItem>({
+  const filters = useListFilters<SupervisorMailItem>({
     viewKey: `mail:${box}`,
     rows: items,
     projectOf: mailProject,
     searchOf: MAIL_SEARCH_FIELDS,
     chips: MAIL_CHIPS,
   });
+  const rowProps = useMemo(
+    () => (mail: SupervisorMailItem) =>
+      attentionRowProps(resourceAttentionSeverity(attention, 'mail', mail.id)),
+    [attention],
+  );
+  const mailSeverity = useCallback(
+    (mail: SupervisorMailItem) => resourceAttentionSeverity(attention, 'mail', mail.id),
+    [attention],
+  );
 
   // Sent box has no unread concept; suppress those chips there.
   const visibleChips = box === 'sent' ? [] : MAIL_CHIPS;
+  const replyDisabled =
+    threadFor === null ||
+    replyBody.trim().length === 0 ||
+    actionInFlight !== null ||
+    !viewingAs.isOperator;
 
   return (
     <section>
@@ -172,7 +268,6 @@ export function MailPage() {
               </span>
             )}
             <Button
-              tone="accent"
               size="sm"
               onClick={() => setComposing(true)}
               disabled={!viewingAs.isOperator}
@@ -217,12 +312,26 @@ export function MailPage() {
               ariaLabel="Search mail"
             />
             {visibleChips.length > 0 && (
-              <FilterChips
-                chips={visibleChips}
-                activeIds={filters.activeChipIds}
-                onToggle={filters.toggleChip}
-                legend="Read state"
-              />
+              <div className="flex items-baseline justify-between gap-4 flex-wrap">
+                <FilterChips
+                  chips={visibleChips}
+                  activeIds={filters.activeChipIds}
+                  onToggle={filters.toggleChip}
+                  legend="Read state"
+                />
+                <HistoryLimitSelect
+                  value={historyLimit}
+                  onChange={setHistoryLimit}
+                />
+              </div>
+            )}
+            {visibleChips.length === 0 && (
+              <div className="flex justify-end">
+                <HistoryLimitSelect
+                  value={historyLimit}
+                  onChange={setHistoryLimit}
+                />
+              </div>
             )}
           </div>
 
@@ -232,6 +341,7 @@ export function MailPage() {
             rowKey={(r) => r.id}
             onToggleProject={filters.toggleProject}
             onRowClick={(r) => void openThread(r)}
+            rowProps={rowProps}
             emptyMessage={
               filters.search.length > 0 || filters.activeChipIds.size > 0
                 ? 'No messages match the current search or filter.'
@@ -249,20 +359,64 @@ export function MailPage() {
         title={threadFor?.subject ?? 'Thread'}
         caption={`Reading as ${aliasLabel}, ${threadItems.length} message(s)`}
         widthClass="max-w-3xl"
+        footer={
+          threadFor === null ? null : (
+            <>
+              <Button
+                tone="quiet"
+                size="sm"
+                disabled={actionInFlight !== null}
+                onClick={() => void runMailAction(threadFor.read ? 'unread' : 'read')}
+              >
+                {threadFor.read ? 'Mark unread' : 'Mark read'}
+              </Button>
+              <Button
+                tone="quiet"
+                size="sm"
+                disabled={actionInFlight !== null}
+                onClick={() => void runMailAction('archive')}
+              >
+                {actionInFlight === 'archive' ? 'Archiving' : 'Archive'}
+              </Button>
+              <Button
+                tone="accent"
+                size="sm"
+                disabled={replyDisabled}
+                onClick={() => void runMailAction('reply')}
+              >
+                {actionInFlight === 'reply' ? 'Replying' : 'Reply'}
+              </Button>
+            </>
+          )
+        }
       >
-        {threadLoading ? (
-          <p className="text-fg-muted italic">Loading thread.</p>
-        ) : threadItems.length === 0 && threadFor ? (
-          <ThreadMessage message={threadFor} />
-        ) : (
-          <ol className="space-y-6">
-            {threadItems.map((m) => (
-              <li key={m.id}>
-                <ThreadMessage message={m} />
-              </li>
-            ))}
-          </ol>
-        )}
+        <div className="space-y-6">
+          {threadLoading ? (
+            <p className="text-fg-muted italic">Loading thread.</p>
+          ) : threadItems.length === 0 && threadFor ? (
+            <ThreadMessage message={threadFor} attentionSeverity={mailSeverity(threadFor)} />
+          ) : (
+            <ol className="space-y-6">
+              {threadItems.map((m) => (
+                <li key={m.id}>
+                  <ThreadMessage message={m} attentionSeverity={mailSeverity(m)} />
+                </li>
+              ))}
+            </ol>
+          )}
+          {threadFor !== null && (
+            <Field label="Reply" variant="form">
+              <textarea
+                value={replyBody}
+                onChange={(e) => setReplyBody(e.target.value)}
+                rows={5}
+                maxLength={16 * 1024}
+                disabled={!viewingAs.isOperator}
+                className="w-full bg-surface-tint border border-rule rounded-sm px-3 py-2 text-body text-fg focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40 resize-y disabled:opacity-50"
+              />
+            </Field>
+          )}
+        </div>
       </Modal>
 
       <ComposeModal
@@ -280,7 +434,7 @@ export function MailPage() {
 function BoxTabs({ box, onChange }: { box: MailBox; onChange: (b: MailBox) => void }) {
   return (
     <div className="flex items-baseline gap-6">
-      {(['inbox', 'sent'] as MailBox[]).map((b) => (
+      {(['inbox', 'sent', 'all'] as MailBox[]).map((b) => (
         <button
           key={b}
           type="button"
@@ -291,11 +445,49 @@ function BoxTabs({ box, onChange }: { box: MailBox; onChange: (b: MailBox) => vo
               : 'text-fg-muted hover:text-fg'
           }`}
         >
-          {capitalize(b)}
+          {b === 'all' ? 'All' : capitalize(b)}
         </button>
       ))}
     </div>
   );
+}
+
+function HistoryLimitSelect({
+  value,
+  onChange,
+}: {
+  value: MailHistoryLimit;
+  onChange: (value: MailHistoryLimit) => void;
+}) {
+  return (
+    <label className="flex items-baseline gap-2 text-label uppercase tracking-wider text-fg-muted">
+      <span>History</span>
+      <select
+        aria-label="Mail history limit"
+        value={value}
+        onChange={(e) => onChange(toMailHistoryLimit(e.target.value))}
+        className="bg-transparent border border-rule rounded-sm px-2 py-1 text-label uppercase tracking-wider text-fg-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+      >
+        {MAIL_HISTORY_LIMITS.map((limit) => (
+          <option key={limit} value={limit}>
+            Recent {limit}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function toMailHistoryLimit(value: string): MailHistoryLimit {
+  const parsed = Number(value);
+  return MAIL_HISTORY_LIMITS.includes(parsed as MailHistoryLimit)
+    ? parsed as MailHistoryLimit
+    : DEFAULT_MAIL_HISTORY_LIMIT;
+}
+
+function normalizeSelectedMessageParam(value: string | null): string | null {
+  const clean = value?.trim();
+  return clean && clean.length > 0 ? clean : null;
 }
 
 function capitalize(s: string): string {

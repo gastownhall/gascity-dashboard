@@ -1,39 +1,26 @@
 import express from 'express';
-import type { GcRunSnapshot } from 'gas-city-dashboard-shared';
+import type { RunExecutionPath } from 'gas-city-dashboard-shared';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
-import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, test } from 'node:test';
+import { describe, test } from 'node:test';
 import { promisify } from 'node:util';
-import { GcClient } from '../src/gc-client.js';
 import { runsRouter } from '../src/routes/runs.js';
 
 const execFileAsync = promisify(execFile);
 
-type Handler = (
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-) => void;
-
-interface FakeSupervisor {
-  baseUrl: string;
-  setHandler(h: Handler): void;
-  close(): Promise<void>;
-}
-
 describe('run diff route', () => {
-  let fake: FakeSupervisor;
-
-  beforeEach(async () => {
-    fake = await startFakeSupervisor();
-  });
-
-  afterEach(async () => {
-    await fake.close();
+  test('does not serve the old dashboard formula-run detail mirror', async () => {
+    const { url, close } = await startApp(buildApp());
+    try {
+      const res = await fetch(`${url}/api/city/test-city/runs/gc-root`);
+      assert.equal(res.status, 404);
+    } finally {
+      await close();
+    }
   });
 
   test('returns unpushed, working tree, staged, and untracked changes for the server-owned execution path', async () => {
@@ -74,12 +61,9 @@ describe('run diff route', () => {
     await fs.mkdir(path.join(repo, 'docs'));
     await fs.writeFile(path.join(repo, 'docs', 'plan.md'), '# Plan\n\nGenerated plan.\n');
 
-    fake.setHandler((_req, res) => {
-      json(res, graphV2Snapshot(repo));
-    });
-    const { url, close } = await startApp(buildApp(fake.baseUrl, '/should-not-be-used'));
+    const { url, close } = await startApp(buildApp());
     try {
-      const res = await fetch(`${url}/api/runs/gc-root/diff?path=/tmp/evil`);
+      const res = await postDiff(url, knownPath(repo), '?path=/tmp/evil');
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.equal(body.kind, 'ok');
@@ -117,12 +101,9 @@ describe('run diff route', () => {
     await fs.mkdir(path.join(repo, 'docs'));
     await fs.writeFile(path.join(repo, 'docs', 'plan.md'), '# Plan\n');
 
-    fake.setHandler((_req, res) => {
-      json(res, graphV2Snapshot(repo));
-    });
-    const { url, close } = await startApp(buildApp(fake.baseUrl, '/should-not-be-used'));
+    const { url, close } = await startApp(buildApp());
     try {
-      const res = await fetch(`${url}/api/runs/gc-root/diff`);
+      const res = await postDiff(url, knownPath(repo));
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.equal(body.kind, 'ok');
@@ -139,13 +120,13 @@ describe('run diff route', () => {
     }
   });
 
-  test('reports path_unknown when supervisor data has no execution folder or rig root', async () => {
-    fake.setHandler((_req, res) => {
-      json(res, graphV2Snapshot());
-    });
-    const { url, close } = await startApp(buildApp(fake.baseUrl));
+  test('reports path_unknown when direct supervisor detail has no execution folder', async () => {
+    const { url, close } = await startApp(buildApp());
     try {
-      const res = await fetch(`${url}/api/runs/gc-root/diff`);
+      const res = await postDiff(url, {
+        kind: 'unavailable',
+        reason: 'missing_cwd_and_rig_root',
+      });
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.equal(body.kind, 'path_unknown');
@@ -159,12 +140,9 @@ describe('run diff route', () => {
 
   test('quietly reports not_git for execution folders outside git', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'run-not-git-'));
-    fake.setHandler((_req, res) => {
-      json(res, graphV2Snapshot(dir));
-    });
-    const { url, close } = await startApp(buildApp(fake.baseUrl));
+    const { url, close } = await startApp(buildApp());
     try {
-      const res = await fetch(`${url}/api/runs/gc-root/diff`);
+      const res = await postDiff(url, knownPath(dir));
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.equal(body.kind, 'not_git');
@@ -190,19 +168,16 @@ describe('run diff route', () => {
     await commit(repo);
     await fs.writeFile(path.join(repo, 'README.md'), 'base\nnext\n');
 
-    fake.setHandler((_req, res) => {
-      json(res, graphV2Snapshot(repo));
-    });
     // The repo is a REAL git tree, but the allowlist sanctions an unrelated
     // root, so the diff must be refused. Because the cwd is a genuine repo,
     // `not_git` can only arise from the cwd refusal (the validation throws
     // before git runs) — were enforcement absent, the paired allow-test below
     // shows this exact setup yields kind 'ok'.
     const { url, close } = await startApp(
-      buildApp(fake.baseUrl, '', ['/var/empty/sanctioned-root']),
+      buildApp(['/var/empty/sanctioned-root']),
     );
     try {
-      const res = await fetch(`${url}/api/runs/gc-root/diff`);
+      const res = await postDiff(url, knownPath(repo));
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.equal(body.kind, 'not_git', 'an out-of-allowlist cwd must not be read');
@@ -222,13 +197,10 @@ describe('run diff route', () => {
     await commit(repo);
     await fs.writeFile(path.join(repo, 'README.md'), 'base\nnext\n');
 
-    fake.setHandler((_req, res) => {
-      json(res, graphV2Snapshot(repo));
-    });
     // The cwd equals the sanctioned root, so the read proceeds normally.
-    const { url, close } = await startApp(buildApp(fake.baseUrl, '', [repo]));
+    const { url, close } = await startApp(buildApp([repo]));
     try {
-      const res = await fetch(`${url}/api/runs/gc-root/diff`);
+      const res = await postDiff(url, knownPath(repo));
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.equal(body.kind, 'ok', 'an in-allowlist cwd must be served');
@@ -247,12 +219,9 @@ describe('run diff route', () => {
     await commit(repo);
     await fs.writeFile(path.join(repo, 'large.txt'), `${'x'.repeat(700 * 1024)}\n`);
 
-    fake.setHandler((_req, res) => {
-      json(res, graphV2Snapshot(repo));
-    });
-    const { url, close } = await startApp(buildApp(fake.baseUrl));
+    const { url, close } = await startApp(buildApp());
     try {
-      const res = await fetch(`${url}/api/runs/gc-root/diff`);
+      const res = await postDiff(url, knownPath(repo));
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.equal(body.kind, 'ok');
@@ -279,80 +248,11 @@ async function commit(repo: string, message = 'base'): Promise<void> {
   ]);
 }
 
-function buildApp(
-  fakeUrl: string,
-  rigRoot = '',
-  runCwdAllowedRoots: readonly string[] = [],
-): express.Express {
-  const gc = new GcClient({
-    baseUrl: fakeUrl,
-    cityName: 'racoon-city',
-    defaultTimeoutMs: 500,
-  });
+function buildApp(runCwdAllowedRoots: readonly string[] = []): express.Express {
   const app = express();
   app.use(express.json());
-  app.use('/api/runs', runsRouter(gc, { rigRoot, runCwdAllowedRoots }));
+  app.use('/api/city/test-city/runs', runsRouter({ runCwdAllowedRoots }));
   return app;
-}
-
-function graphV2Snapshot(workDir?: string): GcRunSnapshot {
-  return {
-    run_id: 'gc-root',
-    root_bead_id: 'gc-root',
-    root_store_ref: 'city:racoon-city',
-    resolved_root_store: 'city:racoon-city',
-    scope_kind: 'city',
-    scope_ref: 'racoon-city',
-    snapshot_version: 7,
-    snapshot_event_seq: 42,
-    partial: false,
-    stores_scanned: ['city:racoon-city'],
-    logical_nodes: [],
-    logical_edges: [],
-    scope_groups: [],
-    beads: [
-      {
-        id: 'gc-root',
-        title: 'Adopt PR #42',
-        status: 'in_progress',
-        kind: 'run',
-        metadata: {
-          'gc.kind': 'run',
-          'gc.formula_contract': 'graph.v2',
-          'gc.formula': 'mol-adopt-pr-v2',
-          'gc.scope_kind': 'city',
-          'gc.scope_ref': 'racoon-city',
-          'gc.root_store_ref': 'city:racoon-city',
-          ...(workDir ? { 'gc.work_dir': workDir } : {}),
-        },
-      },
-    ],
-    deps: [],
-  };
-}
-
-function startFakeSupervisor(): Promise<FakeSupervisor> {
-  return new Promise((resolve) => {
-    let handler: Handler = (_req, res) => {
-      res.statusCode = 404;
-      res.end('not found');
-    };
-    const server = http.createServer((req, res) => {
-      handler(req, res);
-    });
-    server.listen(0, '127.0.0.1', () => {
-      const port = (server.address() as AddressInfo).port;
-      resolve({
-        baseUrl: `http://127.0.0.1:${port}`,
-        setHandler(h: Handler) {
-          handler = h;
-        },
-        close() {
-          return new Promise<void>((done) => server.close(() => done()));
-        },
-      });
-    });
-  });
 }
 
 function startApp(app: express.Express): Promise<{ url: string; close: () => Promise<void> }> {
@@ -367,23 +267,18 @@ function startApp(app: express.Express): Promise<{ url: string; close: () => Pro
   });
 }
 
-function json(res: http.ServerResponse, body: unknown): void {
-  res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify(supervisorWireBody(body)));
+function knownPath(path: string): RunExecutionPath {
+  return { kind: 'known', path };
 }
 
-function supervisorWireBody(body: unknown): unknown {
-  if (!isRunSnapshotBody(body)) return body;
-  const { run_id: runId, ...rest } = body;
-  return { ...rest, workflow_id: runId };
-}
-
-function isRunSnapshotBody(body: unknown): body is GcRunSnapshot {
-  return (
-    typeof body === 'object' &&
-    body !== null &&
-    !Array.isArray(body) &&
-    typeof (body as { run_id?: unknown }).run_id === 'string' &&
-    typeof (body as { root_bead_id?: unknown }).root_bead_id === 'string'
-  );
+function postDiff(
+  baseUrl: string,
+  executionPath: RunExecutionPath,
+  query = '',
+): Promise<Response> {
+  return fetch(`${baseUrl}/api/city/test-city/runs/gc-root/diff${query}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ executionPath }),
+  });
 }

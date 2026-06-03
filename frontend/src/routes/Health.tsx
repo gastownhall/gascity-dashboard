@@ -1,42 +1,71 @@
 import type { ReactNode } from 'react';
 import type {
-  ConfigComparisonRow,
-  DiagnosticValue,
   DoltNomsTrend,
-  HealthDiagnostics,
+  LocalToolVersion,
+  LocalToolVersions,
   SystemHealth,
 } from 'gas-city-dashboard-shared';
 import { api } from '../api/client';
+import { getActiveCity } from '../api/cityBase';
+import { useAttentionModel } from '../attention/context';
+import {
+  attentionSectionProps,
+  prefixedAttentionSeverity,
+} from '../attention/routeHighlight';
 import { Button } from '../components/Button';
 import { PageHeader } from '../components/PageHeader';
 import { StatusBadge, type StatusTone } from '../components/StatusBadge';
+import type {
+  HealthOutputBody,
+  StatusBody,
+  StatusStoreHealth,
+  StatusWorkCounts,
+} from '../generated/gc-supervisor-client/types.gen';
 import { useCachedData } from '../hooks/useCachedData';
 import { useVisibleRefresh } from '../hooks/useVisibleRefresh';
 import { formatHumanSize } from '../lib/format';
 import { formatShortDate } from '../hooks/time';
+import { supervisorApi } from '../supervisor/client';
 
 // Health page fetches the two slow paths in parallel through the
 // stale-while-revalidate cache so re-entering this view (or polling
 // every 30s) doesn't blank the page first.
 async function fetchHealthBundle(): Promise<{
   health: SystemHealth;
+  supervisor: SupervisorHealthState;
+  status: SupervisorStatusState;
+  localTools: LocalToolVersionsState;
   trend: DoltNomsTrend;
 }> {
-  const [health, trend] = await Promise.all([
+  const [health, supervisor, status, localTools, trend] = await Promise.all([
     api.systemHealth(),
+    fetchSupervisorHealth(),
+    fetchSupervisorStatus(),
+    fetchLocalToolVersions(),
     api.doltTrend(),
   ]);
-  return { health, trend };
+  return { health, supervisor, status, localTools, trend };
 }
 
 export function HealthPage() {
+  const attention = useAttentionModel();
   const { data, loading, error, refresh } = useCachedData(
     'health',
     fetchHealthBundle,
   );
   const health = data?.health ?? null;
+  const supervisor = data?.supervisor ?? null;
+  const status = data?.status ?? null;
+  const localTools = data?.localTools ?? null;
   const trend = data?.trend ?? null;
   const hostHealthStatus = health ? hostStatus(health) : undefined;
+  const supervisorAttention = prefixedAttentionSeverity(attention, 'health', ['health:supervisor-']);
+  const hostAttention = prefixedAttentionSeverity(attention, 'health', [
+    'health:load-',
+    'health:memory-',
+  ]);
+  const adminAttention = prefixedAttentionSeverity(attention, 'health', ['health:dashboard-']);
+  const doltNomsAttention = prefixedAttentionSeverity(attention, 'health', ['health:dolt-noms-']);
 
   useVisibleRefresh(refresh, 30_000);
 
@@ -44,7 +73,7 @@ export function HealthPage() {
     <section>
       <PageHeader
         title="Health"
-        synopsis={health ? buildSynopsis(health) : 'Reading state from the supervisor.'}
+        synopsis={health && supervisor ? buildSynopsis(health, supervisor) : 'Reading state from the supervisor.'}
         meta={
           <>
             {error && (
@@ -61,25 +90,29 @@ export function HealthPage() {
 
       {health ? (
         <div className="space-y-12">
-          <Section title="Supervisor" status={supervisorStatus(health)}>
-            {health.supervisor.status === 'available' ? (
+          <Section
+            title="Supervisor"
+            attention={supervisorAttention}
+            {...(supervisor ? { status: supervisorStatus(supervisor) } : {})}
+          >
+            {supervisor?.status === 'available' ? (
               <KvList>
                 {/* izgc F7/F8: city + version are optional per supervisor's
                     OpenAPI. Absence is itself a wire-drift signal — render
                     in 'warn' tone rather than coalescing to a glanceable
                     em-dash, so the operator notices the regression. */}
-                {health.supervisor.data.city !== undefined ? (
-                  <Kv label="City" value={health.supervisor.data.city} />
+                {supervisor.data.city !== undefined ? (
+                  <Kv label="City" value={supervisor.data.city} />
                 ) : (
                   <Kv label="City" value="not reported by supervisor" tone="warn" />
                 )}
-                {health.supervisor.data.version !== undefined ? (
-                  <Kv label="Version" value={health.supervisor.data.version} />
+                {supervisor.data.version !== undefined ? (
+                  <Kv label="Version" value={supervisor.data.version} />
                 ) : (
                   <Kv label="Version" value="not reported by supervisor" tone="warn" />
                 )}
-                <Kv label="Uptime" value={formatDuration(health.supervisor.data.uptime_sec)} />
-                <Kv label="Status" value={health.supervisor.data.status} />
+                <Kv label="Uptime" value={formatDuration(supervisor.data.uptime_sec)} />
+                <Kv label="Status" value={supervisor.data.status} />
               </KvList>
             ) : (
               <p className="text-body text-accent">
@@ -90,6 +123,7 @@ export function HealthPage() {
 
           <Section
             title="Host"
+            attention={hostAttention}
             {...(hostHealthStatus ? { status: hostHealthStatus } : {})}
           >
             <KvList>
@@ -112,7 +146,7 @@ export function HealthPage() {
             </KvList>
           </Section>
 
-          <Section title="Admin process">
+          <Section title="Admin process" attention={adminAttention}>
             <KvList>
               <Kv label="PID" value={health.admin.pid.toString()} />
               <Kv label="Uptime" value={formatDuration(health.admin.uptime_sec)} />
@@ -125,20 +159,37 @@ export function HealthPage() {
           <Section title="Diagnostics">
             <div className="space-y-8">
               <KvList>
-                <DiagnosticKv label="Dolt version" datum={health.diagnostics.doltVersion} />
-                <DiagnosticKv label="Beads version" datum={health.diagnostics.beadsVersion} />
+                <LocalToolKv
+                  label="Dolt version"
+                  datum={localTools?.status === 'available' ? localTools.data.dolt : null}
+                  fallbackReason={
+                    localTools?.status === 'unavailable'
+                      ? localTools.error
+                      : 'local tool versions still loading'
+                  }
+                />
+                <LocalToolKv
+                  label="Beads version"
+                  datum={localTools?.status === 'available' ? localTools.data.beads : null}
+                  fallbackReason={
+                    localTools?.status === 'unavailable'
+                      ? localTools.error
+                      : 'local tool versions still loading'
+                  }
+                />
               </KvList>
-              <DoltUsageBlock usage={health.diagnostics.doltUsage} />
-              <BeadsUsageBlock usage={health.diagnostics.beadsUsage} />
+              <DoltUsageBlock usage={doltUsageOf(status)} />
+              <BeadsUsageBlock usage={beadsUsageOf(status)} />
             </div>
           </Section>
 
           <Section title="Recommended vs loaded">
-            <ConfigComparison comparison={health.diagnostics.configComparison} />
+            <ConfigComparison comparison={configComparisonOf(status)} />
           </Section>
 
           <Section
             title="Dolt-noms · 24 h"
+            attention={doltNomsAttention}
             meta={trend && trend.samples.length > 0 ? `${trend.samples.length} samples` : undefined}
           >
             {trend === null ? (
@@ -167,15 +218,17 @@ function Section({
   title,
   status,
   meta,
+  attention,
   children,
 }: {
   title: string;
   status?: { tone: StatusTone; label: string };
   meta?: ReactNode;
+  attention?: ReturnType<typeof prefixedAttentionSeverity>;
   children: ReactNode;
 }) {
   return (
-    <section>
+    <section {...attentionSectionProps(attention ?? null)}>
       <header className="flex items-baseline justify-between gap-4 mb-4 pb-2 border-b border-rule">
         <h2 className="text-headline font-semibold text-fg">{title}</h2>
         <div className="flex items-baseline gap-4">
@@ -219,57 +272,63 @@ function Kv({
   );
 }
 
-// gascity-dashboard-1cob: a diagnostic datum renders its value when available
-// and an explicit "unavailable — <reason>" in warn tone otherwise, so a
-// missing source (failed probe, supervisor offline) reads as a state rather
-// than a blank. Pairs color with a word per DESIGN.md's Greyscale Test.
-function DiagnosticKv({
+type DiagnosticDatum<T> =
+  | { status: 'available'; value: T; source: string }
+  | { status: 'unavailable'; reason: string };
+
+interface ConfigComparisonRow {
+  label: string;
+  recommended: string;
+  loaded: string;
+  withinRecommendation: boolean;
+}
+
+function LocalToolKv({
   label,
   datum,
+  fallbackReason,
 }: {
   label: string;
-  datum: DiagnosticValue<string>;
+  datum: LocalToolVersion | null;
+  fallbackReason: string;
 }) {
+  if (datum === null) {
+    return <Kv label={label} value={`unavailable - ${fallbackReason}`} tone="warn" />;
+  }
   return datum.status === 'available' ? (
-    <Kv label={label} value={datum.value} />
+    <Kv label={label} value={datum.version} />
   ) : (
-    <Kv label={label} value={`unavailable — ${datum.reason}`} tone="warn" />
+    <Kv label={label} value={`unavailable - ${datum.reason}`} tone="warn" />
   );
 }
 
 function DoltUsageBlock({
   usage,
 }: {
-  usage: HealthDiagnostics['doltUsage'];
+  usage: DiagnosticDatum<StatusStoreHealth>;
 }) {
   if (usage.status === 'unavailable') {
-    return (
-      <UnavailableNote heading="Dolt usage" reason={usage.reason} />
-    );
+    return <UnavailableNote heading="Dolt usage" reason={usage.reason} />;
   }
   const u = usage.value;
   return (
     <div className="space-y-2">
       <h3 className="text-label uppercase tracking-wider text-fg-muted">Dolt usage</h3>
       <KvList>
-        <Kv label="On-disk size" value={formatHumanSize(u.size_bytes)} />
-        {u.live_rows !== undefined && (
-          <Kv label="Live rows" value={u.live_rows.toLocaleString()} />
-        )}
-        {u.ratio_mb_per_row !== undefined && (
-          <Kv label="MB per row" value={u.ratio_mb_per_row.toString()} />
-        )}
-        {u.last_gc_status !== undefined && (
-          <Kv
-            label="Last maintenance"
-            value={u.last_gc_status}
-            {...(u.last_gc_status !== 'success' ? { tone: 'warn' as const } : {})}
-          />
-        )}
+        <Kv label="On-disk size" value={formatHumanSize(statusNumber(u.size_bytes))} />
+        <Kv label="Live rows" value={u.live_rows.toLocaleString()} />
+        <Kv label="MB per row" value={u.ratio_mb_per_row.toString()} />
+        <Kv
+          label="Last maintenance"
+          value={u.last_gc_status ?? 'not reported'}
+          {...(u.last_gc_status !== undefined && u.last_gc_status !== 'success'
+            ? { tone: 'warn' as const }
+            : {})}
+        />
         {u.last_gc_at !== undefined && (
           <Kv label="Last maintenance at" value={formatShortDate(u.last_gc_at)} />
         )}
-        {u.path !== undefined && <Kv label="Store path" value={u.path} />}
+        <Kv label="Store path" value={u.path} />
       </KvList>
     </div>
   );
@@ -278,7 +337,7 @@ function DoltUsageBlock({
 function BeadsUsageBlock({
   usage,
 }: {
-  usage: HealthDiagnostics['beadsUsage'];
+  usage: DiagnosticDatum<StatusWorkCounts>;
 }) {
   if (usage.status === 'unavailable') {
     return <UnavailableNote heading="Beads usage" reason={usage.reason} />;
@@ -299,7 +358,7 @@ function BeadsUsageBlock({
 function ConfigComparison({
   comparison,
 }: {
-  comparison: DiagnosticValue<ConfigComparisonRow[]>;
+  comparison: DiagnosticDatum<ConfigComparisonRow[]>;
 }) {
   if (comparison.status === 'unavailable') {
     return (
@@ -395,10 +454,72 @@ function doltUnavailableCopy(
   }
 }
 
-function buildSynopsis(h: SystemHealth): string {
+type SupervisorHealthState =
+  | { status: 'available'; data: HealthOutputBody }
+  | { status: 'unavailable'; error: string };
+
+type SupervisorStatusState =
+  | { status: 'available'; data: StatusBody }
+  | { status: 'unavailable'; error: string };
+
+type LocalToolVersionsState =
+  | { status: 'available'; data: LocalToolVersions }
+  | { status: 'unavailable'; error: string };
+
+async function fetchSupervisorHealth(): Promise<SupervisorHealthState> {
+  const cityName = getActiveCity();
+  if (cityName === null) {
+    throw new Error('Health page loaded before an active city was resolved');
+  }
+  try {
+    return {
+      status: 'available',
+      data: await supervisorApi().cityHealth(cityName),
+    };
+  } catch {
+    return {
+      status: 'unavailable',
+      error: 'supervisor health unavailable',
+    };
+  }
+}
+
+async function fetchSupervisorStatus(): Promise<SupervisorStatusState> {
+  const cityName = getActiveCity();
+  if (cityName === null) {
+    throw new Error('Health page loaded before an active city was resolved');
+  }
+  try {
+    return {
+      status: 'available',
+      data: await supervisorApi().cityStatus(cityName),
+    };
+  } catch {
+    return {
+      status: 'unavailable',
+      error: 'supervisor status unavailable',
+    };
+  }
+}
+
+async function fetchLocalToolVersions(): Promise<LocalToolVersionsState> {
+  try {
+    return {
+      status: 'available',
+      data: await api.localToolVersions(),
+    };
+  } catch {
+    return {
+      status: 'unavailable',
+      error: 'local tool versions unavailable',
+    };
+  }
+}
+
+function buildSynopsis(h: SystemHealth, supervisorState: SupervisorHealthState): string {
   const parts: string[] = [];
-  if (h.supervisor.status === 'available') {
-    const supervisor = h.supervisor.data;
+  if (supervisorState.status === 'available') {
+    const supervisor = supervisorState.data;
     const verb = supervisor.status === 'ok' ? 'healthy' : supervisor.status;
     // izgc F7/F8: city is optional per OpenAPI. Skip the locator clause if
     // absent rather than rendering "Supervisor healthy on undefined" — the
@@ -420,10 +541,10 @@ function buildSynopsis(h: SystemHealth): string {
   return parts.join(' ');
 }
 
-function supervisorStatus(h: SystemHealth): { tone: StatusTone; label: string } {
-  if (h.supervisor.status === 'unavailable') return { tone: 'stuck', label: 'offline' };
-  if (h.supervisor.data.status === 'ok') return { tone: 'ok', label: 'healthy' };
-  return { tone: 'warn', label: h.supervisor.data.status };
+function supervisorStatus(supervisorState: SupervisorHealthState): { tone: StatusTone; label: string } {
+  if (supervisorState.status === 'unavailable') return { tone: 'stuck', label: 'offline' };
+  if (supervisorState.data.status === 'ok') return { tone: 'ok', label: 'healthy' };
+  return { tone: 'warn', label: supervisorState.data.status };
 }
 
 function hostStatus(h: SystemHealth): { tone: StatusTone; label: string } | undefined {
@@ -432,6 +553,69 @@ function hostStatus(h: SystemHealth): { tone: StatusTone; label: string } | unde
   if (memPct < 0.10) return { tone: 'warn', label: 'memory low' };
   if (h.host.load_avg_1 > h.host.cpu_count * 1.5) return { tone: 'warn', label: 'load high' };
   return undefined;
+}
+
+function doltUsageOf(
+  statusState: SupervisorStatusState | null,
+): DiagnosticDatum<StatusStoreHealth> {
+  if (statusState === null) {
+    return { status: 'unavailable', reason: 'supervisor status still loading' };
+  }
+  if (statusState.status === 'unavailable') {
+    return { status: 'unavailable', reason: statusState.error };
+  }
+  const storeHealth = statusState.data.store_health;
+  if (storeHealth === undefined) {
+    return {
+      status: 'unavailable',
+      reason: 'supervisor did not report store_health',
+    };
+  }
+  return {
+    status: 'available',
+    value: storeHealth,
+    source: 'supervisor status.store_health',
+  };
+}
+
+function beadsUsageOf(
+  statusState: SupervisorStatusState | null,
+): DiagnosticDatum<StatusWorkCounts> {
+  if (statusState === null) {
+    return { status: 'unavailable', reason: 'supervisor status still loading' };
+  }
+  if (statusState.status === 'unavailable') {
+    return { status: 'unavailable', reason: statusState.error };
+  }
+  return {
+    status: 'available',
+    value: statusState.data.work,
+    source: 'supervisor status.work',
+  };
+}
+
+function configComparisonOf(
+  statusState: SupervisorStatusState | null,
+): DiagnosticDatum<ConfigComparisonRow[]> {
+  const usage = doltUsageOf(statusState);
+  if (usage.status === 'unavailable') {
+    return { status: 'unavailable', reason: usage.reason };
+  }
+  const storeHealth = usage.value;
+  return {
+    status: 'available',
+    source: 'supervisor status.store_health (threshold vs actual)',
+    value: [{
+      label: 'Dolt MB-per-row ratio',
+      recommended: `<= ${storeHealth.threshold_mb_per_row}`,
+      loaded: String(storeHealth.ratio_mb_per_row),
+      withinRecommendation: !storeHealth.warning,
+    }],
+  };
+}
+
+function statusNumber(value: number | bigint): number {
+  return typeof value === 'bigint' ? Number(value) : value;
 }
 
 function formatDuration(sec: number): string {

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
-import type {
-  PendingInteraction,
-  TranscriptResult,
-  TranscriptTurn,
-} from 'gas-city-dashboard-shared';
-import { errorMessage, parsePendingInteraction } from 'gas-city-dashboard-shared';
-import { api } from '../api/client';
+import { errorMessage } from 'gas-city-dashboard-shared';
+import { getActiveCity } from '../api/cityBase';
 import { reportClientError } from '../lib/clientErrorReporting';
+import type { OutputTurn } from '../generated/gc-supervisor-client/types.gen';
+import { supervisorApi } from '../supervisor/client';
+import {
+  fetchSupervisorSessionTranscript,
+  sessionTranscriptView,
+  type SessionTranscriptView,
+} from '../supervisor/sessionReads';
 
 export type SessionStreamProgress =
   | { status: 'idle' }
@@ -22,19 +24,7 @@ export type SessionStreamState =
   | { status: 'idle'; stream: { status: 'idle' } }
   | { status: 'loading'; stream: { status: 'idle' } | { status: 'connecting' } }
   | { status: 'failed'; error: string; stream: { status: 'idle' } }
-  | {
-    status: 'ready';
-    result: TranscriptResult;
-    stream: SessionStreamProgress;
-    /**
-     * Latest pending interaction observed on the stream (PRD R3), or null when
-     * none is outstanding. The supervisor emits this ONLY as a per-session SSE
-     * `pending` event — see parsePendingInteraction. The R11 respond write
-     * clears it; until then a present value means an agent is blocked on the
-     * operator. Absent/undefined on a never-streamed ready state.
-     */
-    pending?: PendingInteraction | null;
-  };
+  | { status: 'ready'; result: SessionTranscriptView; stream: SessionStreamProgress };
 
 export function useSessionStream(
   sessionId: string | null,
@@ -60,7 +50,7 @@ export function useSessionStream(
       stream: { status: canStream ? 'connecting' : 'idle' },
     });
 
-    api.peekSession(sessionId).then(
+    fetchSupervisorSessionTranscript(sessionId).then(
       (result) => {
         if (cancelled) return;
         setState({
@@ -69,7 +59,10 @@ export function useSessionStream(
           stream: { status: canStream ? 'connecting' : 'idle' },
         });
         if (canStream) {
-          source = new EventSource(api.sessionStreamUrl(sessionId), {
+          source = new EventSource(supervisorApi().sessionStreamUrl(
+            activeCityOrThrow('open supervisor session stream'),
+            sessionId,
+          ), {
             withCredentials: true,
           });
           source.onopen = () => {
@@ -116,23 +109,6 @@ export function useSessionStream(
           };
           source.onmessage = onTurn;
           source.addEventListener('turn', onTurn);
-          const onPending = (event: MessageEvent<string>) => {
-            if (cancelled) return;
-            const pending = parsePendingInteraction(safeJsonParse(event.data));
-            setState((current) => {
-              const base = current.status === 'ready' ? current.result : result;
-              if (pending === null) {
-                reportMalformedSessionEvent(sessionId, malformedEventReportedRef);
-                return {
-                  status: 'ready',
-                  result: base,
-                  stream: { status: 'degraded', error: MALFORMED_SESSION_STREAM_EVENT },
-                };
-              }
-              return { status: 'ready', result: base, stream: { status: 'open' }, pending };
-            });
-          };
-          source.addEventListener('pending', onPending);
           source.onerror = () => {
             if (cancelled) return;
             const streamState =
@@ -187,20 +163,20 @@ function reportSessionStreamError(
   });
 }
 
+function activeCityOrThrow(operation: string): string {
+  const cityName = getActiveCity();
+  if (cityName === null) {
+    throw new Error(`${operation} called before an active city was resolved`);
+  }
+  return cityName;
+}
+
 type SessionStreamPayload =
-  | { kind: 'turn'; turn: TranscriptTurn }
-  | { kind: 'snapshot'; result: TranscriptResult }
+  | { kind: 'turn'; turn: OutputTurn }
+  | { kind: 'snapshot'; result: SessionTranscriptView }
   | { kind: 'invalid'; error: string };
 
 const MALFORMED_SESSION_STREAM_EVENT = 'Malformed session stream event.';
-
-function safeJsonParse(data: string): unknown {
-  try {
-    return JSON.parse(data);
-  } catch {
-    return undefined;
-  }
-}
 
 function parseStreamPayload(data: string): SessionStreamPayload {
   let parsed: unknown;
@@ -224,9 +200,9 @@ function parseStreamPayload(data: string): SessionStreamPayload {
   };
 }
 
-function parseTranscriptSnapshot(value: Record<string, unknown>): TranscriptResult | null {
+function parseTranscriptSnapshot(value: Record<string, unknown>): SessionTranscriptView | null {
   if (!Array.isArray(value.turns)) return null;
-  const turns = value.turns.flatMap((turn): TranscriptTurn[] => {
+  const turns = value.turns.flatMap((turn): OutputTurn[] => {
     if (!isRecord(turn) || typeof turn.text !== 'string') return [];
     return [{
       role: typeof turn.role === 'string' ? turn.role : 'assistant',
@@ -243,23 +219,18 @@ function parseTranscriptSnapshot(value: Record<string, unknown>): TranscriptResu
   const totalChars = typeof value.total_chars === 'number'
     ? value.total_chars
     : turns.reduce((sum, turn) => sum + turn.text.length, 0);
-  const result: TranscriptResult = {
-    session_id: sessionId,
+  const result = sessionTranscriptView({
+    id: sessionId,
+    template: typeof value.template === 'string' ? value.template : '',
+    provider: typeof value.provider === 'string' ? value.provider : '',
+    format: typeof value.format === 'string' ? value.format : 'conversation',
     turns,
+  }, typeof value.captured_at === 'string' ? value.captured_at : new Date().toISOString());
+  return {
+    ...result,
     total_chars: totalChars,
-    captured_at: typeof value.captured_at === 'string'
-      ? value.captured_at
-      : new Date().toISOString(),
     truncated: value.truncated === true,
   };
-  if (typeof value.template === 'string') result.template = value.template;
-  if (typeof value.provider === 'string') result.provider = value.provider;
-  if (typeof value.format === 'string') {
-    result.format = value.format;
-  } else {
-    result.format = 'conversation';
-  }
-  return result;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

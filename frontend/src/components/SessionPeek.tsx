@@ -1,15 +1,13 @@
 import { AnsiUp } from "ansi_up";
-import type {
-    TranscriptResult,
-    TranscriptTurn,
-} from "gas-city-dashboard-shared";
 import { useMemo, type ReactNode } from "react";
+import type { OutputTurn } from "../generated/gc-supervisor-client/types.gen";
 import {
     formatClockTime,
     formatRelative,
     formatShortDate,
 } from "../hooks/time";
 import { PROMPT_INJECTION_NOTICE } from "../lib/constants";
+import type { SessionTranscriptView } from "../supervisor/sessionReads";
 
 // Render layer for a session's transcript snapshot. Used by:
 //   - Agents page peek modal (one-shot fetch)
@@ -59,7 +57,7 @@ export function extractTurnTimestamp(text: string): string | null {
 interface SessionPeekContentProps {
   loading: boolean;
   error: string | null;
-  result: TranscriptResult | null;
+  result: SessionTranscriptView | null;
 }
 
 export function SessionPeekContent({
@@ -121,7 +119,7 @@ function TurnBlock({
   index,
   now,
 }: {
-  turn: TranscriptTurn;
+  turn: OutputTurn;
   index: number;
   now: number;
 }) {

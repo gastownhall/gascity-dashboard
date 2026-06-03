@@ -4,19 +4,35 @@ This file enumerates the security decisions the dashboard makes and the **test i
 
 The product runs on the operator's host, on `127.0.0.1`, with no auth. That is **not** a free pass — multi-user POSIX hosts share `127.0.0.1` across all local users, prompt-injection in agent mail can drive XSS, and the dashboard executes whitelisted shell commands. Each section below names the defense and how to verify it.
 
-## Network posture
+## Target network posture
+
+The target architecture has two browser-visible API classes:
+
+- GC-owned resources come from the GC supervisor API through a generated
+  browser client.
+- Dashboard-local resources come from the dashboard service under `/api/*`.
+
+Standalone development may route supervisor `/health` and `/v0/*` through the
+dashboard service under `/gc-supervisor/*` as a transport-only proxy so one
+SSH-forwarded port is enough. That proxy is not a security or DTO boundary: it
+forwards bytes and headers and does not inspect, validate, strip, cache, or
+rename supervisor payloads.
+
+## Dashboard service network posture
 
 - **Bind 127.0.0.1 only.** Not `0.0.0.0`. Enforced by `backend/src/config.ts`: `HOST` is ignored unless it is already `127.0.0.1`, and `backend/src/server.ts` binds `config.bindHost`. The systemd unit further restricts via `RestrictAddressFamilies=AF_UNIX AF_INET`.
 - **Host header allowlist** (DNS rebinding defense). `middleware/security.ts::hostHeaderAllowlist`. Allowed: `127.0.0.1`, `localhost` (with optional port). Anything else → **HTTP 421 Misdirected Request**.
-- **Origin header check** on state-changing endpoints. Must be `http://127.0.0.1:<port>` or `http://localhost:<port>`. Anything else → **HTTP 403**.
+- **Origin header check** on dashboard-service state-changing endpoints. Must be `http://127.0.0.1:<port>` or `http://localhost:<port>`. Anything else → **HTTP 403**.
 - **IPv6 posture**: Node's `app.listen('127.0.0.1', …)` binds IPv4 only, so `::1` is naturally refused.
-- **CSP `connect-src` is same-origin.** Browser `EventSource` connections go to this dashboard's `/api/events/stream` and `/api/sessions/:id/stream` proxies. The backend opens the upstream supervisor stream from server-side code, so the page does not need direct browser access to `http://127.0.0.1:8372`.
+- **CSP `connect-src` names the chosen transport.** If the browser calls the
+  supervisor directly, include the supervisor origin explicitly. If standalone
+  mode uses the transport-only proxy, `connect-src 'self'` remains sufficient.
 
 ### Invariants
 
 ```
 curl -sH 'Host: evil.com' http://127.0.0.1:8081/api/health    # → 421
-curl -sX POST -H 'Origin: http://evil.com' http://127.0.0.1:8081/api/sessions/td-foo/peek  # → 403
+curl -sX POST -H 'Origin: http://evil.com' http://127.0.0.1:8081/api/client-errors  # → 403
 ```
 
 ## Frame / content type
@@ -28,14 +44,23 @@ curl -sX POST -H 'Origin: http://evil.com' http://127.0.0.1:8081/api/sessions/td
 
 ## CSRF
 
-Double-submit cookie pattern (`middleware/csrf.ts`). Token generated per boot, surfaced as a `gascity_admin_csrf` cookie (`SameSite=Strict`, non-HttpOnly), echoed by the frontend as `X-CSRF-Token` on every POST/PATCH/DELETE. The validator covers every state-changing route — including `POST /api/client-errors` (browser-side error telemetry), the bead write paths (`/api/beads/:id/{claim,close,nudge}`), and the mail send + maintainer sling paths.
+Double-submit cookie pattern (`middleware/csrf.ts`). Token generated per boot,
+surfaced as a `gascity_admin_csrf` cookie (`SameSite=Strict`, non-HttpOnly),
+echoed by the frontend as `X-CSRF-Token` on every dashboard-service
+POST/PATCH/DELETE.
+
+The target dashboard-service write surface is local-only: client-error
+telemetry, maintainer `gh` actions, and any local audit/control endpoints. GC
+mutations should move to the supervisor API and use the supervisor's own
+browser-safe mutation/auth/header model. Do not keep a dashboard-server GC
+write route merely to reuse the dashboard CSRF middleware.
 
 Why not `csurf`: the canonical package is deprecated; rolling a minimal double-submit pattern is reasonable here, and the Host + Origin checks do the heavy lifting. CSRF is the third belt.
 
 ### Invariant
 
 ```
-curl -sX POST http://127.0.0.1:8081/api/sessions/td-foo/peek -H 'Host: 127.0.0.1' -H 'Origin: http://127.0.0.1:8081'
+curl -sX POST http://127.0.0.1:8081/api/client-errors -H 'Host: 127.0.0.1' -H 'Origin: http://127.0.0.1:8081'
 # → 403 {"error":"Missing CSRF token","kind":"csrf"}
 ```
 
@@ -43,13 +68,20 @@ curl -sX POST http://127.0.0.1:8081/api/sessions/td-foo/peek -H 'Host: 127.0.0.1
 
 Every privileged invocation routes through `backend/src/exec.ts`. **No general-purpose exec helper exists.**
 
-- **Enum whitelist** of allowed commands: `gc bd update <id> --status=... --assignee=...`, `gc bd close <id> [--reason=...]`, `gc bd nudge <id> [--reason=...]`.
+- **Target enum whitelist** of allowed commands: `git` evidence commands and
+  `gh` maintainer reads/actions only. `gc` subprocesses are not part of the
+  dashboard service exec surface.
 
-  *Peek is no longer in this list:* architect addendum td-wisp-ijk7g (mechanic td-wisp-e1v14) confirmed peek is served by gc supervisor's `GET /v0/city/{name}/session/{id}/transcript` HTTP endpoint as structured turns. The dashboard fetches the transcript via `GcClient.fetchTranscript` and sanitises text fields server-side with the same `sanitiseTerminalOutput` it would have applied to shell output. No `subprocess.spawn` involved — one less attack surface in the privileged-exec path.
+  Bead close with operator reason moved to the generated supervisor client
+  after `GC-10`; agent nudge moved after `GC-11`; agent prime/composed-prompt
+  reads moved after `GC-12`. Those subprocess paths are not part of the exec
+  surface.
+
+  *Peek is no longer in this list:* architect addendum td-wisp-ijk7g (mechanic td-wisp-e1v14) confirmed peek is served by gc supervisor's `GET /v0/city/{name}/session/{id}/transcript` HTTP endpoint as structured turns. The current implementation fetches the transcript through the generated browser supervisor client and renders it as escaped text; no dashboard server route or `subprocess.spawn` is involved.
 
 - **Param schemas** enforced before any privileged call:
   - Bead id: `^(td|th|jt)-[a-z0-9-]{3,32}$`
-  - Session id: `^(gc|td|th|[a-z]{4})-[a-z0-9-]{1,32}$` (case-sensitive, no `/i`; validated via the shared `SESSION_ID_RE` in `lib/sessionId.ts`, used by both the peek and stream routes before the gc HTTP call). The `[a-z]{4}` alternation admits city-scoped prefixes (e.g. `fddc-*`) whose codes are derived per-deployment and can't be enumerated here; the lowercase-only, hyphen-and-alphanumeric body keeps the gate strict.
+  - Session id: `^(gc|td|th|[a-z]{4})-[a-z0-9-]{1,32}$` (case-sensitive, no `/i`; validated via the shared `SESSION_ID_RE` in `lib/sessionId.ts` for run/session linking). The `[a-z]{4}` alternation admits city-scoped prefixes (e.g. `fddc-*`) whose codes are derived per-deployment and can't be enumerated here; the lowercase-only, hyphen-and-alphanumeric body keeps the gate strict.
   - Agent alias: `^[a-z][a-z0-9_./-]{1,63}$`
 - **Spawn options**:
   - `shell: false` — non-negotiable. No `sh -c`, no command injection vectors.
@@ -61,7 +93,7 @@ Every privileged invocation routes through `backend/src/exec.ts`. **No general-p
 ### Invariant
 
 ```
-curl -sX POST http://127.0.0.1:8081/api/sessions/$(printf "'; rm -rf /")/peek …
+curl -s http://127.0.0.1:8081/gc-supervisor/v0/city/test-city/session/$(printf "'; rm -rf /")/stream …
 # → 400 {"error":"invalid session id","kind":"validation"}
 ```
 
@@ -72,7 +104,7 @@ The literal arguments never reach a shell; even if they did, `shell: false` woul
 Everything rendered in the UI that originated outside the dashboard (mail bodies, bead descriptions, peek output, agent state strings) is **TEXT, NOT HTML**.
 
 - React's default escaping is the friend. `{content}` not `dangerouslySetInnerHTML`. No `innerHTML`, no `document.write`, no `eval`, no `Function()` anywhere in the frontend.
-- Peek output: server-side strips ANSI/OSC/control characters (`backend/src/exec.ts::sanitiseTerminalOutput`) and passes only safe SGR. Client converts `ansi_up` output into React nodes before rendering, so transcript colour spans are still escaped component output rather than injected HTML.
+- Transcript output: fetched from the supervisor transcript endpoint and rendered as text. Client converts `ansi_up` output into React nodes before rendering, so transcript colour spans are still escaped component output rather than injected HTML.
 - Mail bodies + bead descriptions render in `<pre>` with full text escaping.
 
 ### Banner
@@ -88,16 +120,31 @@ The peek modal carries a banner: *"Content is agent-generated and may contain mi
 
 ## Identity-switching for mail (Phase B)
 
-**Physical separation** of read vs send routers (security_researcher's strong preference over code-path discipline):
+Target state: mail read/send identity is enforced by the supervisor API
+contract and generated client types. The dashboard frontend must still render a
+visible "Viewing as <agent>" banner and must not create a client-side "send as
+other" path.
 
-- `routes/mail.ts` — read paths; takes a `viewing-as` query param.
-- `routes/mail-send.ts` — write path; **the send function's signature has no as-identity parameter**. Server is structurally unable to send-as-other.
+Current posture keeps mail reads and sends on the generated supervisor client:
+
+- Mail list/thread reads use the generated supervisor client directly in the
+  browser. The browser's "viewing as" state filters generated `Message`
+  objects in memory; there is no dashboard read router or dashboard mail-read
+  DTO.
+- Compose sends use the generated supervisor `POST /v0/city/{cityName}/mail`
+  client directly in the browser with the operator wire identity
+  `from: "human"` and the supervisor mutation header. There is no dashboard
+  mail-send router or dashboard mail-send DTO.
 
 Frontend renders a visible "Viewing as <agent>" banner with colour; the compose-from field is greyed when viewing-as ≠ the operator so the constraint is visible *before* the user tries.
 
-**Audit log** (`audit.ts`): every fetch records `actor=stephanie, viewing_as=<alias>`. Every send records `actor=stephanie, viewing_as_context=<alias>` so the trail is intact regardless of UI state.
+**Audit log** (`audit.ts`): mail no longer passes through the dashboard
+service. Mail-send audit/event semantics are owned by the supervisor API; the
+dashboard service only records dashboard-local writes.
 
-No client-side caching of mail under as-identity (`Cache-Control: no-store`, no `localStorage` retention).
+No persistent client-side caching of mail under as-identity (`localStorage`,
+IndexedDB, or durable caches). Generated-client query caches must key by
+identity and stay in memory.
 
 ## Kill switch
 

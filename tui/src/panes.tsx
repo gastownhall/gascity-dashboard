@@ -4,10 +4,12 @@ import type { RunLane } from 'gas-city-dashboard-shared';
 import type { GcBead, GcMailItem } from './api.ts';
 import {
   activityPhrase,
+  agentLane,
   basename,
   CITY_BOARD_PHASE_LABEL,
   CITY_BOARD_PHASES,
   ctxPct,
+  displayRig,
   kindGlyph,
   kindLabel,
   laneNeedsOperator,
@@ -578,6 +580,76 @@ export function LedgerPane({ mail, mailFolded, runs }: LedgerPaneProps): React.J
 
       <Box marginTop={1}>
         <Text dimColor>l close · q quit</Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── overview rows (rendered by the generic grouped list) ─────────────────────
+
+interface ActiveAgentRowProps {
+  readonly view: AgentView;
+  readonly selected: boolean;
+  readonly city: string;
+  readonly lanes: readonly RunLane[];
+  readonly now: number;
+}
+
+/** One ACTIVE row in the overview: kind glyph, agent, city/rig, what it's working
+ *  on (the assigned run lane, else the activity hint), recency. */
+export function ActiveAgentRow({ view, selected, city, lanes, now }: ActiveAgentRowProps): React.JSX.Element {
+  const lane = agentLane(view, lanes);
+  const work = lane ? `on ${lane.title}` : activityPhrase(view.session);
+  return (
+    <Box>
+      <Box width={2}>{selected ? <Text color="cyan">▸</Text> : <Text> </Text>}</Box>
+      <Box width={2}>
+        <Text bold={view.kind === 'orch'} dimColor={view.kind !== 'orch'}>
+          {kindGlyph(view.kind)}
+        </Text>
+      </Box>
+      <Box width={16} marginRight={1}>
+        <Text wrap="truncate-end" bold={selected} inverse={selected}>
+          {view.agent}
+        </Text>
+      </Box>
+      <Box width={12} marginRight={1}>
+        <Text dimColor wrap="truncate-end">
+          {displayRig(view.rig, city)}
+        </Text>
+      </Box>
+      <Box flexGrow={1} marginRight={1}>
+        <Text dimColor wrap="truncate-end">
+          {work}
+        </Text>
+      </Box>
+      <Box width={5} justifyContent="flex-end">
+        <Text dimColor>{relativeTime(view.session.last_active, now)}</Text>
+      </Box>
+    </Box>
+  );
+}
+
+interface MailRowProps {
+  readonly mail: GcMailItem;
+  readonly selected: boolean;
+}
+
+/** One WAITING mail row: a quiet envelope, the sender, the subject. `enter`
+ *  peeks the full message (read-only `gc mail peek`). */
+export function MailRow({ mail, selected }: MailRowProps): React.JSX.Element {
+  return (
+    <Box>
+      <Box width={2}>{selected ? <Text color="cyan">▸</Text> : <Text dimColor>✉</Text>}</Box>
+      <Box width={16} marginRight={1}>
+        <Text wrap="truncate-end" bold={selected} inverse={selected}>
+          {basename(mail.from) || mail.from}
+        </Text>
+      </Box>
+      <Box flexGrow={1}>
+        <Text wrap="truncate-end" dimColor>
+          {mail.subject}
+        </Text>
       </Box>
     </Box>
   );

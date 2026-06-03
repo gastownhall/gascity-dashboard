@@ -1,6 +1,7 @@
-import type { GcStatus, WorkSummary } from 'gas-city-dashboard-shared';
+import type { WorkSummary } from 'gas-city-dashboard-shared';
 
 import { type GcClient } from '../../gc-client.js';
+import type { StatusBody } from '../../generated/gc-supervisor-client/types.gen.js';
 import { SourceCache } from '../cache.js';
 
 // Work-item census collector — gascity-dashboard-aw75. Surfaces the
@@ -26,9 +27,11 @@ import { SourceCache } from '../cache.js';
  */
 export const WORK_CACHE_TTL_MS = 45 * 1000;
 
+export type WorkStatus = Partial<Pick<StatusBody, 'work' | 'version'>>;
+
 export interface CollectWorkOptions {
   /** Live upstream loader for the supervisor city status. */
-  getStatus: () => Promise<GcStatus>;
+  getStatus: () => Promise<WorkStatus>;
 }
 
 export interface CreateWorkSourceCacheOptions {
@@ -44,7 +47,7 @@ export interface CreateWorkSourceCacheOptions {
   loadFixture?: (() => Promise<WorkSummary> | WorkSummary) | undefined;
   useFixture?: boolean | undefined;
   /** Test seam: override the getStatus binding to avoid a real GcClient. */
-  getStatus?: (() => Promise<GcStatus>) | undefined;
+  getStatus?: (() => Promise<WorkStatus>) | undefined;
 }
 
 export function createWorkSourceCache(
@@ -85,7 +88,7 @@ export async function collectWork(options: CollectWorkOptions): Promise<WorkSumm
 
 function resolveGetStatus(
   options: CreateWorkSourceCacheOptions,
-): () => Promise<GcStatus> {
+): () => Promise<WorkStatus> {
   if (options.getStatus) return options.getStatus;
   const { gc } = options;
   if (!gc) {

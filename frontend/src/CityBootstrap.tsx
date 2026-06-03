@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { CITY_NAME_RE, type CityInfo } from 'gas-city-dashboard-shared';
+import { CITY_NAME_RE } from 'gas-city-dashboard-shared';
 import { App } from './App';
-import { api } from './api/client';
 import { setActiveCity } from './api/cityBase';
+import { supervisorApi } from './supervisor/client';
 
 // gascity-dashboard-ucc — city bootstrap.
 //
@@ -55,11 +55,11 @@ export function CityBootstrap() {
   useEffect(() => {
     if (parsed !== null) return; // city already resolved from the URL
     let cancelled = false;
-    api
+    supervisorApi()
       .listCities()
       .then((list) => {
         if (cancelled) return;
-        const first: CityInfo | undefined = list.items[0];
+        const first = list.items?.[0];
         if (first === undefined) {
           setState({ phase: 'empty' });
           return;

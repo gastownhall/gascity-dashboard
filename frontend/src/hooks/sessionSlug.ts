@@ -1,4 +1,5 @@
-import type { GcAgent, GcSession } from 'gas-city-dashboard-shared';
+import type { GcSession } from 'gas-city-dashboard-shared';
+import type { AgentResponse } from '../generated/gc-supervisor-client/types.gen';
 
 // Resolution order for the drilldown URL segment. session_name is gc's
 // URL-safe primary; alias is human-readable; id is the stable fallback.
@@ -14,7 +15,7 @@ export function sessionSlug(s: GcSession): string {
 }
 
 /**
- * Slug for a `GcAgent` row in the Agents list (gascity-dashboard-ay6).
+ * Slug for an `AgentResponse` row in the Agents list (gascity-dashboard-ay6).
  * AgentDetail resolves a slug by matching against session.session_name,
  * session.alias, or session.id (in that order). For agents with an active
  * session we hand back the supervisor session name (highest priority on
@@ -22,6 +23,6 @@ export function sessionSlug(s: GcSession): string {
  * fall back to the agent's own alias, which AgentDetail will still
  * surface even without a backing session.
  */
-export function agentSlug(a: GcAgent): string {
+export function agentSlug(a: AgentResponse): string {
   return a.session?.name ?? a.name;
 }

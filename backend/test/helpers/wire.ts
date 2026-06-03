@@ -1,5 +1,5 @@
 // gascity-dashboard-brx: shared narrowing for redaction-layer wire-error
-// tests. The redaction tests across agents-prime, beads-nudge, mail-send,
+// tests. The redaction tests across agents-prime, beads-nudge,
 // maintainer-sling, and git-commits all repeat the same ad-hoc cast:
 //
 //   const details = res.body.details as { name?: string; message?: string };

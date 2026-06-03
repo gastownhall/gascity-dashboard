@@ -1,6 +1,8 @@
 import { Suspense, useMemo } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { api } from './api/client';
+import { AttentionProvider } from './attention/context';
+import { useLiveAttentionContributors } from './attention/liveContributors';
 import { Layout } from './components/Layout';
 import { AgentsPage } from './routes/Agents';
 import { AgentDetailPage } from './routes/AgentDetail';
@@ -30,6 +32,7 @@ export function App() {
   const { data: config } = useCachedData('config', () => api.config());
   const enabledModules = config?.enabledModules ?? null;
   const defaultViewEnv = config?.defaultView ?? null;
+  const attentionContributors = useLiveAttentionContributors(enabledModules);
 
   const enabledViews = useMemo(
     () => filterEnabledViews(ALL_VIEWS, enabledModules),
@@ -51,9 +54,10 @@ export function App() {
   return (
     <ViewingAsProvider>
       <NowProvider>
-        <Layout>
-          <Suspense fallback={null}>
-            <Routes>
+        <AttentionProvider contributors={attentionContributors}>
+          <Layout>
+            <Suspense fallback={null}>
+              <Routes>
               {/* `/` resolution (PRD §6 / bead 9yj.5):
                   DEFAULT_VIEW env → descriptor `defaultRoute: true` →
                   kb3 ambient home fallback. The resolver runs once per
@@ -87,9 +91,10 @@ export function App() {
                 return <Route key={v.id} path={v.path} element={<Element />} />;
               })}
               <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </Suspense>
-        </Layout>
+              </Routes>
+            </Suspense>
+          </Layout>
+        </AttentionProvider>
       </NowProvider>
     </ViewingAsProvider>
   );

@@ -24,7 +24,7 @@ describe('route error adapter', () => {
     assert.deepEqual(
       routeUpstreamError(err, {
         component: LOG_COMPONENT.sessions,
-        operation: '/api/sessions failed',
+        operation: 'session stream failed',
         responseError: 'failed to list sessions',
         isTimeout: GcClient.isTimeoutError,
       }),

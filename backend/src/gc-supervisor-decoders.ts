@@ -1,25 +1,10 @@
-import { sanitiseTerminalOutput } from './exec.js';
 import type {
-  CityList,
-  GcAgent,
-  GcAgentList,
   GcBead,
   GcBeadList,
-  GcEventList,
   GcFormulaDetail,
-  GcFormulaRunList,
-  GcFormulaRunsResponse,
-  GcMailList,
-  GcOrderHistoryDetail,
-  GcOrderHistoryList,
-  GcOrdersFeedResponse,
-  GcRigList,
   GcRunSnapshot,
   GcSessionList,
-  GcStatus,
-  MailSendResponse,
   SlingResponse,
-  SupervisorHealth,
   TranscriptTurn,
 } from 'gas-city-dashboard-shared';
 import { z } from 'zod';
@@ -28,17 +13,10 @@ import type {
   Bead,
   FormulaDetailResponse,
   FormulaFeedBody,
-  FormulaRunsResponse,
-  HealthOutputBody,
   ListBodyAgentResponse,
   ListBodyBead,
   ListBodyRigResponse,
   ListBodySessionResponse,
-  ListBodyWireEvent,
-  MailListBody,
-  OrderHistoryDetailResponse,
-  OrderHistoryListBody,
-  OrdersFeedBody,
   SessionTranscriptGetResponse,
   StatusBody,
   SupervisorCitiesOutputBody,
@@ -50,17 +28,10 @@ type RawSupervisorSchema = {
   Bead: Bead;
   FormulaDetailResponse: FormulaDetailResponse;
   FormulaFeedBody: FormulaFeedBody;
-  FormulaRunsResponse: FormulaRunsResponse;
-  HealthOutputBody: HealthOutputBody;
   ListBodyAgentResponse: ListBodyAgentResponse;
   ListBodyBead: ListBodyBead;
   ListBodyRigResponse: ListBodyRigResponse;
   ListBodySessionResponse: ListBodySessionResponse;
-  ListBodyWireEvent: ListBodyWireEvent;
-  MailListBody: MailListBody;
-  OrderHistoryDetailResponse: OrderHistoryDetailResponse;
-  OrderHistoryListBody: OrderHistoryListBody;
-  OrdersFeedBody: OrdersFeedBody;
   SessionTranscriptGetResponse: SessionTranscriptGetResponse;
   StatusBody: StatusBody;
   SupervisorCitiesOutputBody: SupervisorCitiesOutputBody;
@@ -70,9 +41,9 @@ type RawSupervisorSchema = {
 /**
  * Decoder-edge type for the supervisor's session-transcript response.
  * Intentionally local to the backend — this is the raw decoded shape,
- * NOT a wire-shape that crosses the dashboard's own API boundary. It is
- * assembled into the public `TranscriptResult` (from shared/) by
- * `buildTranscriptResult()` in routes/sessions.ts. Do not move to shared/.
+ * NOT a wire-shape that crosses the dashboard's own API boundary. Backend
+ * composed routes still use it while their supervisor-backed read surfaces
+ * are migrated. Do not move to shared/.
  */
 export interface GcTranscriptResponse {
   id?: string;
@@ -88,7 +59,6 @@ type GcWorkflowSnapshot = Omit<GcRunSnapshot, 'run_id'> & {
   workflow_id: string;
 };
 
-const UnknownRecordSchema = z.record(z.string(), z.unknown());
 const StringRecordSchema = z.record(z.string(), z.string());
 
 // 6bv7 F10: provider, running, session_name, title are declared REQUIRED in
@@ -159,36 +129,19 @@ const BeadSchema = z.object({
   dependencies: z.array(BeadDepSchema).nullable().optional(),
 }).passthrough();
 
-// Per-rig wire shape from `GET /v0/city/{name}/rigs`. The supervisor's
-// RigResponse carries agent_count, running_count, suspended, git status,
-// default_branch, prefix, last_activity — all of which we drop at the
-// edge because GcRig (shared) is intentionally narrow (name + path
-// only). Adding a field to GcRig means widening this schema first so the
-// SSOT contract stays one-way: shared.GcRig ⊆ supervisor.RigResponse.
+// Per-rig wire shape from `GET /v0/city/{name}/rigs`.
 // gascity-dashboard-19w.
 const RigSchema = z.object({
+  agent_count: z.number().finite(),
   name: z.string(),
   path: z.string(),
+  running_count: z.number().finite(),
+  suspended: z.boolean(),
 }).passthrough();
 
-// gascity-dashboard-ucc: GET /v0/cities item shape. The supervisor's
-// CityInfo carries an absolute host `path` (and `phases_completed`); the
-// dashboard NARROWS to name+running+status+error. Unlike the other
-// supervisor decoders this one deliberately STRIPS unknown keys (Zod's
-// default object behaviour — no `.passthrough()`) so the untrusted host
-// `path` is removed at the decoder edge and can never reach the browser
-// through `GET /api/cities`. A new supervisor field is dropped, not
-// leaked; adopting one requires an explicit shared-types + schema change.
-const CitySchema = z.object({
-  name: z.string(),
-  running: z.boolean(),
-  status: z.string().optional(),
-  error: z.string().optional(),
-});
-
-// Host-side city descriptor: same as CitySchema but RETAINS the untrusted
-// host `path` (required string). Used only by the per-city runtime registry,
-// never serialized to the browser. See `listSupervisorCities`.
+// Host-side city descriptor. Retains the untrusted host `path` because the
+// per-city runtime registry needs it; never serialize this shape to the
+// browser.
 const SupervisorCitySchema = z.object({
   name: z.string(),
   path: z.string(),
@@ -235,53 +188,6 @@ const AgentSchema = z.object({
   context_window: z.number().finite().optional(),
   unavailable_reason: z.string().optional(),
   session: AgentSessionSchema.optional(),
-}).passthrough();
-
-// 6bv7 F17: priority/cc/reply_to live in OpenAPI Message but were missing
-// from the decoder, forcing callers that wanted them to `as any` past
-// passthrough(). Surface them so the SSOT contract covers the full Message.
-const MailItemSchema = z.object({
-  id: z.string(),
-  from: z.string(),
-  to: z.string(),
-  subject: z.string(),
-  body: z.string(),
-  created_at: z.string(),
-  read: z.boolean(),
-  thread_id: z.string().optional(),
-  rig: z.string().optional(),
-  priority: z.number().finite().optional(),
-  cc: z.array(z.string()).nullable().optional(),
-  reply_to: z.string().optional(),
-}).passthrough();
-
-const MailSendResponseSchema = z.object({
-  id: z.string(),
-  from: z.string().optional(),
-  to: z.string().optional(),
-  subject: z.string().optional(),
-  body: z.string().optional(),
-  created_at: z.string().optional(),
-  read: z.boolean().optional(),
-  thread_id: z.string().optional(),
-  rig: z.string().optional(),
-  priority: z.number().finite().optional(),
-  cc: z.array(z.string()).nullable().optional(),
-  reply_to: z.string().optional(),
-}).passthrough();
-
-// 6bv7 F12: actor + payload are declared REQUIRED across every
-// TypedEventStreamEnvelope variant in OpenAPI and present in 200/200
-// sampled live events. Tighten to required so a future supervisor that
-// drops one fails at the decoder edge.
-const EventSchema = z.object({
-  seq: z.number().finite(),
-  type: z.string(),
-  ts: z.string(),
-  actor: z.string(),
-  payload: UnknownRecordSchema,
-  subject: z.string().optional(),
-  message: z.string().optional(),
 }).passthrough();
 
 const RunBeadSchema = z.object({
@@ -382,120 +288,6 @@ const TranscriptResponseSchema = z.object({
   turns: z.array(TranscriptTurnSchema).nullish().transform((v) => v ?? []),
 }).passthrough();
 
-// gascity-dashboard-ej9y: one entry from /v0/city/<city>/formulas/feed.
-// Mirrors supervisor `MonitorFeedItemResponse` at the wire edge, then maps
-// `workflow_id` to dashboard `run_id`. Used by the runs snapshot collector
-// to discover rig-stored run roots that the city-scoped listBeads endpoint
-// does NOT return.
-const FormulaRunWireSchema = z.object({
-  id: z.string(),
-  type: z.string(),
-  status: z.string(),
-  title: z.string(),
-  scope_kind: z.string(),
-  scope_ref: z.string(),
-  target: z.string(),
-  started_at: z.string(),
-  updated_at: z.string(),
-  workflow_id: z.string().optional(),
-  root_bead_id: z.string().optional(),
-  root_store_ref: z.string().optional(),
-  attached_bead_id: z.string().optional(),
-  logical_bead_id: z.string().optional(),
-  bead_id: z.string().optional(),
-  store_ref: z.string().optional(),
-  detail_available: z.boolean().optional(),
-  run_detail_available: z.boolean().optional(),
-}).passthrough();
-const FormulaRunSchema = FormulaRunWireSchema.transform(({ workflow_id: workflowId, ...rest }) =>
-  workflowId !== undefined ? { ...rest, run_id: workflowId } : rest,
-);
-
-// gascity-dashboard-hvx: per-formula run history. One entry from
-// FormulaRunsResponse.recent_runs. Mirrors supervisor `FormulaRecentRunResponse`
-// — workflow_id + target + status + the two timestamps are all required on
-// the wire. The dashboard DTO maps workflow_id to run_id.
-const FormulaRecentRunWireSchema = z.object({
-  workflow_id: z.string(),
-  target: z.string(),
-  status: z.string(),
-  started_at: z.string(),
-  updated_at: z.string(),
-}).passthrough();
-const FormulaRecentRunSchema = FormulaRecentRunWireSchema.transform(
-  ({ workflow_id: workflowId, ...rest }) => ({
-    ...rest,
-    run_id: workflowId,
-  }),
-);
-
-// gascity-dashboard-hvx: one entry from OrderHistoryListBody.entries.
-// Mirrors supervisor `OrderHistoryEntry`. duration_ms / exit_code / signal
-// are strings on the wire — the supervisor formats numerics for downstream
-// consumers; preserved as-is so the SSOT contract stays one-way:
-// shared.GcOrderHistoryEntry ⊆ supervisor.OrderHistoryEntry. `labels` is
-// declared `T[] | null` (required + nullable) — preserve null so consumers
-// can distinguish "no labels" from "missing field" (the latter must fail
-// decoding instead of laundering into null).
-const OrderHistoryEntrySchema = z.object({
-  bead_id: z.string(),
-  name: z.string(),
-  scoped_name: z.string(),
-  created_at: z.string(),
-  capture_output: z.boolean(),
-  has_output: z.boolean(),
-  labels: z.array(z.string()).nullable(),
-  store_ref: z.string(),
-  duration_ms: z.string().optional(),
-  exit_code: z.string().optional(),
-  signal: z.string().optional(),
-  error: z.string().optional(),
-  rig: z.string().optional(),
-  wisp_root_id: z.string().optional(),
-}).passthrough();
-
-const HealthSchema = z.object({
-  status: z.string(),
-  // izgc F7/F8: OpenAPI declares both city + version optional. Present in
-  // practice today, but typing as required depends on supervisor
-  // implementation details — a refactor could legitimately omit them.
-  // Shared SupervisorHealth surfaces undefined as a warn-toned signal in
-  // the Health UI rather than coalescing silently.
-  version: z.string().optional(),
-  city: z.string().optional(),
-  uptime_sec: z.number().finite(),
-}).passthrough();
-
-// gascity-dashboard-x82: the supervisor's StatusBody.store_health summary.
-// `size_bytes` is the only field the dashboard reads (dolt-noms trend); the
-// rest are surfaced for the single-source-of-truth shape but unused today.
-// `.finite()` on size_bytes rejects a malformed Infinity/NaN at the decoder
-// edge; the sampler additionally rejects negative values (see routes/dolt.ts).
-// store_health is optional on StatusBody — a degraded supervisor omits it.
-const StatusStoreHealthSchema = z.object({
-  size_bytes: z.number().finite(),
-  live_rows: z.number().finite().optional(),
-  ratio_mb_per_row: z.number().finite().optional(),
-  threshold_mb_per_row: z.number().finite().optional(),
-  warning: z.boolean().optional(),
-  last_gc_at: z.string().optional(),
-  last_gc_status: z.string().optional(),
-  path: z.string().optional(),
-}).passthrough();
-
-// gascity-dashboard-1cob: beads usage for the Health page, from status.work.
-const StatusWorkCountsSchema = z.object({
-  open: z.number().finite(),
-  ready: z.number().finite(),
-  in_progress: z.number().finite(),
-}).passthrough();
-
-const StatusSchema = z.object({
-  store_health: StatusStoreHealthSchema.optional(),
-  work: StatusWorkCountsSchema.optional(),
-  version: z.string().optional(),
-}).passthrough();
-
 // izgc F3: every ListBody* envelope in the supervisor's OpenAPI declares
 // `items: T[] | null` for partial/degraded responses, correlated with
 // `partial: true` and `partial_errors`. Build the list-decoder fields once
@@ -506,14 +298,9 @@ const StatusSchema = z.object({
 function listItemsField<T extends z.ZodTypeAny>(itemSchema: T) {
   return z.array(itemSchema).nullish().transform((v) => v ?? []);
 }
-// The supervisor's OpenAPI declares `partial` as optional on ListBodyBead,
-// ListBodySessionResponse, MailListBody, and ListBodyWireEvent — `PartialField`
-// mirrors that contract. FormulaFeedBody is the lone outlier: its `partial` is
-// declared `boolean` (required), so `listFormulaRuns` uses `RequiredPartialField`
-// instead. Keeping the two named helpers separate prevents the wire-shape drift
-// from leaking back into the optional-side decoders.
+// The supervisor's OpenAPI declares `partial` as optional on ListBodyBead and
+// ListBodySessionResponse — `PartialField` mirrors that contract.
 const PartialField = z.boolean().optional();
-const RequiredPartialField = z.boolean();
 const PartialErrorsField = z.array(z.string())
   .nullish()
   .transform((v) => (v ?? undefined));
@@ -533,10 +320,11 @@ export const gcSupervisorDecoders = {
     );
   },
 
-  listRigs(value: RawSupervisorSchema['ListBodyRigResponse']): GcRigList {
+  listRigs(value: RawSupervisorSchema['ListBodyRigResponse']): ListBodyRigResponse {
     return decodeSupervisorPayload(
       z.object({
         items: listItemsField(RigSchema),
+        total: z.number().finite(),
         partial: PartialField,
         partial_errors: PartialErrorsField,
       }).passthrough(),
@@ -545,23 +333,11 @@ export const gcSupervisorDecoders = {
     );
   },
 
-  listCities(value: RawSupervisorSchema['SupervisorCitiesOutputBody']): CityList {
-    return decodeSupervisorPayload(
-      z.object({
-        items: listItemsField(CitySchema),
-        // SupervisorCitiesOutputBody declares total required.
-        total: z.number().finite(),
-      }).passthrough(),
-      value,
-      'listCities',
-    );
-  },
-
-  // Host-side variant of listCities that RETAINS the untrusted host `path`.
+  // Host-side city registry decode that RETAINS the untrusted host `path`.
   // The per-city runtime registry needs the path to build each city's
   // CLI-shelling routes; it is kept host-side and NEVER serialized to the
-  // browser (the wire-shape `listCities` above strips it). Validates the
-  // SAME required fields plus a required string `path`.
+  // browser. Browser city discovery uses the generated frontend supervisor
+  // client directly.
   listSupervisorCities(
     value: RawSupervisorSchema['SupervisorCitiesOutputBody'],
   ): readonly SupervisorCity[] {
@@ -579,10 +355,11 @@ export const gcSupervisorDecoders = {
     return decoded.items;
   },
 
-  listAgents(value: RawSupervisorSchema['ListBodyAgentResponse']): GcAgentList {
+  listAgents(value: RawSupervisorSchema['ListBodyAgentResponse']): ListBodyAgentResponse {
     return decodeSupervisorPayload(
       z.object({
         items: listItemsField(AgentSchema),
+        total: z.number().finite(),
         partial: PartialField,
         partial_errors: PartialErrorsField,
       }).passthrough(),
@@ -591,7 +368,7 @@ export const gcSupervisorDecoders = {
     );
   },
 
-  getAgent(value: RawSupervisorSchema['AgentResponse']): GcAgent {
+  getAgent(value: RawSupervisorSchema['AgentResponse']): AgentResponse {
     return decodeSupervisorPayload(AgentSchema, value, 'getAgent');
   },
 
@@ -610,41 +387,6 @@ export const gcSupervisorDecoders = {
       }).passthrough(),
       value,
       'listBeads',
-    );
-  },
-
-  listMail(value: RawSupervisorSchema['MailListBody']): GcMailList {
-    return decodeSupervisorPayload(
-      z.object({
-        items: listItemsField(MailItemSchema),
-        // 6bv7 F14: OpenAPI MailListBody declares total required.
-        total: z.number().finite(),
-        partial: PartialField,
-        partial_errors: PartialErrorsField,
-      }).passthrough(),
-      value,
-      'listMail',
-    );
-  },
-
-  sendMail(value: unknown): MailSendResponse {
-    return decodeSupervisorPayload(MailSendResponseSchema, value, 'sendMail');
-  },
-
-  listEvents(value: RawSupervisorSchema['ListBodyWireEvent']): GcEventList {
-    return decodeSupervisorPayload(
-      z.object({
-        items: listItemsField(EventSchema),
-        // 6bv7 F13/F14: OpenAPI ListBodyWireEvent declares total required and
-        // has no `next` field — only `next_cursor: string`. The previous
-        // `next: z.number()` schema bound to a phantom field; passthrough()
-        // strips it cleanly.
-        total: z.number().finite(),
-        partial: PartialField,
-        partial_errors: PartialErrorsField,
-      }).passthrough(),
-      value,
-      'listEvents',
     );
   },
 
@@ -669,92 +411,8 @@ export const gcSupervisorDecoders = {
     return snapshot;
   },
 
-  listFormulaRuns(value: RawSupervisorSchema['FormulaFeedBody']): GcFormulaRunList {
-    return decodeSupervisorPayload(
-      z.object({
-        items: listItemsField(FormulaRunSchema),
-        // mfb9: FormulaFeedBody.partial is required (`boolean`) per OpenAPI —
-        // unlike its List* siblings whose `partial` is optional. The required
-        // helper here locks the dashboard-side contract so a missing field
-        // surfaces at the decoder edge instead of silently becoming `undefined`.
-        partial: RequiredPartialField,
-        partial_errors: PartialErrorsField,
-      }).passthrough(),
-      value,
-      'listFormulaRuns',
-    );
-  },
-
-  // gascity-dashboard-hvx: per-formula recent runs. Distinct from
-  // listFormulaRuns (cross-formula /formulas/feed) — this is the supervisor's
-  // `formulas/{name}/runs` endpoint, scoped to a single named formula.
-  // FormulaRunsResponse declares `formula` + `run_count` + `partial`
-  // required; `recent_runs` is `T[] | null` (the listItemsField pattern).
-  listFormulaRunsByName(value: RawSupervisorSchema['FormulaRunsResponse']): GcFormulaRunsResponse {
-    return decodeSupervisorPayload(
-      z.object({
-        formula: z.string(),
-        run_count: z.number().finite(),
-        recent_runs: listItemsField(FormulaRecentRunSchema),
-        partial: RequiredPartialField,
-        partial_errors: PartialErrorsField,
-      }).passthrough(),
-      value,
-      'listFormulaRunsByName',
-    );
-  },
-
-  // gascity-dashboard-hvx: orders/feed shares the per-item shape
-  // (MonitorFeedItemResponse) with formulas/feed — reuse FormulaRunSchema.
-  // OrdersFeedBody.partial is required (mirrors FormulaFeedBody).
-  listOrdersFeed(value: RawSupervisorSchema['OrdersFeedBody']): GcOrdersFeedResponse {
-    return decodeSupervisorPayload(
-      z.object({
-        items: listItemsField(FormulaRunSchema),
-        partial: RequiredPartialField,
-        partial_errors: PartialErrorsField,
-      }).passthrough(),
-      value,
-      'listOrdersFeed',
-    );
-  },
-
-  // gascity-dashboard-hvx: full history for one named order. The supervisor's
-  // OrderHistoryListBody is intentionally narrow — entries only, no
-  // partial/partial_errors/total envelope. `entries: T[] | null` follows the
-  // listItemsField pattern.
-  listOrderHistory(value: RawSupervisorSchema['OrderHistoryListBody']): GcOrderHistoryList {
-    return decodeSupervisorPayload(
-      z.object({
-        entries: listItemsField(OrderHistoryEntrySchema),
-      }).passthrough(),
-      value,
-      'listOrderHistory',
-    );
-  },
-
-  // gascity-dashboard-hvx: one historical order-run detail. All five fields
-  // declared required in OpenAPI; `labels` is `T[] | null` (preserve null so
-  // consumers can distinguish "no labels" from "missing field").
-  //
-  // hvx.1: `output` is captured terminal stdout/stderr — the same surface
-  // `fetchTranscript` runs through `sanitiseTerminalOutput`. We apply
-  // sanitisation at the DECODER edge (not the route handler) so any future
-  // route that surfaces this field cannot bypass the contract by forgetting
-  // to call the sanitiser. Defense-in-depth per the Phase-4 security review
-  // on the cleanup wave.
-  getOrderHistoryDetail(value: RawSupervisorSchema['OrderHistoryDetailResponse']): GcOrderHistoryDetail {
-    return decodeSupervisorPayload(
-      z.object({
-        bead_id: z.string(),
-        store_ref: z.string(),
-        created_at: z.string(),
-        labels: z.array(z.string()).nullable(),
-        output: z.string().transform(sanitiseTerminalOutput),
-      }).passthrough(),
-      value,
-      'getOrderHistoryDetail',
-    );
+  listFormulaRuns(value: RawSupervisorSchema['FormulaFeedBody']): FormulaFeedBody {
+    return value;
   },
 
   getFormulaDetail(value: RawSupervisorSchema['FormulaDetailResponse']): GcFormulaDetail {
@@ -769,16 +427,8 @@ export const gcSupervisorDecoders = {
     );
   },
 
-  health(value: RawSupervisorSchema['HealthOutputBody']): SupervisorHealth {
-    return decodeSupervisorPayload(
-      HealthSchema,
-      value,
-      'health',
-    );
-  },
-
-  getStatus(value: RawSupervisorSchema['StatusBody']): GcStatus {
-    return decodeSupervisorPayload(StatusSchema, value, 'getStatus');
+  getStatus(value: RawSupervisorSchema['StatusBody']): StatusBody {
+    return value;
   },
 
   // gascity-dashboard sling wire-field mapping. #61 renamed

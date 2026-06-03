@@ -100,14 +100,14 @@ export async function discoverFromFeed(gc: GcClient): Promise<FeedDiscovery> {
     });
     const rigNames = new Set<string>();
     const scopes = new Map<string, RunFeedScope>();
-    for (const run of runs.items) {
+    for (const run of runs.items ?? []) {
       if (run.type !== 'formula') continue;
       const storeRef = run.root_store_ref ?? null;
       const storeScope = fromStoreRef(storeRef);
       if (storeScope?.scopeKind === 'rig') {
         rigNames.add(storeScope.scopeRef);
       }
-      const rootId = run.root_bead_id ?? run.run_id ?? null;
+      const rootId = run.root_bead_id ?? run.workflow_id ?? null;
       const scope = fromFeedScope(run);
       if (rootId !== null && scope !== null) {
         scopes.set(rootId, {

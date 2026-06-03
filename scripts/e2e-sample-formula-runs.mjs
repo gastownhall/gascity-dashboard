@@ -2,20 +2,22 @@
 //
 // This intentionally hits the running dashboard and supervisor-backed APIs.
 // It verifies that the sample todo and tic-tac-toe planning and implementation
-// runs are present, clickable from /runs, and render as real run-detail
-// pages with backend-owned progress, graph selection, diff evidence, and session
+// runs are present, clickable from /runs, and render as real run-detail pages
+// with browser-owned progress, graph selection, diff evidence, and session
 // empty/state handling.
 //
 // Usage:
 //   node scripts/e2e-sample-formula-runs.mjs
 //
 // Optional:
-//   DASHBOARD_BASE_URL=http://127.0.0.1:5174 node scripts/e2e-sample-formula-runs.mjs
+//   DASHBOARD_BASE_URL=http://127.0.0.1:5174 DASHBOARD_CITY=formula-detail-demo-city node scripts/e2e-sample-formula-runs.mjs
 
 import { chromium } from 'playwright';
 import { exit } from 'node:process';
 
-const BASE = process.env.DASHBOARD_BASE_URL ?? 'http://127.0.0.1:5174';
+const BASE = stripTrailingSlash(process.env.DASHBOARD_BASE_URL ?? 'http://127.0.0.1:5174');
+const CITY = process.env.DASHBOARD_CITY ?? await discoverFirstCity(BASE);
+const CITY_BASE = `${BASE}/city/${encodeURIComponent(CITY)}`;
 const EXPECTED_RUNS = [
   {
     key: 'todo planning',
@@ -43,22 +45,6 @@ const EXPECTED_RUNS = [
   },
 ];
 
-const snapshot = await fetchJson(`${BASE}/api/snapshot`);
-const lanes = snapshot?.sources?.runs?.data?.lanes;
-if (!Array.isArray(lanes)) {
-  console.error('sample formula run e2e: FAILED');
-  console.error('  /api/snapshot did not include sources.runs.data.lanes');
-  exit(1);
-}
-
-const foundRuns = [];
-const missingRuns = [];
-for (const expected of EXPECTED_RUNS) {
-  const lane = lanes.find((candidate) => laneMatches(candidate, expected));
-  if (lane) foundRuns.push({ expected, lane });
-  else missingRuns.push(expected);
-}
-
 const browser = await chromium.launch();
 const context = await browser.newContext({
   viewport: { width: 1440, height: 900 },
@@ -82,7 +68,7 @@ const apiFailures = [];
 
 page.on('response', (response) => {
   const url = new URL(response.url());
-  if (url.pathname.startsWith('/api/')) {
+  if (isObservedApiPath(url.pathname)) {
     apiCalls.push({
       status: response.status(),
       method: response.request().method(),
@@ -93,13 +79,14 @@ page.on('response', (response) => {
 
 page.on('requestfailed', (request) => {
   const url = new URL(request.url());
-  if (url.pathname.startsWith('/api/')) {
-    apiFailures.push({
-      method: request.method(),
-      url: url.toString(),
-      failure: request.failure()?.errorText ?? 'request failed',
-    });
-  }
+  if (!isObservedApiPath(url.pathname)) return;
+  const failure = request.failure()?.errorText ?? 'request failed';
+  if (failure === 'net::ERR_ABORTED') return;
+  apiFailures.push({
+    method: request.method(),
+    url: url.toString(),
+    failure,
+  });
 });
 
 page.on('console', (message) => {
@@ -108,7 +95,24 @@ page.on('console', (message) => {
   }
 });
 
+let foundRuns = [];
+let missingRuns = [];
+
 try {
+  await page.goto(`${CITY_BASE}/runs`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 15_000,
+  });
+  await page.getByRole('heading', { name: 'Formula Runs' }).waitFor({ timeout: 10_000 });
+
+  const runLinks = await collectRunLinks(page);
+  foundRuns = EXPECTED_RUNS
+    .map((expected) => ({ expected, lane: runLinks.find((lane) => laneMatches(lane, expected)) }))
+    .filter((entry) => entry.lane !== undefined);
+  missingRuns = EXPECTED_RUNS.filter(
+    (expected) => !foundRuns.some((entry) => entry.expected === expected),
+  );
+
   for (const { expected, lane } of foundRuns) {
     await verifyRun(page, expected, lane, errors);
   }
@@ -125,6 +129,7 @@ for (const missing of missingRuns) {
   );
 }
 
+console.log(`sample formula run e2e: city ${CITY}`);
 console.log(`sample formula run e2e: found ${foundRuns.length}/${EXPECTED_RUNS.length} expected runs`);
 for (const { expected, lane } of foundRuns) {
   console.log(`  found ${expected.key}: ${lane.id} (${lane.title})`);
@@ -142,18 +147,12 @@ if (errors.length > 0) {
 console.log('sample formula run e2e: PASSED');
 
 async function verifyRun(page, expected, lane, errors) {
-  const detailUrl = runDetailApiUrl(lane);
-  const diffUrl = runDiffApiUrl(lane);
-  const detail = await fetchJson(detailUrl);
-  const diff = await fetchJson(diffUrl);
-  validateDetailPayload(expected, lane, detail, errors);
-  validateDiffPayload(expected, diff, errors);
-
-  await page.goto(`${BASE}/runs`, {
+  await page.goto(`${CITY_BASE}/runs`, {
     waitUntil: 'domcontentloaded',
     timeout: 15_000,
   });
   await page.getByRole('heading', { name: 'Formula Runs' }).waitFor({ timeout: 10_000 });
+
   const laneLink = page.getByRole('link', { name: lane.title });
   const laneLinkCount = await waitForLocatorCount(laneLink, 1, 10_000);
   if (laneLinkCount !== 1) {
@@ -162,69 +161,68 @@ async function verifyRun(page, expected, lane, errors) {
   }
 
   await laneLink.click();
-  await page.waitForURL(
-    `${BASE}/runs/${encodeURIComponent(lane.id)}?scope_kind=${lane.scopeKind}&scope_ref=${lane.scopeRef}`,
-    { timeout: 10_000 },
-  );
-  await page.locator('h1').filter({ hasText: detail.title }).waitFor({ timeout: 10_000 });
+  await page.waitForURL(lane.href, { timeout: 10_000 });
+  await page.locator('h1').waitFor({ timeout: 10_000 });
   await page.getByRole('heading', { name: 'Formula Graph' }).waitFor({ timeout: 10_000 });
-
-  const synopsis = page.locator('header p').filter({
-    hasText: `${detail.progress.visibleNodeCount} nodes, ${detail.progress.edgeCount} edges`,
-  });
-  if ((await synopsis.count()) !== 1) {
-    errors.push(`${expected.key}: detail header did not render backend progress counts`);
-  }
+  await page.getByRole('heading', { name: 'Local changes' }).waitFor({ timeout: 10_000 });
 
   const graphButtons = page.locator('section[aria-label="Formula run graph"] button');
   const graphButtonCount = await graphButtons.count();
-  if (graphButtonCount !== detail.progress.visibleNodeCount) {
-    errors.push(
-      `${expected.key}: graph rendered ${graphButtonCount} selectable nodes, expected ${detail.progress.visibleNodeCount}`,
-    );
-  }
-  if (graphButtonCount === 0) return;
-
-  const selectableNodes = detail.nodes.filter((node) => node.visibleInGraph !== false);
-  const sessionNodeIndex = selectableNodes.findIndex((node) =>
-    node.executionInstances.some((instance) => instance.sessionLink),
-  );
-  const selectedIndex = sessionNodeIndex >= 0 ? sessionNodeIndex : 0;
-  const selectedNode = selectableNodes[selectedIndex];
-  if (!selectedNode) {
-    errors.push(`${expected.key}: detail had visible graph buttons but no visible node payload`);
+  if (graphButtonCount === 0) {
+    errors.push(`${expected.key}: graph rendered no selectable nodes`);
     return;
   }
 
-  const selectedButton = graphButtons.nth(selectedIndex);
+  const selectedButton = graphButtons.first();
   await selectedButton.click();
   await expectPressedCount(page, expected.key, 1, errors);
   await selectedButton.click();
   await expectPressedCount(page, expected.key, 0, errors);
 
   await selectedButton.click();
-  if (nodeHasSession(selectedNode)) {
-    const sessionTab = page.getByRole('tab', { name: 'Session' });
-    if (!(await sessionTab.isEnabled())) {
-      errors.push(`${expected.key}: Session tab disabled for node "${selectedNode.title}" with a session link`);
-    } else {
-      await sessionTab.click();
-      await page.locator('[role="tabpanel"]').waitFor({ timeout: 5_000 });
-      await page.waitForTimeout(500);
-    }
+  const sessionTab = page.getByRole('tab', { name: 'Session' });
+  if (await sessionTab.isEnabled()) {
+    await sessionTab.click();
+    await page.locator('[role="tabpanel"]').waitFor({ timeout: 5_000 });
+    await page.waitForTimeout(300);
   } else {
-    await page.getByText('No session is attached to this node.').waitFor({ timeout: 10_000 });
-    const sessionDisabled = await page
-      .getByRole('tab', { name: 'Session' })
-      .evaluate((node) =>
-        node instanceof HTMLButtonElement &&
-        node.disabled &&
-        node.getAttribute('aria-disabled') === 'true',
-      );
+    const sessionDisabled = await sessionTab.evaluate((node) =>
+      node instanceof HTMLButtonElement &&
+      node.disabled &&
+      node.getAttribute('aria-disabled') === 'true',
+    );
     if (!sessionDisabled) {
-      errors.push(`${expected.key}: Session tab stayed enabled for node "${selectedNode.title}" without a session`);
+      errors.push(`${expected.key}: Session tab was neither enabled nor explicitly disabled`);
     }
   }
+
+  await page.getByRole('tab', { name: 'Diff' }).click();
+  await page.getByRole('heading', { name: 'Local changes' }).waitFor({ timeout: 10_000 });
+}
+
+async function collectRunLinks(page) {
+  await page.locator('a[href*="/runs/"]').first().waitFor({ timeout: 10_000 });
+  const links = await page.locator('a[href*="/runs/"]').evaluateAll((anchors) =>
+    anchors
+      .map((anchor) => ({
+        href: anchor instanceof HTMLAnchorElement ? anchor.href : '',
+        title: anchor.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+      }))
+      .filter((link) => link.href.length > 0 && link.title.length > 0),
+  );
+
+  return links.flatMap((link) => {
+    const url = new URL(link.href);
+    const runId = url.pathname.match(/\/runs\/([^/]+)$/)?.[1];
+    if (runId === undefined) return [];
+    return [{
+      id: decodeURIComponent(runId),
+      title: link.title,
+      href: url.toString(),
+      scopeKind: url.searchParams.get('scope_kind'),
+      scopeRef: url.searchParams.get('scope_ref'),
+    }];
+  });
 }
 
 async function expectPressedCount(page, label, expectedCount, errors) {
@@ -247,33 +245,6 @@ async function waitForLocatorCount(locator, expected, timeoutMs) {
   return lastCount;
 }
 
-function validateDetailPayload(expected, lane, detail, errors) {
-  if (detail.runId !== lane.id) {
-    errors.push(`${expected.key}: detail.runId=${detail.runId}, lane.id=${lane.id}`);
-  }
-  if (detail.scopeKind !== expected.scopeKind || detail.scopeRef !== expected.scopeRef) {
-    errors.push(`${expected.key}: detail scope is ${detail.scopeKind}:${detail.scopeRef}`);
-  }
-  if (!detail.progress || typeof detail.progress.visibleNodeCount !== 'number') {
-    errors.push(`${expected.key}: detail payload is missing progress`);
-  }
-  if (!Array.isArray(detail.nodes) || detail.nodes.length === 0) {
-    errors.push(`${expected.key}: detail payload has no nodes`);
-  }
-  if (!Array.isArray(detail.edges)) {
-    errors.push(`${expected.key}: detail payload has no edges array`);
-  }
-}
-
-function validateDiffPayload(expected, diff, errors) {
-  if (!diff || typeof diff.kind !== 'string') {
-    errors.push(`${expected.key}: diff payload missing kind`);
-  }
-  if (diff?.kind === 'error') {
-    errors.push(`${expected.key}: diff endpoint returned error: ${diff.error ?? 'unknown error'}`);
-  }
-}
-
 function laneMatches(candidate, expected) {
   return (
     candidate?.scopeKind === expected.scopeKind &&
@@ -283,8 +254,13 @@ function laneMatches(candidate, expected) {
   );
 }
 
-function nodeHasSession(node) {
-  return node.executionInstances.some((instance) => instance.session?.kind === 'attached');
+async function discoverFirstCity(baseUrl) {
+  const registry = await fetchJson(`${baseUrl}/gc-supervisor/v0/cities`);
+  const first = registry?.items?.[0]?.name;
+  if (typeof first !== 'string' || first.length === 0) {
+    throw new Error('no city registered; set DASHBOARD_CITY explicitly');
+  }
+  return first;
 }
 
 async function fetchJson(url) {
@@ -296,20 +272,8 @@ async function fetchJson(url) {
   return response.json();
 }
 
-function runDetailApiUrl(lane) {
-  const query = new URLSearchParams({
-    scope_kind: lane.scopeKind,
-    scope_ref: lane.scopeRef,
-  });
-  return `${BASE}/api/runs/${encodeURIComponent(lane.id)}?${query.toString()}`;
-}
-
-function runDiffApiUrl(lane) {
-  const query = new URLSearchParams({
-    scope_kind: lane.scopeKind,
-    scope_ref: lane.scopeRef,
-  });
-  return `${BASE}/api/runs/${encodeURIComponent(lane.id)}/diff?${query.toString()}`;
+function isObservedApiPath(pathname) {
+  return pathname.startsWith('/api/') || pathname.startsWith('/gc-supervisor/');
 }
 
 function recordApiFailures(errors, apiCalls, apiFailures) {
@@ -318,10 +282,10 @@ function recordApiFailures(errors, apiCalls, apiFailures) {
     errors.push(`unexpected API failure: ${call.status} ${call.method} ${call.url}`);
   }
   for (const call of apiFailures) {
-    const url = new URL(call.url);
-    if (url.pathname === '/api/events/stream' && call.failure.includes('ERR_ABORTED')) {
-      continue;
-    }
     errors.push(`unexpected API request failure: ${call.method} ${call.url} (${call.failure})`);
   }
+}
+
+function stripTrailingSlash(value) {
+  return value.replace(/\/+$/, '');
 }

@@ -7,10 +7,16 @@ import type {
   TriageTier,
   TriageTierSection,
 } from 'gas-city-dashboard-shared';
+import { useAttentionModel } from '../../../attention/context';
+import {
+  attentionBlockProps,
+  resourceAttentionSeverity,
+} from '../../../attention/routeHighlight';
 import { useNow } from '../../../contexts/NowContext';
 import { formatRelative } from '../../../hooks/time';
 import { CollapsibleHeader } from '../../../components/CollapsibleHeader';
 import { selectionKey } from './selectionKey';
+import { maintainerResourceId } from './attentionKeys';
 import { RunLink, SlungLink, TriageScore } from './TriageSignals';
 
 export type ToggleSelect =
@@ -325,8 +331,15 @@ export function IssueRow({
   const showAnchored = item.linked_numbers.length > 0 && !hasInListChildren;
   const showNeedsPr = item.has_in_flight_pr === false;
   const gridClass = onToggleSelect ? ROW_GRID_WITH_SELECT : ROW_GRID_NO_SELECT;
+  const attention = useAttentionModel();
+  const highlightProps = attentionBlockProps(
+    resourceAttentionSeverity(attention, 'maintainer', maintainerResourceId(item)),
+  );
   return (
-    <div className={`${gridClass} py-1.5`}>
+    <div
+      {...highlightProps}
+      className={`${gridClass} py-1.5 ${highlightProps.className ?? ''}`}
+    >
       {onToggleSelect && (
         <SelectCheckbox item={item} selection={selection} onToggleSelect={onToggleSelect} />
       )}
@@ -371,6 +384,10 @@ function PrRow({
   selection: ReadonlySet<string>;
   onToggleSelect: ToggleSelect;
 }) {
+  const attention = useAttentionModel();
+  const highlightProps = attentionBlockProps(
+    resourceAttentionSeverity(attention, 'maintainer', maintainerResourceId(item)),
+  );
   const leading = item.is_marked ? (
     <span className="text-accent text-[0.85em] leading-none translate-y-[1px]" aria-hidden>●</span>
   ) : nested ? (
@@ -386,7 +403,10 @@ function PrRow({
 
   const gridClass = onToggleSelect ? ROW_GRID_WITH_SELECT : ROW_GRID_NO_SELECT;
   return (
-    <div className={`${gridClass} py-1 ${nested ? 'pl-10' : ''}`}>
+    <div
+      {...highlightProps}
+      className={`${gridClass} py-1 ${nested ? 'pl-10' : ''} ${highlightProps.className ?? ''}`}
+    >
       {onToggleSelect && (
         <SelectCheckbox item={item} selection={selection} onToggleSelect={onToggleSelect} />
       )}

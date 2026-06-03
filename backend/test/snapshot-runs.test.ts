@@ -1312,7 +1312,7 @@ describe('createRunsSourceCache', () => {
                 target: '/home/ds/gascity/polecat',
                 started_at: '2026-05-28T23:24:42Z',
                 updated_at: '2026-05-28T23:24:42Z',
-                run_id: 'gc-0ioyjp',
+                workflow_id: 'gc-0ioyjp',
                 root_bead_id: 'gc-0ioyjp',
                 root_store_ref: 'rig:gascity',
                 run_detail_available: true,
@@ -1320,7 +1320,7 @@ describe('createRunsSourceCache', () => {
             ],
             // mfb9: FormulaFeedBody.partial is required upstream. The mock's
             // enclosing `as never` cast masks the type error, so make the
-            // fixture honest to match the GcFormulaRunList contract.
+            // fixture honest to match the generated FormulaFeedBody contract.
             partial: false,
           };
         },
@@ -1589,7 +1589,7 @@ describe('createRunsSourceCache', () => {
               target: '/tmp/feed-target',
               started_at: '2026-05-28T00:00:00Z',
               updated_at: '2026-05-28T00:00:00Z',
-              run_id: 'feed-run',
+              workflow_id: 'feed-run',
               root_bead_id: 'feed-run',
               root_store_ref: 'rig:shared',
               run_detail_available: true,
@@ -1614,7 +1614,7 @@ describe('createRunsSourceCache', () => {
   // gascity-dashboard-d3xp: end-to-end — a rig-stored workflow root bead
   // that the per-rig listBeads sweep brings in WITHOUT gc.scope_kind /
   // gc.scope_ref must still produce a scope=available lane, sourced from
-  // the /formulas/feed GcFormulaRun fields. Otherwise the lane deep-link
+  // the /formulas/feed supervisor fields. Otherwise the lane deep-link
   // drops the qs and the backend silently substitutes
   // defaultWorkflowScope(cityName), 404ing or loading the wrong data for
   // any rig-scoped run.
@@ -1665,7 +1665,7 @@ describe('createRunsSourceCache', () => {
               target: '/home/ds/gascity/polecat',
               started_at: '2026-05-28T00:00:00Z',
               updated_at: '2026-05-28T00:00:00Z',
-              run_id: 'rig-only-root',
+              workflow_id: 'rig-only-root',
               root_bead_id: 'rig-only-root',
               root_store_ref: 'rig:gascity',
               run_detail_available: true,
@@ -1741,7 +1741,7 @@ describe('createRunsSourceCache', () => {
               target: '/home/ds/gascity/polecat',
               started_at: '2026-05-28T00:00:00Z',
               updated_at: '2026-05-28T00:00:00Z',
-              run_id: 'malformed-feed-root',
+              workflow_id: 'malformed-feed-root',
               root_bead_id: 'malformed-feed-root',
               root_store_ref: 'rig:gascity',
               run_detail_available: true,

@@ -1,4 +1,5 @@
-import type { GcAgent, GcSession } from 'gas-city-dashboard-shared';
+import type { GcSession } from 'gas-city-dashboard-shared';
+import type { AgentResponse } from '../generated/gc-supervisor-client/types.gen';
 import { formatRelative } from '../hooks/time';
 import {
     useSessionStream,
@@ -126,7 +127,7 @@ export function isSessionStreamable(session: GcSession | null): boolean {
  * agent shape so the peek-modal gate stays consistent with what the rest
  * of the Agents view labels as running.
  */
-export function isAgentStreamable(agent: GcAgent | null): boolean {
+export function isAgentStreamable(agent: AgentResponse | null): boolean {
   if (agent === null) return false;
   if (!agent.session) return false;
   return (

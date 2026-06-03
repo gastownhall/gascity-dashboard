@@ -5,11 +5,10 @@
 // formula/order runs) into a single bidirectional, provenance-tagged
 // adjacency view rendered as a typeset "Related" section.
 //
-// The join is computed ONCE per snapshot in the dashboard backend over
-// supervisor-provided bead metadata (ZFC-clean: structural inversion of
-// already-extracted fields, no read-time heuristics). The frontend
-// renders the EntityLinkView without recomputing anything — same posture
-// as the maintainer triage envelope and the formula run detail.
+// The join is computed over supervisor-provided bead metadata (ZFC-clean:
+// structural inversion of already-extracted fields, no read-time heuristics).
+// Browser code can build it directly from supervisor API reads; backend tests
+// still exercise the same shared builder through compatibility re-exports.
 
 import type { IsoTimestamp } from './gc-client-types.js';
 

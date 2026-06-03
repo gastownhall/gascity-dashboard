@@ -2,8 +2,8 @@ import { Router } from 'express';
 import type {
   DoltNomsTrend,
   DoltNomsUnavailableReason,
-  GcStatus,
 } from 'gas-city-dashboard-shared';
+import type { StatusBody } from '../generated/gc-supervisor-client/types.gen.js';
 import { recordAudit } from '../audit.js';
 import { LOG_COMPONENT, errorMessage, logWarn } from '../logging.js';
 
@@ -21,7 +21,7 @@ const SAMPLE_INTERVAL_MS = 10 * 60 * 1_000;
 export const STORE_HEALTH_SOURCE = 'status.store_health.size_bytes';
 
 /** Fetches the supervisor city status (source of store_health.size_bytes). */
-export type FetchStatus = () => Promise<GcStatus>;
+export type FetchStatus = () => Promise<StatusBody>;
 
 interface RingSlot {
   ts: string;

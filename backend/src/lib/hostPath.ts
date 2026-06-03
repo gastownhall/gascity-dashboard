@@ -1,10 +1,9 @@
 // Shared host-path validator (gascity-dashboard-ucc review fix). A city's
-// host path is supervisor-reported and threaded into subprocess `--city`
-// flags (exec.ts) and into `fs.stat` of `<cityPath>/.dolt/noms` (dolt.ts).
-// Both sites must apply the SAME safety rule so one cannot accept a path the
-// other rejects. Previously exec.ts checked `startsWith('/') && !'..'` while
-// dolt.ts only checked `path.isAbsolute()` — a `..` traversal slipped past
-// the dolt sampler. This helper is the single gate for both.
+// host path is supervisor-reported and threaded into `fs.stat` of
+// `<cityPath>/.dolt/noms` (dolt.ts).
+// Previously exec.ts checked `startsWith('/') && !'..'` while dolt.ts only
+// checked `path.isAbsolute()` - a `..` traversal slipped past the dolt sampler.
+// This helper remains the single gate for host path values.
 
 /**
  * True when `p` is a safe absolute host path: it is absolute (POSIX leading

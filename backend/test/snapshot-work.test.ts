@@ -1,11 +1,12 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { GcStatus, WorkSummary } from 'gas-city-dashboard-shared';
+import type { WorkSummary } from 'gas-city-dashboard-shared';
 
 import {
   collectWork,
   createWorkSourceCache,
+  type WorkStatus,
   WORK_CACHE_TTL_MS,
 } from '../src/snapshot/collectors/work.js';
 
@@ -18,7 +19,7 @@ import {
 // an absent block is an upstream degradation and must surface as a source
 // error (status='error'), never a fabricated zero — per "Don't Swallow Errors".
 
-function status(work: GcStatus['work']): GcStatus {
+function status(work: WorkStatus['work']): WorkStatus {
   return { version: 'test', ...(work !== undefined ? { work } : {}) };
 }
 

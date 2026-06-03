@@ -38,8 +38,6 @@ import type {
   Avail,
   ClientErrorReport,
   GcCountedList,
-  GcFormulaRecentRun,
-  GcFormulaRun,
   GcList,
   GcRequiredPartialList,
   GcSession,
@@ -66,14 +64,11 @@ import type {
   GcRequiredPartialList as LeafGcRequiredPartialList,
 } from './lists.js';
 import './lists.js';
-import './gc-agents.js';
-import './gc-rigs.js';
+import './viewing-as.js';
 import './gc-beads.js';
-import './gc-mail.js';
+import './activity.js';
 import './gc-health.js';
-import './gc-events.js';
 import './transcript.js';
-import './formula-runs.js';
 import './api-error.js';
 import './maintainer-triage.js';
 
@@ -228,6 +223,24 @@ test('leaf-owned runtime exports stay available through the barrel', () => {
   assert.equal(makeNodeKey('bead', 'b-1', 'rig:demo-app'), 'bead:rig:demo-app:b-1');
 });
 
+test('shared barrel does not expose dashboard mirror DTOs for direct supervisor surfaces', () => {
+  const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+  const healthSource = readFileSync(new URL('./gc-health.ts', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(source, /gc-agents/);
+  assert.doesNotMatch(source, /gc-rigs/);
+  assert.doesNotMatch(source, /gc-mail/);
+  assert.doesNotMatch(source, /gc-events/);
+  assert.doesNotMatch(source, /formula-runs/);
+  assert.doesNotMatch(healthSource, /\binterface\s+GcStatus\b/);
+  assert.doesNotMatch(healthSource, /\bHealthDiagnostics\b/);
+  assert.doesNotMatch(healthSource, /\bSupervisorHealth\b/);
+  assert.doesNotMatch(healthSource, /\bDoltUsage\b/);
+  assert.doesNotMatch(healthSource, /\bBeadsUsage\b/);
+  assert.doesNotMatch(healthSource, /\bConfigComparisonRow\b/);
+  assert.equal(exists(new URL('./formula-runs.ts', import.meta.url)), false);
+});
+
 test('errorMessage normalizes unknown error values for shared client/server reporting', () => {
   assert.equal(errorMessage(new Error('boom')), 'boom');
   assert.equal(errorMessage('plain failure'), 'plain failure');
@@ -359,29 +372,17 @@ test('snapshot availability states compile as Avail<T> aliases', () => {
   assert.equal(scope.rootStoreRef, 'rig:demo-app');
 });
 
-test('formula-run dashboard DTOs expose run_id after supervisor workflow_id decoding', () => {
-  const feedItem: GcFormulaRun = {
-    id: 'gc-run',
-    type: 'formula',
-    status: 'done',
-    title: 'mol-focus-review',
-    scope_kind: 'city',
-    scope_ref: 'ds-research',
-    target: '/tmp/work',
-    started_at: '2026-05-28T00:00:00Z',
-    updated_at: '2026-05-28T00:01:00Z',
-    run_id: 'gc-run',
-  };
-  const recentRun: GcFormulaRecentRun = {
-    run_id: 'gc-recent',
-    target: '/tmp/work',
-    status: 'done',
-    started_at: '2026-05-28T00:00:00Z',
-    updated_at: '2026-05-28T00:01:00Z',
-  };
+test('triage items keep dashboard-owned run_id links', () => {
   const triageLink: Pick<TriageItem, 'run_id'> = { run_id: 'gc-triage' };
 
-  assert.equal(feedItem.run_id, 'gc-run');
-  assert.equal(recentRun.run_id, 'gc-recent');
   assert.equal(triageLink.run_id, 'gc-triage');
 });
+
+function exists(url: URL): boolean {
+  try {
+    readFileSync(url);
+    return true;
+  } catch {
+    return false;
+  }
+}

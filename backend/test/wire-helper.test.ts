@@ -1,7 +1,7 @@
 // gascity-dashboard-brx: unit coverage for the shared redaction-test
 // wire-error narrowing helper. The helper replaces ~9 ad-hoc
 // `res.body.details as { name?: string; ... }` casts across the
-// redaction-layer tests (agents-prime, beads-nudge, mail-send,
+// redaction-layer tests (agents-prime, beads-nudge,
 // maintainer-sling, git-commits). The casts silenced the type system
 // without validating shape — a wire change that flipped `details` from
 // object to string would have slipped through as a runtime

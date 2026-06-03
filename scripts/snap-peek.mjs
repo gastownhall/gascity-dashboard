@@ -10,11 +10,11 @@
 //   (3) Clicking Peek opens role="dialog" aria-modal="true".
 //   (4) The modal panel renders opaque: computed background-color alpha === 1.
 //       (Modal.tsx contract: panel is bg-surface, not the bg-fg/30 scrim.)
-//   (5) At least one POST /api/sessions/<id>/peek returns 200 (no 403 — guards the
-//       Vite changeOrigin / CSRF allow-list fix from CP1).
+//   (5) At least one direct supervisor transcript GET returns 200, and no
+//       deleted dashboard /api/.../sessions/<id>/peek mirror is called.
 //
 // Skips, not failures, when the backend is unreachable. Returns non-zero only on
-// a real regression (modal transparent, peek POST 4xx/5xx, modal didn't open).
+// a real regression (modal transparent, transcript GET 4xx/5xx, modal didn't open).
 
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
@@ -90,7 +90,7 @@ async function runTheme(browser, theme) {
   const page = await ctx.newPage();
   const apiCalls = [];
   page.on('response', (r) => {
-    if (r.url().includes('/api/')) {
+    if (r.url().includes('/api/') || r.url().includes('/gc-supervisor/')) {
       apiCalls.push({ url: r.url(), method: r.request().method(), status: r.status() });
     }
   });
@@ -152,16 +152,24 @@ async function runTheme(browser, theme) {
         result.errors.push(`modal panel not opaque: alpha=${alpha} (background=${panelBg})`);
       }
 
-      // Assertion: at least one POST /peek returned 200.
-      const peekCalls = apiCalls.filter(
-        (c) => c.method === 'POST' && /\/api\/sessions\/[^/]+\/peek$/.test(c.url),
+      // Assertion: at least one direct supervisor transcript GET returned 200.
+      const transcriptCalls = apiCalls.filter(
+        (c) => c.method === 'GET' &&
+          /\/gc-supervisor\/v0\/city\/[^/]+\/session\/[^/]+\/transcript(?:\?|$)/.test(c.url),
       );
-      result.info.peekCalls = peekCalls;
-      if (peekCalls.length === 0) {
-        result.errors.push('no POST /api/sessions/<id>/peek was observed');
-      } else if (!peekCalls.some((c) => c.status === 200)) {
-        const summary = peekCalls.map((c) => `${c.status} ${c.url}`).join('; ');
-        result.errors.push(`no successful (200) /peek response. Saw: ${summary}`);
+      const deletedPeekCalls = apiCalls.filter(
+        (c) => /\/api\/city\/[^/]+\/sessions\/[^/]+\/peek$/.test(c.url),
+      );
+      result.info.transcriptCalls = transcriptCalls;
+      result.info.deletedPeekCalls = deletedPeekCalls;
+      if (deletedPeekCalls.length > 0) {
+        const summary = deletedPeekCalls.map((c) => `${c.method} ${c.status} ${c.url}`).join('; ');
+        result.errors.push(`deleted dashboard peek mirror was called: ${summary}`);
+      } else if (transcriptCalls.length === 0) {
+        result.errors.push('no GET /gc-supervisor/v0/city/<city>/session/<id>/transcript was observed');
+      } else if (!transcriptCalls.some((c) => c.status === 200)) {
+        const summary = transcriptCalls.map((c) => `${c.status} ${c.url}`).join('; ');
+        result.errors.push(`no successful (200) supervisor transcript response. Saw: ${summary}`);
       }
     }
 
@@ -202,8 +210,11 @@ for (const r of results) {
   if (r.info.panelBg !== undefined) {
     console.log(`[${r.theme}] panel bg=${r.info.panelBg} alpha=${r.info.panelAlpha}`);
   }
-  if (r.info.peekCalls?.length) {
-    for (const c of r.info.peekCalls) console.log(`[${r.theme}] peek: ${c.status} ${c.url}`);
+  if (r.info.transcriptCalls?.length) {
+    for (const c of r.info.transcriptCalls) console.log(`[${r.theme}] transcript: ${c.status} ${c.url}`);
+  }
+  if (r.info.deletedPeekCalls?.length) {
+    for (const c of r.info.deletedPeekCalls) console.log(`[${r.theme}] deleted peek mirror: ${c.status} ${c.url}`);
   }
   if (r.info.apiCalls4xx?.length) {
     console.log(`[${r.theme}] 4xx/5xx API calls:`, r.info.apiCalls4xx);

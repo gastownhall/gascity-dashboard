@@ -1,129 +1,29 @@
 import { Router } from 'express';
 import os from 'node:os';
-import type {
-  GcStatus,
-  SupervisorHealthState,
-  SystemHealth,
-} from 'gas-city-dashboard-shared';
-import { GcClient } from '../gc-client.js';
+import type { LocalToolVersion, LocalToolVersions, SystemHealth } from 'gas-city-dashboard-shared';
 import { recordAudit } from '../audit.js';
-import { HTTP_STATUS } from '../lib/http-status.js';
-import { LOG_COMPONENT, errorMessage, logWarn } from '../logging.js';
-import { buildDiagnostics, type VersionProbe } from './health-diagnostics.js';
-import { probeBeadsVersion, probeDoltVersion } from './version-probe.js';
-
-// Health uses a tighter window than the global GcClient timeout (5s default)
-// because /v0/city/{name}/health is a cheap localhost ping. 2.5s is plenty
-// to distinguish "supervisor hung" from "supervisor slow under real load".
-// Operators can override via GC_HEALTH_TIMEOUT_MS (mirrors the
-// GC_CLIENT_TIMEOUT_MS knob on GcClient — same shape, narrower scope).
-const SUPERVISOR_HEALTH_TIMEOUT_MS = 2_500;
-// Upper bound: any GC_HEALTH_TIMEOUT_MS above this is a typo, not a tuning
-// choice. A 30s ceiling keeps a fat-fingered value from holding the health
-// route open for hours and effectively breaking the dashboard.
-const MAX_HEALTH_TIMEOUT_MS = 30_000;
-
-/**
- * Resolves the supervisor health timeout from the GC_HEALTH_TIMEOUT_MS env
- * var, falling back to SUPERVISOR_HEALTH_TIMEOUT_MS. Invalid or non-positive
- * values fall back too — silent fallback matches the gc-client pattern and
- * keeps a typo from accidentally setting a 0ms timeout. Values above
- * MAX_HEALTH_TIMEOUT_MS are clamped to that ceiling.
- *
- * Read once at startup: healthRouter() calls this when the router is
- * constructed and captures the result in a closure. Mutating
- * GC_HEALTH_TIMEOUT_MS at runtime has no effect — operators must restart
- * the dashboard process for a new value to take effect.
- */
-export function resolveHealthTimeoutMs(): number {
-  const raw = process.env.GC_HEALTH_TIMEOUT_MS;
-  if (typeof raw !== 'string') return SUPERVISOR_HEALTH_TIMEOUT_MS;
-  const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n) || n <= 0) return SUPERVISOR_HEALTH_TIMEOUT_MS;
-  return Math.min(n, MAX_HEALTH_TIMEOUT_MS);
-}
+import {
+  probeBeadsVersion,
+  probeDoltVersion,
+  type VersionProbe,
+  type VersionProbeResult,
+} from './version-probe.js';
 
 export interface HealthRouterOptions {
-  /**
-   * Per-request timeout for the supervisor /health probe. Defaults to
-   * GC_HEALTH_TIMEOUT_MS env, then 2500ms. Captured at router construction
-   * time, not re-read per request.
-   */
-  supervisorTimeoutMs?: number;
-  /**
-   * Local CLI version probes. Defaults to the real `dolt version` / `bd
-   * version` exec probes; tests inject deterministic stand-ins.
-   */
   doltProbe?: VersionProbe;
   beadsProbe?: VersionProbe;
 }
 
-/**
- * Builds the /system health router. The supervisor timeout is resolved
- * exactly once here (from opts.supervisorTimeoutMs, then GC_HEALTH_TIMEOUT_MS,
- * then the 2500ms default) and captured in the route handler's closure.
- * Runtime env changes do not propagate — restart the process to pick up a
- * new GC_HEALTH_TIMEOUT_MS.
- */
-export function healthRouter(gc: GcClient, opts: HealthRouterOptions = {}): Router {
+/** Dashboard-local admin process and host health. GC supervisor health is
+ * fetched directly by the browser through the generated supervisor client. */
+export function healthRouter(options: HealthRouterOptions = {}): Router {
   const router = Router();
-  const supervisorTimeoutMs = opts.supervisorTimeoutMs ?? resolveHealthTimeoutMs();
-  const doltProbe = opts.doltProbe ?? probeDoltVersion;
-  const beadsProbe = opts.beadsProbe ?? probeBeadsVersion;
+  const doltProbe = options.doltProbe ?? probeDoltVersion;
+  const beadsProbe = options.beadsProbe ?? probeBeadsVersion;
 
   router.get('/system', async (_req, res) => {
     const mem = process.memoryUsage();
     const load = os.loadavg();
-    // The health probe and the status fetch are independent supervisor calls —
-    // neither result feeds the other — so they ride one parallel wave bounded
-    // to the same timeout window instead of stacking serially (gascity-dashboard-1cob
-    // review). getStatus takes an AbortSignal rather than a timeoutMs option, so
-    // it is bounded with AbortSignal.timeout to match supervisorTimeoutMs.
-    const [healthSettled, statusSettled] = await Promise.allSettled([
-      gc.health({ timeoutMs: supervisorTimeoutMs }),
-      gc.getStatus(AbortSignal.timeout(supervisorTimeoutMs)),
-    ]);
-
-    let supervisor: SupervisorHealthState;
-    if (healthSettled.status === 'fulfilled') {
-      supervisor = { status: 'available', data: healthSettled.value };
-    } else {
-      const err = healthSettled.reason;
-      // gascity-dashboard-mek: distinguish hung supervisor (504) from
-      // broken supervisor (200 + explicit unavailable state). Generic fetch
-      // failures (connection refused, 5xx, JSON parse error) still keep the
-      // admin + host slices visible. Only the per-request timeout propagates
-      // as 504, matching the contract in sessions.ts/beads.ts.
-      if (GcClient.isTimeoutError(err)) {
-        res.status(HTTP_STATUS.gatewayTimeout).json({
-          error: 'gc supervisor did not respond in time',
-          kind: 'upstream-timeout',
-        });
-        return;
-      }
-      logWarn(LOG_COMPONENT.health, `supervisor health probe failed: ${errorMessage(err)}`);
-      supervisor = {
-        status: 'unavailable',
-        error: 'supervisor health unavailable',
-      };
-    }
-
-    // Diagnostics (gascity-dashboard-1cob): supervisor status carries Dolt +
-    // Beads usage and the recommended-vs-actual threshold; the binary versions
-    // are probed locally. A status fetch failure does NOT 504 the route — the
-    // local version probes are still useful — so it degrades to null status and
-    // the builder surfaces the supervisor-sourced fields as unavailable.
-    let status: GcStatus | null;
-    if (statusSettled.status === 'fulfilled') {
-      status = statusSettled.value;
-    } else {
-      logWarn(
-        LOG_COMPONENT.health,
-        `supervisor status fetch failed: ${errorMessage(statusSettled.reason)}`,
-      );
-      status = null;
-    }
-    const diagnostics = await buildDiagnostics({ status, doltProbe, beadsProbe });
     const payload: SystemHealth = {
       admin: {
         pid: process.pid,
@@ -141,8 +41,6 @@ export function healthRouter(gc: GcClient, opts: HealthRouterOptions = {}): Rout
         cpu_count: os.cpus().length,
         uptime_sec: Math.round(os.uptime()),
       },
-      supervisor,
-      diagnostics,
     };
     await recordAudit({
       type: 'dashboard.fetch',
@@ -152,5 +50,28 @@ export function healthRouter(gc: GcClient, opts: HealthRouterOptions = {}): Rout
     res.json(payload);
   });
 
+  router.get('/local-tools', async (_req, res) => {
+    const [dolt, beads] = await Promise.all([doltProbe(), beadsProbe()]);
+    const payload: LocalToolVersions = {
+      dolt: localToolVersion(dolt, 'local probe: dolt version'),
+      beads: localToolVersion(beads, 'local probe: bd version'),
+    };
+    await recordAudit({
+      type: 'dashboard.fetch',
+      endpoint: 'GET /api/health/local-tools',
+      duration_ms: 0,
+    });
+    res.json(payload);
+  });
+
   return router;
+}
+
+function localToolVersion(
+  result: VersionProbeResult,
+  source: string,
+): LocalToolVersion {
+  return result.kind === 'ok'
+    ? { status: 'available', version: result.version, source }
+    : { status: 'unavailable', reason: result.reason };
 }

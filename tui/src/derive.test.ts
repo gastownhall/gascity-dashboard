@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { GcMailItem, GcSession, RunLane, RunPhase } from 'gas-city-dashboard-shared';
+import type { GcBead, GcMailItem, GcSession, RunLane, RunPhase } from 'gas-city-dashboard-shared';
 import {
   AGENT_KINDS,
   activityPhrase,
@@ -19,8 +19,14 @@ import {
   matchesStatusFilter,
   nextStatusFilter,
   operatorMail,
+  agentLane,
+  displayRig,
   ORCHESTRATION,
+  orchFirstActive,
+  OVERVIEW_WAITING_CAP,
+  overviewModel,
   runningSessions,
+  toAgentView,
   type StatusFilter,
 } from './derive.ts';
 
@@ -220,6 +226,7 @@ function lane(over: {
   needsOperator?: boolean;
   /** Scope reports unavailable (the other null-rig path → orchestration bucket). */
   scopeUnavailable?: boolean;
+  assignees?: string[];
 }): RunLane {
   const rig = over.rig === undefined ? 'gascity' : over.rig;
   const scope: RunLane['scope'] = over.scopeUnavailable
@@ -237,7 +244,7 @@ function lane(over: {
     phase,
     phaseLabel: phase,
     statusCounts: {},
-    activeAssignees: [],
+    activeAssignees: over.assignees ?? [],
     updatedAt: { status: 'available', at: '2026-06-01T00:00:00Z' },
     stages: [],
     progress: { status: 'unavailable', error: 'none' },
@@ -338,4 +345,119 @@ test('cityBoard orders attention rigs (needsOperator) first, then busiest', () =
     lane({ id: 'a1', rig: 'attention', phase: 'blocked', needsOperator: true }),
   ]);
   assert.deepEqual(board.map((r) => r.rig), ['attention', 'busy']);
+});
+
+// ── mayor-companion overview ──────────────────────────────────────────────────
+
+function bead(overrides: Partial<GcBead>): GcBead {
+  return {
+    id: 'b1',
+    title: 'a bead',
+    status: 'open',
+    issue_type: 'task',
+    priority: 2,
+    created_at: '2026-06-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+test('overviewModel: waiting lists needs-operator runs before mayor mail, full total', () => {
+  const sessions = [session({ id: 'may', title: 'mayor' })];
+  const m = overviewModel(
+    sessions,
+    [],
+    [mail({ id: 'esc', from: 'mayor', subject: 'decide scope' })],
+    [lane({ id: 'r', rig: 'gc2', phase: 'approval', needsOperator: true })],
+  );
+  assert.equal(m.waiting.length, 2);
+  assert.equal(m.waiting[0]?.kind, 'run');
+  assert.equal(m.waiting[1]?.kind, 'mail');
+  assert.equal(m.waitingTotal, 2);
+});
+
+test('overviewModel: waiting caps the list but reports the true total', () => {
+  const lanes = Array.from({ length: OVERVIEW_WAITING_CAP + 2 }, (_, i) =>
+    lane({ id: `r${i}`, rig: 'gc2', phase: 'approval', needsOperator: true }),
+  );
+  const m = overviewModel([], [], [], lanes);
+  assert.equal(m.waiting.length, OVERVIEW_WAITING_CAP);
+  assert.equal(m.waitingTotal, OVERVIEW_WAITING_CAP + 2);
+});
+
+test('overviewModel: active floats orchestration first, counts active vs total', () => {
+  const sessions = [
+    session({ id: 'p', title: 'polecat-2', rig: 'gascity', pool: 'polecat', state: 'active', last_active: '2026-06-01T00:09:00Z' }),
+    session({ id: 'may', title: 'mayor', state: 'active', last_active: '2026-06-01T00:01:00Z' }),
+    session({ id: 'idle', title: 'sleeper', rig: 'gascity', state: 'asleep' }),
+  ];
+  const m = overviewModel(sessions, [], [], []);
+  assert.deepEqual(m.active.map((a) => a.agent), ['mayor', 'polecat-2']);
+  assert.equal(m.activeCount, 2);
+  assert.equal(m.agentTotal, 3);
+});
+
+test('overviewModel: active is uncapped (the band scrolls)', () => {
+  const sessions = Array.from({ length: 12 }, (_, i) =>
+    session({ id: `a${i}`, title: `polecat-${i}`, rig: 'gascity', pool: 'polecat', state: 'active', last_active: `2026-06-01T00:0${i}:00Z` }),
+  );
+  const m = overviewModel(sessions, [], [], []);
+  assert.equal(m.active.length, 12);
+  assert.equal(m.activeCount, 12);
+});
+
+test('displayRig swaps the orchestration key for the city name, leaves rigs alone', () => {
+  assert.equal(displayRig(ORCHESTRATION, 'ds-research'), 'ds-research');
+  assert.equal(displayRig('gascity', 'ds-research'), 'gascity');
+});
+
+test('orchFirstActive floats orchestration first, drops idle, uncapped', () => {
+  const sessions = [
+    session({ id: 'p', title: 'polecat-2', rig: 'gascity', pool: 'polecat', state: 'active', last_active: '2026-06-01T00:09:00Z' }),
+    session({ id: 'may', title: 'mayor', state: 'active', last_active: '2026-06-01T00:01:00Z' }),
+    session({ id: 'idle', title: 'sleeper', rig: 'gascity', state: 'asleep' }),
+  ];
+  assert.deepEqual(orchFirstActive(sessions).map((a) => a.agent), ['mayor', 'polecat-2']);
+});
+
+test('agentLane matches an agent to its run lane via activeAssignees, else undefined', () => {
+  const view = toAgentView(session({ id: 'cp', title: 'codeprobe.lead', rig: 'codeprobe' }));
+  const onLane = lane({ id: 'l1', rig: 'codeprobe', phase: 'approval', assignees: ['codeprobe.lead'] });
+  const otherLane = lane({ id: 'l2', rig: 'gc2', phase: 'review' });
+  assert.equal(agentLane(view, [onLane, otherLane])?.id, 'l1');
+  assert.equal(agentLane(view, [otherLane]), undefined);
+});
+
+test('overviewModel: beads count open and in-progress, wip lists in-progress', () => {
+  const beads = [
+    bead({ id: 'o1', status: 'open' }),
+    bead({ id: 'o2', status: 'open' }),
+    bead({ id: 'w1', status: 'in_progress', title: 'discount pipeline' }),
+    bead({ id: 'c1', status: 'closed' }),
+  ];
+  const m = overviewModel([], beads, [], []);
+  assert.equal(m.beadsOpen, 2);
+  assert.equal(m.beadsInProgress, 1);
+  assert.deepEqual(m.wip.map((b) => b.id), ['w1']);
+});
+
+test('overviewModel: runs count active lanes and needs-operator lanes', () => {
+  const lanes = [
+    lane({ id: 'a', rig: 'gc2', phase: 'implementation', needsOperator: false }),
+    lane({ id: 'b', rig: 'gc2', phase: 'approval', needsOperator: true }),
+  ];
+  const m = overviewModel([], [], [], lanes);
+  assert.equal(m.runsActive, 2);
+  assert.equal(m.runsNeedsOp, 1);
+});
+
+test('overviewModel: all-calm city yields empty bands', () => {
+  const m = overviewModel([], [], [], []);
+  assert.equal(m.waiting.length, 0);
+  assert.equal(m.waitingTotal, 0);
+  assert.equal(m.active.length, 0);
+  assert.equal(m.activeCount, 0);
+  assert.equal(m.beadsOpen, 0);
+  assert.equal(m.beadsInProgress, 0);
+  assert.equal(m.runsActive, 0);
+  assert.equal(m.runsNeedsOp, 0);
 });

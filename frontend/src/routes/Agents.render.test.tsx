@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentsPage } from './Agents';
+import { AttentionProvider } from '../attention/context';
+import type { AttentionContributor } from '../attention/compose';
 import { invalidate } from '../api/cache';
 import { NowProvider } from '../contexts/NowContext';
 
@@ -18,16 +20,35 @@ import { NowProvider } from '../contexts/NowContext';
 //    The fix uses `name` (alias) as primary and pushes `display_name` to a
 //    secondary line.
 
-const fetchUrls: string[] = [];
+interface FetchCall {
+  url: string;
+  method: string;
+  gcRequest: string | null;
+  body: unknown;
+}
 
-// Minimal fetch stub that mimics the surface the AgentsPage hits via the
-// shared api client (api.listAgents + api.listSessions).
-function stubFetch() {
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input);
-    fetchUrls.push(url);
+const fetchCalls: FetchCall[] = [];
+
+const fetchUrls = () => fetchCalls.map((call) => call.url);
+
+interface StubFetchOptions {
+  agentsPayload?: unknown;
+}
+
+// Minimal fetch stub that mimics the surface the AgentsPage hits: dashboard
+// local agents plus direct supervisor sessions/transcript reads.
+function stubFetch(options: StubFetchOptions = {}) {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = requestUrl(input);
+    const method = requestMethod(input, init);
+    const gcRequest = requestHeader(input, init, 'X-GC-Request');
+    const body = await requestBody(input, init);
+    fetchCalls.push({ url, method, gcRequest, body });
     if (url === '/api/city/test-city/agents') {
-      return jsonResponse({
+      throw new Error('old dashboard agents roster route should not be called');
+    }
+    if (url === '/gc-supervisor/v0/city/test-city/agents' && method === 'GET') {
+      return jsonResponse(options.agentsPayload ?? {
         items: [
           {
             name: 'mayor',
@@ -40,7 +61,7 @@ function stubFetch() {
             session: {
               name: 'mayor',
               attached: true,
-              last_activity: '2026-05-29T20:56:31-04:00',
+              last_activity: '2026-05-30T00:56:31Z',
             },
           },
           // ay6.2: orphan agent — configured roster entry with no
@@ -57,9 +78,10 @@ function stubFetch() {
             provider: 'claude-5',
           },
         ],
+        total: 2,
       });
     }
-    if (url === '/api/city/test-city/sessions') {
+    if (url === '/gc-supervisor/v0/city/test-city/sessions' && method === 'GET') {
       return jsonResponse({
         items: [
           {
@@ -70,33 +92,95 @@ function stubFetch() {
             alias: 'mayor',
             provider: 'claude-5',
             running: true,
+            attached: true,
+            created_at: '2026-05-30T00:00:00Z',
             title: 'mayor',
           },
         ],
+        total: 1,
       });
     }
-    if (url === '/api/city/test-city/sessions/gc-2568/peek') {
+    if (url === '/gc-supervisor/v0/city/test-city/session/gc-2568/pending' && method === 'GET') {
       return jsonResponse({
-        session_id: 'gc-2568',
+        supported: true,
+        pending: {
+          kind: 'tool_approval',
+          prompt: 'Approve deployment?',
+          request_id: 'req-1',
+        },
+      });
+    }
+    if (url === '/gc-supervisor/v0/city/test-city/session/gc-2568/respond' && method === 'POST') {
+      return jsonResponse({ id: 'gc-2568', status: 'accepted' }, { status: 202 });
+    }
+    if (url === '/gc-supervisor/v0/city/test-city/session/gc-2568/transcript?format=conversation' && method === 'GET') {
+      return jsonResponse({
+        id: 'gc-2568',
+        template: 'mayor',
+        provider: 'claude-5',
+        format: 'conversation',
         turns: [{ role: 'assistant', text: 'mayor transcript snapshot' }],
-        total_chars: 25,
-        captured_at: '2026-05-30T00:00:00Z',
-        truncated: false,
       });
     }
     throw new Error(`unexpected fetch: ${url}`);
   }));
 }
 
-function jsonResponse(payload: unknown): Response {
+function requestUrl(input: RequestInfo | URL): string {
+  const url = input instanceof Request
+    ? input.url
+    : input instanceof URL
+      ? input.toString()
+      : String(input);
+  return stripSameOrigin(url);
+}
+
+function requestMethod(input: RequestInfo | URL, init: RequestInit | undefined): string {
+  if (init?.method !== undefined) return init.method.toUpperCase();
+  if (input instanceof Request) return input.method.toUpperCase();
+  return 'GET';
+}
+
+function requestHeader(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  name: string,
+): string | null {
+  const initHeaders = init?.headers === undefined ? null : new Headers(init.headers);
+  const inputHeaders = input instanceof Request ? input.headers : null;
+  return initHeaders?.get(name) ?? inputHeaders?.get(name) ?? null;
+}
+
+async function requestBody(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+): Promise<unknown> {
+  if (init?.body !== undefined) return parseBody(init.body);
+  if (input instanceof Request && input.method.toUpperCase() !== 'GET') {
+    return input.clone().json();
+  }
+  return undefined;
+}
+
+function parseBody(body: BodyInit | null): unknown {
+  if (typeof body === 'string') return JSON.parse(body);
+  return body;
+}
+
+function stripSameOrigin(url: string): string {
+  const origin = window.location.origin;
+  return url.startsWith(origin) ? url.slice(origin.length) : url;
+}
+
+function jsonResponse(payload: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(payload), {
-    status: 200,
+    status: init?.status ?? 200,
     headers: { 'content-type': 'application/json' },
   });
 }
 
 beforeEach(() => {
-  fetchUrls.length = 0;
+  fetchCalls.length = 0;
   invalidate('agents');
   invalidate('sessions');
   stubFetch();
@@ -121,11 +205,54 @@ describe('AgentsPage (post-ay6 regressions)', () => {
     const mayorLink = await screen.findByRole('link', { name: /mayor/i });
     expect(mayorLink).toBeDefined();
     expect(mayorLink.textContent).toBe('mayor');
+    expect(fetchUrls()).toContain('/gc-supervisor/v0/city/test-city/agents');
+    expect(fetchUrls()).not.toContain('/api/city/test-city/agents');
     // display_name appears as secondary muted text — present but not the link.
     expect(screen.getByText('Claude (Account 5)')).toBeDefined();
   });
 
-  it('Peek resolves agent.session.name -> session.id via the sessions cache and POSTs the right gc-XXX id', async () => {
+  it('renders generated supervisor validation failures as operator-safe copy', async () => {
+    vi.unstubAllGlobals();
+    stubFetch({
+      agentsPayload: {
+        items: [
+          {
+            name: 'mayor',
+            available: true,
+            running: true,
+            suspended: false,
+            state: 'idle',
+            provider: 'claude',
+            session: {
+              name: 'mayor',
+              attached: true,
+              last_activity: 'not-a-date',
+            },
+          },
+        ],
+        total: 1,
+      },
+    });
+
+    const { container } = render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <NowProvider intervalMs={1_000_000}>
+          <AgentsPage />
+        </NowProvider>
+      </MemoryRouter>,
+    );
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'gc supervisor response failed validation',
+    );
+    expect(container.textContent).not.toContain('invalid_format');
+    expect(container.textContent).not.toContain('datetime');
+    expect(container.textContent).not.toContain('[{"origin"');
+    expect(container.textContent).toContain('Agent roster unavailable.');
+    expect(container.textContent).not.toContain('No agents configured.');
+  });
+
+  it('Peek resolves agent.session.name -> session.id via direct supervisor sessions and fetches the right transcript', async () => {
     render(
       <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <NowProvider intervalMs={1_000_000}>
@@ -140,14 +267,70 @@ describe('AgentsPage (post-ay6 regressions)', () => {
     const peekButton = await screen.findByRole('button', { name: /peek/i });
     fireEvent.click(peekButton);
 
-    // The peek modal must hit /api/city/test-city/sessions/gc-2568/peek — NOT
-    // /api/city/test-city/sessions/mayor/peek (the pre-fix bug). We wait for the POST to
-    // land in fetchUrls because the resolution is async (sessions cache).
+    // The peek modal must hit supervisor transcript for gc-2568 — NOT
+    // dashboard mirror peek for mayor (the pre-fix bug). We wait for it
+    // because the resolution is async (sessions cache).
     await waitFor(() => {
-      expect(fetchUrls).toContain('/api/city/test-city/sessions/gc-2568/peek');
+      expect(fetchUrls()).toContain('/gc-supervisor/v0/city/test-city/session/gc-2568/transcript?format=conversation');
     });
     // Belt-and-suspenders: assert the buggy URL was NEVER attempted.
-    expect(fetchUrls).not.toContain('/api/city/test-city/sessions/mayor/peek');
+    expect(fetchUrls()).toContain('/gc-supervisor/v0/city/test-city/sessions');
+    expect(fetchUrls()).not.toContain('/api/city/test-city/sessions');
+    expect(fetchUrls()).not.toContain('/api/city/test-city/sessions/gc-2568/peek');
+    expect(fetchUrls()).not.toContain('/api/city/test-city/sessions/mayor/peek');
+  });
+
+  it('surfaces pending interactions and copies the attach command for the agent', async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <NowProvider intervalMs={1_000_000}>
+          <AgentsPage />
+        </NowProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('needs you')).toBeTruthy();
+    expect(screen.getByText('Approve deployment?')).toBeTruthy();
+    expect(fetchUrls()).toContain('/gc-supervisor/v0/city/test-city/session/gc-2568/pending');
+
+    fireEvent.click(screen.getByRole('button', { name: /copy attach/i }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('gc agent attach mayor');
+    });
+  });
+
+  it('responds to pending interactions through the generated supervisor respond endpoint', async () => {
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <NowProvider intervalMs={1_000_000}>
+          <AgentsPage />
+        </NowProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('needs you')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /deny/i }));
+
+    await screen.findByText('responded to mayor');
+
+    expect(fetchCalls).toContainEqual({
+      url: '/gc-supervisor/v0/city/test-city/session/gc-2568/respond',
+      method: 'POST',
+      gcRequest: 'dashboard',
+      body: {
+        action: 'deny',
+        request_id: 'req-1',
+      },
+    });
+    expect(fetchUrls()).not.toContain('/api/city/test-city/sessions/gc-2568/respond');
   });
 
   it('orphan agent name-link carries a different title tooltip than a session-bound one (ay6.2)', async () => {
@@ -159,11 +342,8 @@ describe('AgentsPage (post-ay6 regressions)', () => {
       </MemoryRouter>,
     );
 
-    // The orphan agent (asleep, no session) is hidden by the active-only
-    // default; toggle "Running only" off to bring the full roster into view.
-    const runningToggle = await screen.findByRole('checkbox', { name: /running/i });
-    fireEvent.click(runningToggle);
-
+    // With no state chip active, the current Agents view shows the full
+    // supervisor roster, including configured-but-not-running agents.
     // Both rows render their alias as a Link, but the title must
     // differ — session-bound agents promise a real drilldown; orphan
     // agents warn that the detail page will show no live session.
@@ -180,4 +360,40 @@ describe('AgentsPage (post-ay6 regressions)', () => {
     // the operator understands why the drilldown will be empty.
     expect(orphanTitle.toLowerCase()).toMatch(/not running|no live session|configured/);
   });
+
+  it('marks rows that match composed agent attention without hiding other agents', async () => {
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <NowProvider intervalMs={1_000_000}>
+          <AttentionProvider contributors={[
+            contributor('agents', [{
+              id: 'agents:control-dispatcher:idle',
+              domain: 'agents',
+              severity: 'watch',
+              title: 'control-dispatcher idle',
+            }]),
+          ]}>
+            <AgentsPage />
+          </AttentionProvider>
+        </NowProvider>
+      </MemoryRouter>,
+    );
+
+    const orphanLink = await screen.findByRole('link', { name: /control-dispatcher/i });
+    const mayorLink = await screen.findByRole('link', { name: /mayor/i });
+
+    expect(orphanLink.closest('tr')?.getAttribute('data-attention-severity')).toBe('watch');
+    expect(mayorLink.closest('tr')?.getAttribute('data-attention-severity')).toBeNull();
+  });
 });
+
+function contributor(
+  domain: 'agents',
+  items: ReturnType<AttentionContributor['getItems']>,
+): AttentionContributor {
+  return {
+    id: `${domain}:test`,
+    domain,
+    getItems: () => items,
+  };
+}

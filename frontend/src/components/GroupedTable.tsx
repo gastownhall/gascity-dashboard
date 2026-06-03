@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { ProjectGroupHeader } from './ProjectGroupHeader';
 import { Table, type SortState, type TableColumn } from './Table';
 import type { ProjectGroup } from '../hooks/useListFilters';
@@ -14,6 +14,7 @@ interface GroupedTableProps<T> {
   onToggleProject: (project: string) => void;
   /** Optional per-row click handler (used by Mail to open thread). */
   onRowClick?: (row: T) => void;
+  rowProps?: (row: T) => HTMLAttributes<HTMLTableRowElement>;
   /** Italic line shown when there are no groups at all. */
   emptyMessage: ReactNode;
   /** Per-project empty (rare: filters return zero rows for a project). */
@@ -27,6 +28,7 @@ export function GroupedTable<T>({
   rowKey,
   onToggleProject,
   onRowClick,
+  rowProps,
   emptyMessage,
   perProjectEmpty,
   initialSort,
@@ -55,6 +57,7 @@ export function GroupedTable<T>({
               rowKey={rowKey}
               empty={perProjectEmpty ?? 'No items.'}
               {...(onRowClick !== undefined ? { onRowClick } : {})}
+              {...(rowProps !== undefined ? { rowProps } : {})}
               {...(initialSort !== undefined ? { initialSort } : {})}
             />
           )}

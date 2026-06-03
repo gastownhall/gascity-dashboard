@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type HTMLAttributes, type ReactNode } from 'react';
 
 // Tables are typeset lists, not bordered grids. Column headers in
 // Label scale (uppercase, tracked), rows separated by a hairline
@@ -26,6 +26,7 @@ interface TableProps<T> {
   rows: ReadonlyArray<T>;
   rowKey: (row: T) => string;
   onRowClick?: (row: T) => void;
+  rowProps?: (row: T) => HTMLAttributes<HTMLTableRowElement>;
   empty?: ReactNode;
   initialSort?: SortState | null;
 }
@@ -35,6 +36,7 @@ export function Table<T>({
   rows,
   rowKey,
   onRowClick,
+  rowProps,
   empty,
   initialSort,
 }: TableProps<T>) {
@@ -111,29 +113,33 @@ export function Table<T>({
               </td>
             </tr>
           ) : (
-            sortedRows.map((row) => (
-              <tr
-                key={rowKey(row)}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={`border-b border-rule transition-colors duration-150 ease-out-quart ${
-                  onRowClick
-                    ? 'cursor-pointer hover:bg-surface-tint'
-                    : ''
-                }`}
-              >
-                {columns.map((col) => {
-                  const align = col.align === 'right' ? 'text-right' : 'text-left';
-                  return (
-                    <td
-                      key={col.key}
-                      className={`py-3 pr-6 align-baseline ${align} ${col.className ?? ''}`}
-                    >
-                      {col.render(row)}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))
+            sortedRows.map((row) => {
+              const { className: rowClassName = '', ...extraRowProps } = rowProps?.(row) ?? {};
+              return (
+                <tr
+                  {...extraRowProps}
+                  key={rowKey(row)}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  className={`border-b border-rule transition-colors duration-150 ease-out-quart ${
+                    onRowClick
+                      ? 'cursor-pointer hover:bg-surface-tint'
+                      : ''
+                  } ${rowClassName}`}
+                >
+                  {columns.map((col) => {
+                    const align = col.align === 'right' ? 'text-right' : 'text-left';
+                    return (
+                      <td
+                        key={col.key}
+                        className={`py-3 pr-6 align-baseline ${align} ${col.className ?? ''}`}
+                      >
+                        {col.render(row)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>

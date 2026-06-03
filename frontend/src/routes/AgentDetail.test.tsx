@@ -1,18 +1,11 @@
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { api } from '../api/client';
 import { NowProvider } from '../contexts/NowContext';
 import { reportClientError } from '../lib/clientErrorReporting';
 import { AgentDetailPage } from './AgentDetail';
 
 vi.mock('../api/client', () => ({
-  api: {
-    listSessions: vi.fn(),
-    listBeads: vi.fn(),
-    listMail: vi.fn(),
-    agentPrime: vi.fn(),
-  },
   ApiClientError: class extends Error {
     status: number;
     kind: string | undefined;
@@ -40,6 +33,33 @@ vi.mock('../api/client', () => ({
   },
 }));
 
+const mockListSupervisorSessions = vi.hoisted(() => vi.fn());
+const mockListSupervisorBeads = vi.hoisted(() => vi.fn());
+const mockListSupervisorMail = vi.hoisted(() => vi.fn());
+const mockFetchSupervisorAgentPrime = vi.hoisted(() => vi.fn());
+
+vi.mock('../supervisor/sessionReads', () => ({
+  listSupervisorSessions: mockListSupervisorSessions,
+  fetchSupervisorSessionTranscript: vi.fn(async () => ({
+    turns: [],
+    total_chars: 0,
+    captured_at: '2026-06-01T00:00:00Z',
+    truncated: false,
+  })),
+}));
+
+vi.mock('../supervisor/beadReads', () => ({
+  listSupervisorBeads: mockListSupervisorBeads,
+}));
+
+vi.mock('../supervisor/mailReads', () => ({
+  listSupervisorMail: mockListSupervisorMail,
+}));
+
+vi.mock('../supervisor/agentReads', () => ({
+  fetchSupervisorAgentPrime: mockFetchSupervisorAgentPrime,
+}));
+
 vi.mock('../contexts/ViewingAsContext', () => ({
   useViewingAs: () => ({
     viewingAs: { alias: 'stephanie', isOperator: true },
@@ -48,7 +68,7 @@ vi.mock('../contexts/ViewingAsContext', () => ({
 
 vi.mock('../hooks/useEntityLinks', () => ({
   useEntityLinks: () => ({
-    links: [],
+    view: null,
     loading: false,
     error: null,
     refresh: vi.fn(),
@@ -67,18 +87,14 @@ vi.mock('../lib/clientErrorReporting', () => ({
   reportClientError: vi.fn(),
 }));
 
-const mockListSessions = api.listSessions as Mock;
-const mockListBeads = api.listBeads as Mock;
-const mockListMail = api.listMail as Mock;
-const mockAgentPrime = api.agentPrime as Mock;
 const mockReportClientError = reportClientError as Mock;
 
 describe('AgentDetailPage error reporting', () => {
   beforeEach(() => {
-    mockListSessions.mockResolvedValue({ items: [] });
-    mockListBeads.mockRejectedValue(new Error('beads unavailable'));
-    mockListMail.mockResolvedValue({ items: [] });
-    mockAgentPrime.mockResolvedValue({ prompt: '', bytes: 0 });
+    mockListSupervisorSessions.mockResolvedValue({ items: [] });
+    mockListSupervisorBeads.mockRejectedValue(new Error('beads unavailable'));
+    mockListSupervisorMail.mockResolvedValue({ items: [] });
+    mockFetchSupervisorAgentPrime.mockResolvedValue({ agent: 'mayor', prompt: '', bytes: 0 });
     mockReportClientError.mockReset();
   });
 
@@ -102,11 +118,53 @@ describe('AgentDetailPage error reporting', () => {
     );
 
     await waitFor(() => {
+      expect(mockListSupervisorBeads).toHaveBeenCalledWith({ includeClosed: true });
       expect(mockReportClientError).toHaveBeenCalledWith({
         component: 'AgentDetail',
         operation: 'refreshBeads',
         message: 'beads unavailable',
       });
     });
+  });
+
+  it('fetches directives through the supervisor prime API', async () => {
+    mockListSupervisorSessions.mockResolvedValue({
+      items: [{
+        id: 'gc-session-1',
+        session_name: 'mayor',
+        alias: 'mayor',
+        template: 'mayor',
+        title: 'mayor',
+        state: 'active',
+        provider: 'claude',
+        running: true,
+        attached: false,
+        created_at: '2026-06-01T00:00:00Z',
+      }],
+    });
+    mockListSupervisorBeads.mockResolvedValue({ items: [] });
+    mockFetchSupervisorAgentPrime.mockResolvedValue({
+      agent: 'mayor',
+      prompt: 'DIRECTIVE BODY',
+      bytes: 'DIRECTIVE BODY'.length,
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={['/agents/mayor']}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <NowProvider intervalMs={1_000_000}>
+          <Routes>
+            <Route path="/agents/:slug" element={<AgentDetailPage />} />
+          </Routes>
+        </NowProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(mockFetchSupervisorAgentPrime).toHaveBeenCalledWith('mayor');
+    });
+    expect(await screen.findByText('DIRECTIVE BODY')).toBeTruthy();
   });
 });

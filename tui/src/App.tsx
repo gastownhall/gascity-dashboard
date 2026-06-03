@@ -3,12 +3,14 @@ import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import { useCity } from './useCity.ts';
 import { useMouseWheel } from './useMouseWheel.ts';
 import {
+  ActiveAgentRow,
   AgentRow,
   BeadRow,
   CityBoardPane,
   DetailPane,
   HealthPane,
   LedgerPane,
+  MailRow,
   RunRow,
   SessionRow,
   type DetailTab,
@@ -36,6 +38,8 @@ import {
   neverActiveByRig,
   nextStatusFilter,
   operatorMail,
+  orchFirstActive,
+  overviewModel,
   runningSessions,
   systemHealth,
   toAgentView,
@@ -43,19 +47,36 @@ import {
   type Category,
   type StatusFilter,
 } from './derive.ts';
-import type { GcBead, GcSession, RunLane } from './api.ts';
+import type { GcBead, GcMailItem, GcSession, RunLane } from './api.ts';
 
 interface AppProps {
   readonly baseUrl: string;
   readonly city: string;
+  /** Mayor-companion mode: open on the truncated overview instead of the full
+   *  agent list (set by the launcher's --split/--target via --compact). */
+  readonly compact?: boolean;
+  /** Whether to grab the mouse for wheel scrolling. False (`--no-mouse`) leaves
+   *  the mouse to tmux so a pinned panel is drag-resizable; keyboard nav still
+   *  works. */
+  readonly mouse?: boolean;
 }
 
-type ViewMode = 'list' | 'beads' | 'runs' | 'detail' | 'health' | 'sessions' | 'ledger' | 'board';
+type ViewMode =
+  | 'list'
+  | 'beads'
+  | 'runs'
+  | 'detail'
+  | 'health'
+  | 'sessions'
+  | 'ledger'
+  | 'board'
+  | 'overview';
 
 type Entry =
   | { readonly kind: 'agent'; readonly id: string; readonly agent: AgentView }
   | { readonly kind: 'bead'; readonly id: string; readonly bead: GcBead }
-  | { readonly kind: 'run'; readonly id: string; readonly lane: RunLane };
+  | { readonly kind: 'run'; readonly id: string; readonly lane: RunLane }
+  | { readonly kind: 'mail'; readonly id: string; readonly mail: GcMailItem };
 
 interface GroupInfo {
   readonly label: string;
@@ -85,6 +106,7 @@ function buildNav(
   sessions: readonly GcSession[],
   beads: readonly GcBead[],
   lanes: readonly RunLane[],
+  mail: readonly GcMailItem[],
   filter: StatusFilter,
 ): Nav {
   const entries: Entry[] = [];
@@ -128,6 +150,58 @@ function buildNav(
     return { entries, renderRows };
   }
 
+  if (view === 'overview') {
+    // One scrollable, peekable list with attention-first sections: the LEDGER
+    // (what's waiting on the operator — needs-operator runs and mayor-escalated
+    // mail, worker chatter folded away) leads, then ACTIVE agents, then
+    // in-progress BEADS, then a RUNS summary. Every item peeks via the shared
+    // drill (run/mail/agent/bead). The single red mark is the ledger heading.
+    const needsOp = lanes.filter(laneNeedsOperator);
+    const escalations = operatorMail(mail, sessions);
+    const folded = foldedMailCount(mail, escalations);
+    const actives = orchFirstActive(sessions);
+    const wip = beads.filter((b) => b.status === 'in_progress');
+    const open = beads.filter((b) => b.status === 'open').length;
+
+    const ledgerTotal = needsOp.length + escalations.length;
+    const ledgerGroup: GroupInfo = {
+      // The ledger's signature honesty: never silently drop the worker firehose
+      // the mayor digested — report how much was folded.
+      label: 'LEDGER',
+      sub: folded > 0 ? `${ledgerTotal} · ${folded} folded` : `${ledgerTotal}`,
+      alert: ledgerTotal > 0,
+    };
+    renderRows.push({ kind: 'heading', group: ledgerGroup });
+    for (const l of needsOp) push({ kind: 'run', id: l.id, lane: l }, false, ledgerGroup);
+    for (const m of escalations) push({ kind: 'mail', id: m.id, mail: m }, false, ledgerGroup);
+
+    const actGroup: GroupInfo = {
+      label: 'ACTIVE',
+      sub: `${actives.length} of ${sessions.length}`,
+      alert: false,
+    };
+    renderRows.push({ kind: 'heading', group: actGroup });
+    for (const v of actives) push({ kind: 'agent', id: v.session.id, agent: v }, false, actGroup);
+
+    const beadGroup: GroupInfo = {
+      label: 'BEADS',
+      sub: `${open} open · ${wip.length} in progress`,
+      alert: false,
+    };
+    renderRows.push({ kind: 'heading', group: beadGroup });
+    for (const b of wip) push({ kind: 'bead', id: b.id, bead: b }, false, beadGroup);
+
+    renderRows.push({
+      kind: 'heading',
+      group: {
+        label: 'RUNS',
+        sub: `${lanes.length} active · ${needsOp.length} needs operator`,
+        alert: false,
+      },
+    });
+    return { entries, renderRows };
+  }
+
   // list (and detail, which navigates the same agent list underneath).
   // Failed agents always pass the filter so a problem is never hidden.
   const filtered = sessions.filter((s) => matchesStatusFilter(categorize(s), filter));
@@ -148,6 +222,7 @@ function buildNav(
 function entryLabel(e: Entry): string {
   if (e.kind === 'agent') return e.agent.agent;
   if (e.kind === 'bead') return e.bead.id;
+  if (e.kind === 'mail') return e.mail.subject;
   return e.lane.title;
 }
 
@@ -164,12 +239,12 @@ function useTerminalRows(): number {
   return rows;
 }
 
-export function App({ baseUrl, city }: AppProps): React.JSX.Element {
+export function App({ baseUrl, city, compact = false, mouse = true }: AppProps): React.JSX.Element {
   const { exit } = useApp();
   const { sessions, snapshot, beads, mail, error, conn } = useCity(baseUrl, city);
   const rows = useTerminalRows();
 
-  const [view, setView] = useState<ViewMode>('list');
+  const [view, setView] = useState<ViewMode>(compact ? 'overview' : 'list');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active+idle');
   const [detailTab, setDetailTab] = useState<DetailTab>('overview');
   const [cursorId, setCursorId] = useState<string | null>(null);
@@ -182,14 +257,18 @@ export function App({ baseUrl, city }: AppProps): React.JSX.Element {
 
   const health = useMemo(() => systemHealth(snapshot), [snapshot]);
   const board = useMemo(() => cityBoard(health.lanes), [health.lanes]);
+  const overview = useMemo(
+    () => overviewModel(sessions, beads, mail, health.lanes),
+    [sessions, beads, mail, health.lanes],
+  );
   // detail navigates the same agent list as 'list' underneath.
   const navView: ViewMode = view === 'detail' ? 'list' : view;
   const { entries, renderRows } = useMemo(
     () =>
       navView === 'health' || navView === 'ledger' || navView === 'board'
         ? EMPTY_NAV
-        : buildNav(navView, sessions, beads, health.lanes, statusFilter),
-    [navView, sessions, beads, health.lanes, statusFilter],
+        : buildNav(navView, sessions, beads, health.lanes, mail, statusFilter),
+    [navView, sessions, beads, health.lanes, mail, statusFilter],
   );
 
   const cursorIndex = Math.max(0, entries.findIndex((e) => e.id === cursorId));
@@ -219,7 +298,7 @@ export function App({ baseUrl, city }: AppProps): React.JSX.Element {
     setCursorId(list[next]?.id ?? null);
   }, []);
 
-  useMouseWheel(useCallback((dir: -1 | 1) => moveCursor(dir * 3), [moveCursor]));
+  useMouseWheel(useCallback((dir: -1 | 1) => moveCursor(dir * 3), [moveCursor]), mouse);
 
   const closeActivePeek = (): void => {
     if (peekPaneId !== null && paneExists(peekPaneId)) closePeek(peekPaneId);
@@ -297,6 +376,7 @@ export function App({ baseUrl, city }: AppProps): React.JSX.Element {
     (input, key) => {
       if (input === 'q') return quit();
       if (key.escape) return view === 'list' ? quit() : (setView('list'), setScrollTop(0));
+      if (input === 'o') return toggle('overview');
       if (input === 'h') return toggle('health');
       if (input === 'm') return toggle('board');
       if (input === 'b') return toggle('beads');
@@ -304,7 +384,10 @@ export function App({ baseUrl, city }: AppProps): React.JSX.Element {
       if (input === 's') return toggle('sessions');
       if (input === 'l') return toggle('ledger');
       if (input === 'p') {
-        if (navView === 'list') setView((v) => (v === 'detail' ? 'list' : 'detail'));
+        // Detail for the selected agent — from the agent list, or from the
+        // overview when an agent row (not a run/mail/bead) is selected.
+        const onAgent = navView === 'list' || (navView === 'overview' && selected?.kind === 'agent');
+        if (onAgent) setView((v) => (v === 'detail' ? 'list' : 'detail'));
         return;
       }
       if (input === 'a') {
@@ -346,7 +429,13 @@ export function App({ baseUrl, city }: AppProps): React.JSX.Element {
   const mailFolded = foldedMailCount(mail, ledgerMail);
 
   const summary =
-    view === 'board' ? (
+    view === 'overview' ? (
+      // No red here: the LEDGER heading inside the list carries the one mark.
+      <Text dimColor>
+        overview
+        {overview.waitingTotal > 0 ? ` · ${overview.waitingTotal} on the ledger` : ' · ledger clear'}
+      </Text>
+    ) : view === 'board' ? (
       // No red here: the board's own `needs` column carries the one mark, so a
       // second red region in the same viewport would break the One Mark Rule.
       <Text dimColor>
@@ -473,6 +562,7 @@ export function App({ baseUrl, city }: AppProps): React.JSX.Element {
                     dim={row.dim}
                     now={now}
                     sessionRow={navView === 'sessions'}
+                    overview={navView === 'overview' ? { city, lanes: health.lanes } : null}
                   />
                 ),
               )
@@ -487,7 +577,10 @@ export function App({ baseUrl, city }: AppProps): React.JSX.Element {
                 {below > 0 ? `↓ ${below}` : ''}
               </Text>
             )}
-            <Text dimColor>↑↓ · enter drill · a filter · s/b/f/l/h/m views · p detail · x close · q quit</Text>
+            <Text dimColor>
+              ↑↓ · enter peek · {view === 'overview' ? 'o full' : 'o overview'} · a filter ·
+              s/b/f/l/h/m · p detail · x close · q quit
+            </Text>
           </Box>
         </>
       )}
@@ -511,15 +604,32 @@ interface EntryRowProps {
   /** Render an agent entry as the activity-forward Sessions row instead of the
    *  grouped Agents row. */
   readonly sessionRow: boolean;
+  /** Overview context: render the calm overview rows (agent = city + on-lane,
+   *  mail = sender/subject). Null outside the overview. */
+  readonly overview: { readonly city: string; readonly lanes: readonly RunLane[] } | null;
 }
 
-function EntryRow({ entry, selected, dim, now, sessionRow }: EntryRowProps): React.JSX.Element {
+function EntryRow({ entry, selected, dim, now, sessionRow, overview }: EntryRowProps): React.JSX.Element {
   if (entry.kind === 'agent') {
+    if (overview) {
+      return (
+        <ActiveAgentRow
+          view={entry.agent}
+          selected={selected}
+          city={overview.city}
+          lanes={overview.lanes}
+          now={now}
+        />
+      );
+    }
     return sessionRow ? (
       <SessionRow view={entry.agent} selected={selected} now={now} />
     ) : (
       <AgentRow view={entry.agent} selected={selected} dim={dim} now={now} />
     );
+  }
+  if (entry.kind === 'mail') {
+    return <MailRow mail={entry.mail} selected={selected} />;
   }
   if (entry.kind === 'bead') {
     return <BeadRow bead={entry.bead} selected={selected} dim={dim} />;

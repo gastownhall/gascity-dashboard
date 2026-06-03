@@ -5,10 +5,8 @@ import { createCityRuntime, type CityRuntime } from './runtime.js';
 
 /**
  * Raw supervisor city descriptor including the untrusted host `path`. This
- * is NOT the wire-shape `CityInfo` (which omits the path). The registry
- * needs the path host-side to build each CityRuntime's CLI-shelling routes,
- * so it sources it from the supervisor's raw list rather than the decoded
- * dashboard wire shape.
+ * is host-side only. The browser reads generated supervisor CityInfo
+ * directly and uses only the fields it needs.
  */
 export interface SupervisorCityDescriptor {
   name: string;
@@ -144,10 +142,8 @@ export function createCityRegistry(opts: CityRegistryOptions): CityRegistry {
 
 /**
  * Adapter from a GcClient to the registry's host-side lister. The wire
- * `GcClient.listCities()` strips the host path (browser-facing); the
- * registry uses the host-side `listSupervisorCities()` which RETAINS the
- * untrusted host path so each CityRuntime's CLI-shelling routes get their
- * rig root. The path never crosses the dashboard's own API boundary.
+ * `listSupervisorCities()` retains the untrusted host path so each
+ * CityRuntime's local filesystem routes get their city root.
  */
 export function supervisorCityLister(gc: GcClient): ListSupervisorCities {
   return async (signal) => gc.listSupervisorCities(signal);

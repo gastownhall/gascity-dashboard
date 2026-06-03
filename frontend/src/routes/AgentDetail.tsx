@@ -1,13 +1,10 @@
 import {
     errorMessage,
     GC_EVENT_PREFIX,
-    type GcBead,
-    type GcMailItem,
-    type GcSession,
 } from "gas-city-dashboard-shared";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, apiErrorParts, formatApiError } from "../api/client";
+import { apiErrorParts, formatApiError } from "../api/client";
 import { BeadDetailModal } from "../components/BeadDetailModal";
 import { Button } from "../components/Button";
 import { PageHeader } from "../components/PageHeader";
@@ -28,6 +25,19 @@ import { useEntityLinks } from "../hooks/useEntityLinks";
 import { useGcEventRefresh } from "../hooks/useGcEvents";
 import { useVisibleRefresh } from "../hooks/useVisibleRefresh";
 import { reportClientError } from "../lib/clientErrorReporting";
+import { fetchSupervisorAgentPrime } from "../supervisor/agentReads";
+import {
+  listSupervisorBeads,
+  type SupervisorBead,
+} from "../supervisor/beadReads";
+import {
+  listSupervisorMail,
+  type SupervisorMailItem,
+} from "../supervisor/mailReads";
+import {
+  listSupervisorSessions,
+  type SupervisorSession,
+} from "../supervisor/sessionReads";
 import { stateTone } from "./Agents";
 
 // Read-only drilldown for a single agent. Route: /agents/:slug where
@@ -36,7 +46,7 @@ import { stateTone } from "./Agents";
 // Surface:
 //   - Header with state badge, identity line, back link
 //   - Metadata block (rig, pool, template, model, ctx, attached, timestamps)
-//   - Beads assigned to this agent (filtered from /api/beads)
+//   - Beads assigned to this agent (filtered from direct supervisor reads)
 //   - Live peek panel (live SSE stream for active sessions; snapshot otherwise)
 //
 // Read-only scope: nudge actions, chat compose, and directive edits stay
@@ -51,10 +61,10 @@ export function AgentDetailPage() {
   const navigate = useNavigate();
   const { viewingAs } = useViewingAs();
 
-  const [sessions, setSessions] = useState<GcSession[] | null>(null);
-  const [beads, setBeads] = useState<GcBead[] | null>(null);
+  const [sessions, setSessions] = useState<SupervisorSession[] | null>(null);
+  const [beads, setBeads] = useState<SupervisorBead[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [viewingBead, setViewingBead] = useState<GcBead | null>(null);
+  const [viewingBead, setViewingBead] = useState<SupervisorBead | null>(null);
   const [viewingBeadId, setViewingBeadId] = useState<string | null>(null);
 
   const now = useNow();
@@ -82,8 +92,8 @@ export function AgentDetailPage() {
 
   const refreshSessions = useCallback(async () => {
     try {
-      const { items } = await api.listSessions();
-      setSessions(items);
+      const { items } = await listSupervisorSessions();
+      setSessions(items ?? []);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "sessions failed");
@@ -92,7 +102,7 @@ export function AgentDetailPage() {
 
   const refreshBeads = useCallback(async () => {
     try {
-      const { items } = await api.listBeads(true);
+      const { items } = await listSupervisorBeads({ includeClosed: true });
       setBeads(items);
     } catch (err) {
       void reportClientError({
@@ -117,7 +127,7 @@ export function AgentDetailPage() {
     void refreshBeads();
   });
 
-  const session = useMemo<GcSession | null>(() => {
+  const session = useMemo<SupervisorSession | null>(() => {
     if (sessions === null) return null;
     return (
       sessions.find((s) => s.session_name === decoded) ??
@@ -133,7 +143,7 @@ export function AgentDetailPage() {
   //   1. bead.assignee == alias | session_name | id
   //   2. bead.metadata.session_id == session.id (supervisor-spawned)
   //   3. bead.metadata.session_name == session.session_name (CLI-tagged)
-  const assignedBeads = useMemo<GcBead[]>(() => {
+  const assignedBeads = useMemo<SupervisorBead[]>(() => {
     if (session === null || beads === null) return [];
     const candidates = new Set<string>();
     if (session.alias) candidates.add(session.alias);
@@ -141,7 +151,7 @@ export function AgentDetailPage() {
     candidates.add(session.id);
     return beads.filter((b) => {
       if (b.assignee !== undefined && candidates.has(b.assignee)) return true;
-      // 6bv7: GcBead.metadata is Record<string, string> per OpenAPI (F11)
+      // Supervisor Bead metadata is Record<string, string> per OpenAPI (F11)
       // and session_name is required (F10), so neither check needs the
       // prior runtime guards.
       const md = b.metadata;
@@ -155,7 +165,7 @@ export function AgentDetailPage() {
     });
   }, [session, beads]);
 
-  // Chat thread: wide /api/mail box=all fetch, client-side filter for
+  // Chat thread: wide supervisor mail fetch, client-side filter for
   // messages between operator and this agent.
   const agentAliases = useMemo<ReadonlyArray<string>>(() => {
     if (session === null) return [];
@@ -171,8 +181,8 @@ export function AgentDetailPage() {
     [viewingAs.alias],
   );
 
-  const loadChatItems = useCallback(async (): Promise<GcMailItem[]> => {
-    const { items } = await api.listMail("all", viewingAs.alias);
+  const loadChatItems = useCallback(async (): Promise<SupervisorMailItem[]> => {
+    const { items } = await listSupervisorMail("all", viewingAs.alias);
     return items;
   }, [viewingAs.alias]);
 
@@ -191,10 +201,10 @@ export function AgentDetailPage() {
         ? chatState.error
         : null;
 
-  // Directives: lazy-fetch the agent's composed prompt via `gc prime`.
+  // Directives: lazy-fetch the agent's composed prompt from the supervisor.
   // Cached for the lifetime of the page (no auto-refresh); operator can
   // manually re-pull. Bail out (render nothing) when there's no alias
-  // candidate — `gc prime` is alias-keyed, not id-keyed.
+  // candidate — supervisor prime is alias-keyed, not id-keyed.
   const primeAlias = useMemo<string | null>(() => {
     if (session === null) return null;
     return session.alias ?? session.template ?? null;
@@ -205,7 +215,7 @@ export function AgentDetailPage() {
     setDirectivesLoading(true);
     setDirectivesError(null);
     try {
-      const result = await api.agentPrime(primeAlias);
+      const result = await fetchSupervisorAgentPrime(primeAlias);
       setDirectivesPrompt(result.prompt);
       setDirectivesAliasFetched(primeAlias);
     } catch (err) {
@@ -239,7 +249,7 @@ export function AgentDetailPage() {
   // returns) per rules-of-hooks; a null ref leaves it idle.
   const links = useEntityLinks(session?.id ?? null);
 
-  const chatMessages = useMemo<ReadonlyArray<GcMailItem>>(() => {
+  const chatMessages = useMemo<ReadonlyArray<SupervisorMailItem>>(() => {
     const chatItems = chatState.status === "ready" ? chatState.data : [];
     const agents = new Set(agentAliases);
     const operators = new Set(operatorAliases);

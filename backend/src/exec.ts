@@ -1,8 +1,3 @@
-// Param schemas — every privileged exec validates its args against these.
-// SESSION_ID_RE lives in lib/sessionId.ts now that peek is HTTP, not exec.
-// BEAD_ID_RE is shared with routes/beads.ts via lib/beadId.ts so any prefix
-// the read side accepts the write side can act on (gascity-dashboard-bwp).
-import { BEAD_ID_RE } from './lib/beadId.js';
 import { isValidHostPath } from './lib/hostPath.js';
 import {
   AGENT_ALIAS_RE,
@@ -60,9 +55,8 @@ const CTRL_RE = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g;
 // but they're in the same Unicode bidi-control category — the CVE
 // listed all 12 and a comprehensive strip costs nothing.
 const BIDI_RE = /[؜‎‏‪-‮⁦-⁩]/g;
-const MAX_CLOSE_REASON_LENGTH = 1024;
-const BEAD_ACTION_TIMEOUT_MS = 15_000;
-const AGENT_PRIME_TIMEOUT_MS = 10_000;
+const GIT_LOG_RECENT_LIMIT = '200';
+const GIT_LOG_TIMEOUT_MS = 10_000;
 const RUN_GIT_TIMEOUT_MS = 5_000;
 const GH_LIST_TIMEOUT_MS = 30_000;
 const GH_HISTORY_LIST_TIMEOUT_MS = 60_000;
@@ -76,96 +70,56 @@ function sanitiseTerminalOutput(raw: string): string {
 
 // ── Public exec wrappers — each one is a named, whitelisted call. ──────
 //
-// Bead CLOSE + agent NUDGE only. The dashboard uses supervisor HTTP for
-// claim writes, but close still needs the CLI because the HTTP close route
-// does not accept the operator's reason field. Nudge is also CLI-backed
-// because the supervisor has no HTTP route for the nudge queue.
-export async function execBeadAction(
-  beadId: string,
-  action: 'close' | 'nudge',
-  reason?: string,
-  cityPath?: string,
-): Promise<ExecResult> {
-  if (!BEAD_ID_RE.test(beadId)) {
-    throw new ExecError('invalid bead id', 'validation');
-  }
-  const args: string[] = ['bd'];
-  // --city pins the store so `gc bd` doesn't depend on the backend's cwd
-  // (which is the dashboard repo, not a city directory). Without this,
-  // writes fail with "not in a city directory". Same defensive validation
-  // and flag placement as execAgentPrime.
-  const cityArg =
-    cityPath !== undefined && cityPath.length > 0
-      ? (() => {
-          if (!isValidHostPath(cityPath)) {
-            throw new ExecError('invalid city path', 'validation');
-          }
-          return `--city=${cityPath}`;
-        })()
-      : undefined;
-  if (action === 'close') {
-    args.push('close', beadId);
-    if (cityArg) args.push(cityArg);
-    if (
-      typeof reason === 'string' &&
-      reason.length > 0 &&
-      reason.length <= MAX_CLOSE_REASON_LENGTH
-    ) {
-      args.push('--reason', reason);
-    }
-  } else if (action === 'nudge') {
-    if (!AGENT_ALIAS_RE.test(beadId)) {
-      // 'nudge' is on agent alias, not bead. We thread it through this
-      // function for parity — but require alias format here.
-      throw new ExecError('nudge requires agent alias, not bead id', 'validation');
-    }
-    args.push('nudge', beadId);
-    if (cityArg) args.push(cityArg);
-  }
-  return runExec('gc', args, BEAD_ACTION_TIMEOUT_MS);
-}
+// GC-related reads and writes use the generated supervisor client directly.
+// This file contains only dashboard-local git/gh operations.
 
-/**
- * `gc prime --strict <alias>` — outputs the composed behavioural prompt
- * for an agent (the same text the agent reads on wake). gascity-dashboard-vq7
- * read-only surface: the dashboard surfaces the resolved prompt without
- * exposing an edit path (edits would need a file-write privilege the
- * exec whitelist deliberately doesn't grant — filed for follow-up
- * behind security review).
- *
- * --strict so 'agent not in city config' surfaces as exit=1 +
- * stderr (caller renders "not configured") instead of gc's default
- * fallback to a generic worker prompt that would mislead the operator.
- *
- * cityPath is optional. When omitted, `gc` walks up from cwd to
- * discover the city (matches the behaviour of the other exec helpers
- * in this file, which don't pin --city). When present, it must be an
- * absolute path with no `..` traversal segments.
- *
- * Output size: measured ~15KB for the mayor's prompt; well under
- * runExec's 100KB MAX_BYTES.
- */
-export async function execAgentPrime(
-  alias: string,
-  cityPath?: string,
-): Promise<ExecResult> {
-  if (!AGENT_ALIAS_RE.test(alias)) {
-    throw new ExecError('invalid agent alias', 'validation');
-  }
-  const args: string[] = ['prime', '--strict'];
-  if (cityPath !== undefined && cityPath.length > 0) {
-    if (!isValidHostPath(cityPath)) {
-      throw new ExecError('invalid city path', 'validation');
-    }
-    args.push(`--city=${cityPath}`);
-  }
-  args.push(alias);
-  return runExec('gc', args, AGENT_PRIME_TIMEOUT_MS);
-}
+// Hardcoded enum of `git log` invocations. Each view's args live entirely
+// in this file — the operator cannot pass arbitrary git arguments to the
+// server. The caller can only pick a view *name* (validated upstream).
+// Recent views use an explicit count cap sized for roughly two weeks of
+// active main-branch commits. The since= variants are time-windowed, not
+// count-windowed, so git's default result count is the correct limit there.
+const GIT_LOG_VIEWS: Record<string, string[]> = {
+  'recent-main': [
+    'log',
+    '--pretty=format:%H%x09%h%x09%an%x09%aI%x09%D%x09%s',
+    '-n',
+    GIT_LOG_RECENT_LIMIT,
+    'origin/main',
+  ],
+  'recent-all': [
+    'log',
+    '--pretty=format:%H%x09%h%x09%an%x09%aI%x09%D%x09%s',
+    '-n',
+    GIT_LOG_RECENT_LIMIT,
+    '--branches',
+    '--remotes',
+  ],
+  today: [
+    'log',
+    '--pretty=format:%H%x09%h%x09%an%x09%aI%x09%D%x09%s',
+    '--since=24.hours.ago',
+    '--branches',
+    '--remotes',
+  ],
+  'this-week': [
+    'log',
+    '--pretty=format:%H%x09%h%x09%an%x09%aI%x09%D%x09%s',
+    '--since=7.days.ago',
+    '--branches',
+    '--remotes',
+  ],
+};
 
-// Mail send uses supervisor HTTP with from:'human' pinned server-side.
-// The browser-facing MailComposeRequest carries no `from` or `as` slot,
-// preserving the impersonation boundary in the route contract.
+const GIT_REPO_PATH = process.env.ADMIN_GIT_REPO ?? process.env.HOME ?? '';
+
+export async function execGitLog(view: string): Promise<ExecResult> {
+  const args = GIT_LOG_VIEWS[view];
+  if (!args) {
+    throw new ExecError('unknown git view', 'validation');
+  }
+  return runExec('git', ['-C', GIT_REPO_PATH, ...args], GIT_LOG_TIMEOUT_MS);
+}
 
 type RunGitView =
   | 'root'

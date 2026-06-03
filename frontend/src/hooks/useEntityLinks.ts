@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { EntityLinkView } from 'gas-city-dashboard-shared';
-import { api, formatApiError } from '../api/client';
+import { formatApiError } from '../api/client';
+import { loadSupervisorEntityLinks } from '../supervisor/entityLinks';
 
 // Fetch the bead-ID linked view for a focus ref (gascity-dashboard-j4x).
 //
@@ -32,7 +33,7 @@ export function useEntityLinks(ref: string | null): UseEntityLinks {
     setError(null);
     void (async () => {
       try {
-        const result = await api.entityLinks(ref);
+        const result = await loadSupervisorEntityLinks(ref);
         if (!cancelled) setView(result);
       } catch (err) {
         if (cancelled) return;

@@ -4,6 +4,7 @@ import {
   type BoardColumnId,
 } from '../../lib/beadGraph';
 import { BeadBoardRow } from './BeadBoardRow';
+import type { AttentionSeverity } from '../../attention/compose';
 
 // The Beads board: status columns (kanban) whose rows carry the dependency
 // graph (gascity-dashboard-6frc). Editorial register — columns are
@@ -20,10 +21,16 @@ import { BeadBoardRow } from './BeadBoardRow';
 interface BeadBoardProps {
   columns: Record<BoardColumnId, BeadNode[]>;
   selectedId: string | null;
+  attentionSeverity?: (beadId: string) => AttentionSeverity | null;
   onSelect: (beadId: string) => void;
 }
 
-export function BeadBoard({ columns, selectedId, onSelect }: BeadBoardProps) {
+export function BeadBoard({
+  columns,
+  selectedId,
+  attentionSeverity,
+  onSelect,
+}: BeadBoardProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-x-8 gap-y-8">
       {BOARD_COLUMNS.map((col) => {
@@ -50,6 +57,7 @@ export function BeadBoard({ columns, selectedId, onSelect }: BeadBoardProps) {
                     key={node.bead.id}
                     node={node}
                     selected={node.bead.id === selectedId}
+                    attentionSeverity={attentionSeverity?.(node.bead.id) ?? null}
                     onSelect={onSelect}
                   />
                 ))}

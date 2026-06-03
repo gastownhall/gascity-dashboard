@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   agentProject,
   beadProject,
+  isAgentOutsideRig,
   isOrchestrationAgent,
   isOrchestrationSession,
   isPerRigDispatcherAgent,
@@ -188,4 +189,25 @@ describe('orchestration name sets stay in sync between sessions and agents', () 
       expect(isOrchestrationAgent({ name: id } as never)).toBe(true);
     },
   );
+});
+
+describe('isAgentOutsideRig', () => {
+  it('is true for cross-rig Orchestration agents (mayor, control-dispatcher, chief-of-staff)', () => {
+    expect(isAgentOutsideRig({ name: 'mayor' } as never)).toBe(true);
+    expect(isAgentOutsideRig({ name: 'control-dispatcher' } as never)).toBe(true);
+    expect(isAgentOutsideRig({ name: 'oversight-rig.chief-of-staff' } as never)).toBe(true);
+  });
+
+  it('is true for the residual (no rig) bucket — no rig, no pool, not orchestration', () => {
+    expect(isAgentOutsideRig({ name: 'a1' } as never)).toBe(true);
+    expect(isAgentOutsideRig({ name: 'a1', rig: '' } as never)).toBe(true);
+  });
+
+  it('is false for an agent in a real rig', () => {
+    expect(isAgentOutsideRig({ name: 'a1', rig: '/home/ds/gascity' } as never)).toBe(false);
+  });
+
+  it('is false for a pool-scoped agent (a pool stands in as the rig label)', () => {
+    expect(isAgentOutsideRig({ name: 'a1', pool: 'research' } as never)).toBe(false);
+  });
 });

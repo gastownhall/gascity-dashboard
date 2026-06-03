@@ -11,7 +11,6 @@ import {
   type BackgroundWorker,
   type CityContext,
 } from '../src/views/types.js';
-import { healthBackend } from '../src/views/modules/health.module.js';
 
 function makeConfig(overrides: Partial<AdminConfig> = {}): AdminConfig {
   return {
@@ -52,10 +51,18 @@ function fakeCityContext(config: AdminConfig): CityContext {
   };
 }
 
+const noDepsModule: BackendModule<void> = {
+  id: 'no-deps',
+  kind: 'core',
+  resources: {},
+  needs: () => undefined,
+  mount: () => Router(),
+};
+
 describe('views/registry', () => {
-  test('ALL_MODULES includes the health module', () => {
+  test('ALL_MODULES keeps dashboard-local health out of the per-city module plane', () => {
     const ids = ALL_MODULES.map((m) => m.id);
-    assert.ok(ids.includes('health'), `expected 'health' in ${JSON.stringify(ids)}`);
+    assert.ok(!ids.includes('health'), `expected no per-city health module in ${JSON.stringify(ids)}`);
   });
 
   test('ALL_MODULES includes the maintainer module', () => {
@@ -87,10 +94,10 @@ describe('views/registry', () => {
 });
 
 describe('views/types#bind', () => {
-  test('bind(healthBackend) returns a MountedModule whose mount() yields a Router', () => {
+  test('bind() returns a MountedModule whose mount() yields a Router', () => {
     const config = makeConfig();
-    const mounted = bind(healthBackend, config);
-    assert.equal(mounted.id, 'health');
+    const mounted = bind(noDepsModule, config);
+    assert.equal(mounted.id, 'no-deps');
     assert.equal(mounted.kind, 'core');
     const router = mounted.mount(fakeCityContext(config));
     // express.Router instances expose `.use` + `.get` + `.stack` — that's
@@ -103,7 +110,7 @@ describe('views/types#bind', () => {
 
   test('bind() throws when a module is missing needs()', () => {
     const broken = {
-      ...healthBackend,
+      ...noDepsModule,
       // Simulate JS-interop drift: the field exists but is not a function.
       needs: undefined as unknown as (config: AdminConfig) => void,
     } as BackendModule<void>;
@@ -149,8 +156,7 @@ describe('BackgroundWorker contract', () => {
 
   test('a no-workers module yields undefined for the bound worker', () => {
     const config = makeConfig();
-    const mounted = bind(healthBackend, config);
-    // health declares no workers — `worker` is undefined on the MountedModule.
+    const mounted = bind(noDepsModule, config);
     assert.equal(mounted.worker, undefined);
   });
 });

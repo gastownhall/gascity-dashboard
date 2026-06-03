@@ -11,8 +11,10 @@
 // through ~30 `api.*` call sites) keeps the cutover mechanical: the call sites
 // are unchanged; only the URL they resolve to gains the city prefix.
 //
-// Non-city endpoints (health, csrf, cities, client-errors, git, builds) do
-// NOT go through this base — they address `/api/...` directly.
+// Non-city dashboard-service endpoints (health, csrf, client-errors, git,
+// builds) do NOT go through this base — they address `/api/...` directly.
+// GC-owned non-city supervisor resources, such as /v0/cities, use the
+// generated supervisor client instead.
 
 import { CITY_NAME_RE } from 'gas-city-dashboard-shared';
 

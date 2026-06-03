@@ -7,8 +7,8 @@ import { BEAD_ID_RE } from '../src/lib/beadId.js';
 // was too narrow (only td/th/jt prefixes), causing dashboard 'close'
 // actions on co-/gc-/agent-prefixed ids to bounce with HTTP 400.
 //
-// These cases are exercised against the shared regex used by both
-// routes/beads.ts and exec.ts; one of them passing means both do.
+// These cases exercise the shared regex used by run-link parsing and
+// maintainer sling-state validation.
 
 describe('BEAD_ID_RE — accept', () => {
   const accept = [

@@ -14,7 +14,7 @@ export function insideTmux(): boolean {
   return Boolean(process.env.TMUX);
 }
 
-export type PeekKind = 'agent' | 'bead' | 'run';
+export type PeekKind = 'agent' | 'bead' | 'run' | 'mail';
 
 export interface PeekRequest {
   readonly kind: PeekKind;
@@ -53,6 +53,9 @@ export function buildCommand(req: PeekRequest): string | { error: string } {
       return `bash '${AGENT_SCRIPT}' '${root}' '${req.id}'`;
     case 'bead':
       return `gc --city ${root} bd show ${req.id}; exec $SHELL`;
+    case 'mail':
+      // `mail peek` shows the message WITHOUT marking it read (read-only posture).
+      return `gc --city ${root} mail peek ${req.id}; exec $SHELL`;
     case 'run':
       // peek-run.sh prints `bd show <run>` then the code diff; args are
       // single-quoted (all validated/owned, no quotes) for the sh -c tmux runs.
@@ -73,12 +76,18 @@ export function paneExists(paneId: string): boolean {
   return r.stdout.split('\n').includes(paneId);
 }
 
-/** Opens the peek pane beside the dashboard (focus stays on the dashboard). */
+/**
+ * Opens the peek pane BELOW the dashboard (focus stays on the dashboard). A
+ * vertical split (not a right-hand one) keeps the dashboard's full width — it is
+ * often already narrow when pinned beside the mayor — and gives wide peek output
+ * (logs, `bd show`, diffs) the full width too.
+ */
 export function openPeek(command: string): PeekResult {
-  // -d: don't move focus. -P -F prints the new pane's id so we can retarget it.
+  // -d: don't move focus. -v: split below. -P -F prints the new pane's id so we
+  // can retarget it.
   const r = spawnSync(
     'tmux',
-    ['split-window', '-d', '-h', '-l', '45%', '-P', '-F', '#{pane_id}', command],
+    ['split-window', '-d', '-v', '-l', '50%', '-P', '-F', '#{pane_id}', command],
     { encoding: 'utf8' },
   );
   if (r.error || (typeof r.status === 'number' && r.status !== 0)) {

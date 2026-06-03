@@ -4,6 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import type { MaintainerTriage, TriageItem, TriageItemStatus } from 'gas-city-dashboard-shared';
 import { api } from '../../../api/client';
 import { invalidateKey } from '../../../api/cache';
+import { AttentionProvider } from '../../../attention/context';
+import { createAttentionContributors } from '../../../attention/registry';
 import { NowProvider } from '../../../contexts/NowContext';
 import { ViewingAsProvider } from '../../../contexts/ViewingAsContext';
 import { MaintainerPage } from './Maintainer';
@@ -22,16 +24,23 @@ vi.mock('../../../api/client', () => ({
     maintainerTriage: vi.fn(),
     maintainerRefresh: vi.fn(),
     maintainerSling: vi.fn(),
-    listSessions: vi.fn(),
-    listMail: vi.fn(),
     config: vi.fn(),
   },
   ApiClientError: class extends Error {},
 }));
 
+const mockListSupervisorSessions = vi.hoisted(() => vi.fn());
+const mockListSupervisorMail = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../supervisor/sessionReads', () => ({
+  listSupervisorSessions: mockListSupervisorSessions,
+}));
+
+vi.mock('../../../supervisor/mailReads', () => ({
+  listSupervisorMail: mockListSupervisorMail,
+}));
+
 const mockTriage = api.maintainerTriage as Mock;
-const mockListSessions = api.listSessions as Mock;
-const mockListMail = api.listMail as Mock;
 
 class NoopEventSource {
   addEventListener(): void {}
@@ -95,11 +104,11 @@ function envelope(items: TriageItem[]): MaintainerTriage {
 
 beforeEach(() => {
   mockTriage.mockReset();
-  mockListSessions.mockReset();
-  mockListMail.mockReset();
+  mockListSupervisorSessions.mockReset();
+  mockListSupervisorMail.mockReset();
   invalidateKey('maintainer-triage');
-  mockListSessions.mockResolvedValue({ items: [] });
-  mockListMail.mockResolvedValue({ items: [] });
+  mockListSupervisorSessions.mockResolvedValue({ items: [] });
+  mockListSupervisorMail.mockResolvedValue({ items: [] });
   (globalThis as unknown as { EventSource: typeof NoopEventSource }).EventSource =
     NoopEventSource;
 });
@@ -108,7 +117,20 @@ afterEach(() => {
   cleanup();
 });
 
-function mount(initialEntries: string[]) {
+function mount(
+  initialEntries: string[],
+  options: { attention?: MaintainerTriage } = {},
+) {
+  const contributors = createAttentionContributors(
+    options.attention === undefined
+      ? {}
+      : {
+          maintainer: {
+            nowMs: Date.parse('2026-06-01T12:00:00.000Z'),
+            triage: options.attention,
+          },
+        },
+  );
   return render(
     <MemoryRouter
       initialEntries={initialEntries}
@@ -119,7 +141,9 @@ function mount(initialEntries: string[]) {
           act-warning noise. Matches the pattern at AmbientHome.test.tsx. */}
       <NowProvider intervalMs={1_000_000}>
         <ViewingAsProvider>
-          <MaintainerPage />
+          <AttentionProvider contributors={contributors}>
+            <MaintainerPage />
+          </AttentionProvider>
         </ViewingAsProvider>
       </NowProvider>
     </MemoryRouter>,
@@ -204,5 +228,23 @@ describe('MaintainerPage — needs-you mode (dw8)', () => {
     mount(['/maintainer?view=needs-you']);
     const link = await screen.findByRole('link', { name: /runs/i });
     expect(link.getAttribute('href')).toBe('/runs');
+  });
+
+  it('highlights rows that match Maintainer attention facts', async () => {
+    const triage = envelope([
+      mkItem({
+        kind: 'pr',
+        number: 1,
+        status: 'changes_requested',
+        title: 'keep changes-requested',
+      }),
+    ]);
+    mockTriage.mockResolvedValue(triage);
+
+    mount(['/maintainer'], { attention: triage });
+
+    const rowText = await screen.findByText(/keep changes-requested/);
+    const highlighted = rowText.closest('[data-attention-severity]');
+    expect(highlighted?.getAttribute('data-attention-severity')).toBe('attention');
   });
 });

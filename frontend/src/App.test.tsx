@@ -11,8 +11,16 @@ vi.mock('./api/client', () => ({
       defaultView: null,
       enabledModules: [],
     })),
-    listCities: vi.fn(async () => ({ items: [{ name: 'test-city', running: true }] })),
   },
+}));
+
+vi.mock('./supervisor/client', () => ({
+  supervisorApi: () => ({
+    listCities: vi.fn(async () => ({
+      items: [{ name: 'test-city', path: '/srv/gc/test-city', running: true }],
+      total: 1,
+    })),
+  }),
 }));
 
 vi.mock('./routes/Runs', () => ({

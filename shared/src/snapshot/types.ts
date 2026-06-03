@@ -152,11 +152,11 @@ export interface CityStatusSummary {
   /**
    * True when the supervisor's listRigs response was degraded
    * (one or more rig backends failed during aggregation; signalled by
-   * GcRigList.partial === true or non-empty partial_errors). Optional —
+   * generated ListBodyRigResponse.partial === true or non-empty partial_errors). Optional —
    * absent on a clean response. gascity-dashboard-19w.1: mirrors the
-   * partial-handling convention in backend/src/routes/links.ts and
-   * routes/mail.ts so operators see a degraded indicator instead of
-   * an apparent "no rigs configured" report.
+   * partial-handling convention in direct supervisor entity-link and mail reads
+   * so operators see a degraded indicator instead of an apparent
+   * "no rigs configured" report.
    *
    * Typed as optional literal `true` (gascity-dashboard-19w.1.1): the
    * collector only ever assigns `true` (else leaves the field absent),

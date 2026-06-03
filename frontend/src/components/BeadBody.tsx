@@ -1,4 +1,4 @@
-import type { GcBead } from "gas-city-dashboard-shared";
+import type { SupervisorBead } from "../supervisor/beadReads";
 import { formatDateTime } from "../lib/format";
 import { Field } from "./Field";
 import { beadStatusTone, StatusBadge } from "./StatusBadge";
@@ -29,8 +29,8 @@ interface RunMeta {
   runTarget?: string;
 }
 
-function readRunMeta(bead: GcBead): RunMeta {
-  // GcBead.metadata is Record<string, string> per OpenAPI, so values are
+function readRunMeta(bead: SupervisorBead): RunMeta {
+  // Supervisor Bead metadata is Record<string, string> per OpenAPI, so values are
   // guaranteed strings. Truthy check on the key suffices.
   const md = bead.metadata;
   if (!md) return {};
@@ -47,13 +47,13 @@ function readRunMeta(bead: GcBead): RunMeta {
 
 type BeadKind = "template" | "wisp" | "work";
 
-function classifyBead(bead: GcBead, wf: RunMeta): BeadKind {
+function classifyBead(bead: SupervisorBead, wf: RunMeta): BeadKind {
   if (wf.kind === "run") return "template";
   if (bead.issue_type === "molecule") return "wisp";
   return "work";
 }
 
-export function BeadBody({ bead }: { bead: GcBead }) {
+export function BeadBody({ bead }: { bead: SupervisorBead }) {
   const wf = readRunMeta(bead);
   const kind = classifyBead(bead, wf);
 

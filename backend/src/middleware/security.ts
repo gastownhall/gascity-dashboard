@@ -62,7 +62,8 @@ export function originCheck(port: number, extraAllowedHosts: ReadonlyArray<strin
 }
 
 export function securityHeaders(extraConnectSrc: ReadonlyArray<string> = []) {
-  // SSE flows same-origin via /api/events/stream, so 'self' covers EventSource.
+  // In standalone mode, supervisor SSE usually flows same-origin via
+  // /gc-supervisor/v0/.../stream, so 'self' covers EventSource.
   // Extra connect-src values are explicit config, not a wildcard escape hatch.
   const connectSrc = ["'self'", ...extraConnectSrc].join(' ');
   const csp = [

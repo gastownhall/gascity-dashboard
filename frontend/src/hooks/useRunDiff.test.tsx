@@ -27,7 +27,16 @@ afterEach(() => {
 
 describe("useRunDiff", () => {
   it("does not fetch or report when no run id is available", async () => {
-    const { result } = renderHook(() => useRunDiff(undefined));
+    const { result } = renderHook(() => useRunDiff(undefined, knownPath()));
+
+    await waitFor(() => expect(result.current.kind).toBe("idle"));
+
+    expect(mockRunDiff).not.toHaveBeenCalled();
+    expect(mockReportClientError).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch before the supervisor detail resolves an execution path", async () => {
+    const { result } = renderHook(() => useRunDiff("wf-1", undefined));
 
     await waitFor(() => expect(result.current.kind).toBe("idle"));
 
@@ -38,7 +47,7 @@ describe("useRunDiff", () => {
   it("returns a real failed state and reports diff load failures", async () => {
     mockRunDiff.mockRejectedValue(new Error("git unavailable"));
 
-    const { result } = renderHook(() => useRunDiff("wf-1"));
+    const { result } = renderHook(() => useRunDiff("wf-1", knownPath()));
 
     await waitFor(() =>
       expect(result.current).toMatchObject({
@@ -58,15 +67,22 @@ describe("useRunDiff", () => {
     const diff = okDiff();
     mockRunDiff.mockResolvedValue(diff);
 
-    const { result } = renderHook(() => useRunDiff("wf-1"));
+    const { result } = renderHook(() => useRunDiff("wf-1", knownPath()));
 
     await waitFor(() => expect(result.current.kind).toBe("ready"));
 
     if (result.current.kind !== "ready") throw new Error("diff did not load");
     expect(result.current.diff).toBe(diff);
     expect(result.current.refreshState).toEqual({ kind: "idle" });
+    expect(mockRunDiff).toHaveBeenCalledWith("wf-1", {
+      executionPath: knownPath(),
+    }, {});
   });
 });
+
+function knownPath() {
+  return { kind: "known" as const, path: "/tmp/run" };
+}
 
 function okDiff(): RunDiffResponse {
   return {

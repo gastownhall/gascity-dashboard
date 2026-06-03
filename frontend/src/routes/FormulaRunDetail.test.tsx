@@ -12,10 +12,26 @@ import {
   type RunDiffResponse,
   type FormulaRunDetail,
   type RunScopeKind,
-  type DashboardSnapshot,
   type RunLane,
+  type RunSummary,
+  type SourceState,
 } from 'gas-city-dashboard-shared';
 import rawFormulaRunDetailFixture from '../test/fixtures/formula-run-detail.json';
+
+const loadSupervisorFormulaRunDetail = vi.hoisted(() => vi.fn());
+const loadSupervisorRunSummarySource = vi.hoisted(() => vi.fn());
+
+vi.mock('../supervisor/runDetail', () => ({
+  loadSupervisorFormulaRunDetail,
+}));
+
+vi.mock('../supervisor/runSummary', () => ({
+  loadSupervisorRunSummarySource,
+}));
+
+vi.mock('../hooks/useEntityLinks', () => ({
+  useEntityLinks: () => ({ view: null, loading: false, error: null }),
+}));
 
 const eventSources: FakeEventSource[] = [];
 
@@ -43,50 +59,36 @@ beforeEach(() => {
   eventSources.length = 0;
   fetchUrls.length = 0;
   invalidate('formula-run');
+  invalidate('runs:summary:test-city');
+  loadSupervisorFormulaRunDetail.mockReset();
+  loadSupervisorRunSummarySource.mockReset();
+  loadSupervisorFormulaRunDetail.mockImplementation(async () => currentDetail);
+  loadSupervisorRunSummarySource.mockResolvedValue(runSummarySource());
   currentDetail = detail;
   currentDiff = diff;
   vi.stubGlobal('EventSource', FakeEventSource);
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
+    const url = requestUrl(input);
     fetchUrls.push(url);
     if (url.startsWith('/api/city/test-city/runs/gc-adopt-pr-active/diff')) {
       return jsonResponse(currentDiff);
     }
     if (url.startsWith('/api/city/test-city/runs/gc-adopt-pr-active')) {
-      return jsonResponse(currentDetail);
+      throw new Error(`old dashboard formula-run mirror should not be called: ${url}`);
     }
-    if (url === '/api/city/test-city/sessions/gc-session-review-i2/peek') {
-      expect(init?.method).toBe('POST');
-      return jsonResponse(transcripts['gc-session-review-i2']);
+    const transcriptPrefix = '/gc-supervisor/v0/city/test-city/session/';
+    if (url.startsWith(transcriptPrefix) && url.endsWith('/transcript?format=conversation')) {
+      expect(init?.method ?? (input instanceof Request ? input.method : 'GET')).toBe('GET');
+      const id = decodeURIComponent(
+        url.slice(transcriptPrefix.length, -'/transcript?format=conversation'.length),
+      );
+      const transcript = transcripts[id] ?? transcripts[sessionTranscriptFixtureId(id)];
+      if (transcript !== undefined) {
+        return jsonResponse(toSupervisorTranscript(transcript));
+      }
     }
-    if (url === '/api/city/test-city/sessions/gc-session-rebase/peek') {
-      return jsonResponse(transcripts['gc-session-rebase']);
-    }
-    if (url === '/api/city/test-city/sessions/gc-session-rebase-a1/peek') {
-      return jsonResponse(transcripts['gc-session-rebase']);
-    }
-    if (url === '/api/city/test-city/sessions/gc-session-rebase-a2/peek') {
-      return jsonResponse(transcripts['gc-session-rebase']);
-    }
-    if (url === '/api/city/test-city/sessions/gc-session-review-i1/peek') {
-      return jsonResponse(transcripts['gc-session-review-i1']);
-    }
-    if (url === '/api/city/test-city/sessions/gc-session-fix-i1/peek') {
-      return jsonResponse(transcripts['gc-session-fix-i1']);
-    }
-    if (url.startsWith('/api/city/test-city/links/')) {
-      // RelatedEntities (gascity-dashboard-j4x) fetches its view on mount.
-      // A focus-only view keeps this test scoped to the run-detail flow.
-      const ref = decodeURIComponent(url.slice('/api/city/test-city/links/'.length));
-      return jsonResponse({
-        focus: { key: `bead:c:${ref}`, type: 'bead', ref },
-        nodes: [{ key: `bead:c:${ref}`, type: 'bead', ref, title: null, status: null, url: null, fetchedAt: null, unresolved: false }],
-        edges: [],
-        stats: [],
-        partial: false,
-        generatedAt: '2026-05-25T00:00:00.000Z',
-        asOf: null,
-      });
+    if (url.includes('/sessions/') && url.endsWith('/peek')) {
+      throw new Error('old dashboard session peek route should not be called');
     }
     throw new Error(`unexpected fetch: ${url}`);
   }));
@@ -112,18 +114,15 @@ describe('FormulaRunDetailPage', () => {
   it('renders an optimistic stage-ladder skeleton from the snapshot lane while detail loads', async () => {
     // The first load of a run is bounded by the supervisor's all-store scan
     // (gascity-dashboard-wqsk). When the operator arrives from /runs the
-    // snapshot cache already holds this run's lane, so the page shows its
+    // run-summary cache already holds this run's lane, so the page shows its
     // title + phase stages instantly instead of a blank spinner. Here the
-    // detail (and diff) fetch hangs while the snapshot resolves with a lane.
-    invalidate('snapshot');
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.startsWith('/api/city/test-city/snapshot')) {
-        return jsonResponse(snapshotWithActiveLane());
-      }
-      // Everything run-specific (detail, diff, links) hangs → stay in loading.
-      return new Promise<Response>(() => {});
-    }));
+    // detail (and diff) fetch hangs while the summary resolves with a lane.
+    invalidate('runs:summary:test-city');
+    loadSupervisorRunSummarySource.mockResolvedValue(runSummarySourceWithActiveLane());
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    loadSupervisorFormulaRunDetail.mockImplementationOnce(
+      () => new Promise<FormulaRunDetail>(() => {}),
+    );
 
     renderPage();
 
@@ -273,6 +272,50 @@ describe('FormulaRunDetailPage', () => {
     expect(screen.getByText(/v12 · seq 92/i)).toBeTruthy();
   });
 
+  it('does not refresh terminal runs from ambient city events without run identity', async () => {
+    currentDetail = terminalDetail();
+    renderPage();
+    await screen.findByRole('heading', { name: /adopt pr #42/i });
+    const cityStream = requireCityEventSource();
+    await waitFor(() => expect(diffUrls()).toHaveLength(1));
+
+    cityStream.dispatch('event', { type: `${GC_EVENT_PREFIX.session}updated` });
+    await Promise.resolve();
+
+    expect(loadSupervisorFormulaRunDetail).toHaveBeenCalledTimes(1);
+    expect(diffUrls()).toHaveLength(1);
+  });
+
+  it('does not refresh from city events before the initial run detail identifies the run', async () => {
+    const initialLoad = deferred<FormulaRunDetail>();
+    loadSupervisorFormulaRunDetail.mockReturnValue(initialLoad.promise);
+
+    renderPage();
+    const cityStream = requireCityEventSource();
+    expect(loadSupervisorFormulaRunDetail).toHaveBeenCalledTimes(1);
+
+    cityStream.dispatch('event', { type: `${GC_EVENT_PREFIX.bead}updated` });
+    await Promise.resolve();
+
+    expect(loadSupervisorFormulaRunDetail).toHaveBeenCalledTimes(1);
+    initialLoad.resolve(detail);
+    await screen.findByRole('heading', { name: /adopt pr #42/i });
+  });
+
+  it('does not load the execution-folder diff before the initial run detail is ready', async () => {
+    const initialLoad = deferred<FormulaRunDetail>();
+    loadSupervisorFormulaRunDetail.mockReturnValue(initialLoad.promise);
+
+    renderPage();
+    await Promise.resolve();
+
+    expect(diffUrls()).toHaveLength(0);
+
+    initialLoad.resolve(detail);
+    await screen.findByRole('heading', { name: /adopt pr #42/i });
+    await waitFor(() => expect(diffUrls()).toHaveLength(1));
+  });
+
   it('refreshes the execution-folder diff during a run without leaving an explicit Diff tab choice', async () => {
     renderPage();
     await screen.findByRole('heading', { name: /adopt pr #42/i });
@@ -377,8 +420,10 @@ describe('FormulaRunDetailPage', () => {
     await screen.findByRole('heading', { name: /adopt pr #42/i });
 
     const runUrls = fetchUrls.filter((url) => url.startsWith('/api/city/test-city/runs/'));
-    expect(runUrls).toContain(
-      '/api/city/test-city/runs/gc-adopt-pr-active?scope_kind=city&scope_ref=racoon-city',
+    expect(loadSupervisorFormulaRunDetail).toHaveBeenCalledWith(
+      'gc-adopt-pr-active',
+      'city',
+      'racoon-city',
     );
     expect(runUrls).toContain(
       '/api/city/test-city/runs/gc-adopt-pr-active/diff?scope_kind=city&scope_ref=racoon-city',
@@ -642,10 +687,37 @@ function RouteControls() {
   );
 }
 
-// A snapshot whose runs source carries one lane matching the route's runId, so
-// the detail page can render an optimistic skeleton while the full detail
-// loads. city/resources are error states — the skeleton only reads runs.lanes.
-function snapshotWithActiveLane(): DashboardSnapshot {
+function runSummarySource(lanes: RunLane[] = []): SourceState<RunSummary> {
+  return {
+    source: 'runs',
+    status: 'fresh',
+    fetchedAt: '2026-05-25T00:00:00.000Z',
+    staleAt: '2026-05-25T00:01:00.000Z',
+    error: { kind: 'none' },
+    data: {
+      totalActive: lanes.length,
+      totalHistorical: 0,
+      historicalLanes: [],
+      runCounts: {
+        total: lanes.length,
+        visible: lanes.length,
+        prReview: 0,
+        designReview: 0,
+        bugfix: 0,
+        blocked: 0,
+        other: lanes.length,
+      },
+      lanes,
+      recentChanges: [],
+      census: { status: 'unavailable', error: 'run health has not been derived' },
+    },
+  };
+}
+
+// A run summary whose runs source carries one lane matching the route's runId,
+// so the detail page can render an optimistic skeleton while the full detail
+// loads.
+function runSummarySourceWithActiveLane(): SourceState<RunSummary> {
   const lane: RunLane = {
     id: 'gc-adopt-pr-active',
     title: 'Pending adoption run',
@@ -675,53 +747,7 @@ function snapshotWithActiveLane(): DashboardSnapshot {
       },
     },
   };
-  return {
-    generatedAt: '2026-05-25T00:00:00.000Z',
-    alerts: [],
-    config: {
-      cityName: 'test-city',
-      cityRoot: '/tmp/example-city',
-      useFixtures: false,
-      enabledModules: null,
-      defaultView: null,
-    },
-    headline: {
-      activeAgents: { status: 'unavailable', source: 'city', error: 'city unavailable in test' },
-      maxAgents: { status: 'unavailable', source: 'city', error: 'city unavailable in test' },
-      activeSessions: { status: 'unavailable', source: 'city', error: 'city unavailable in test' },
-      activeRuns: { status: 'available', value: 1 },
-      workInProgress: { status: 'unavailable', source: 'work', error: 'work unavailable in test' },
-    },
-    sources: {
-      city: { source: 'city', status: 'error', error: 'city unavailable in test' },
-      resources: { source: 'resources', status: 'error', error: 'resources unavailable in test' },
-      work: { source: 'work', status: 'error', error: 'work unavailable in test' },
-      runs: {
-        source: 'runs',
-        status: 'fresh',
-        fetchedAt: '2026-05-25T00:00:00.000Z',
-        staleAt: '2026-05-25T00:01:00.000Z',
-        error: { kind: 'none' },
-        data: {
-          totalActive: 1,
-          totalHistorical: 0,
-          historicalLanes: [],
-          runCounts: {
-            total: 1,
-            visible: 1,
-            prReview: 0,
-            designReview: 0,
-            bugfix: 0,
-            blocked: 0,
-            other: 1,
-          },
-          lanes: [lane],
-          recentChanges: [],
-          census: { status: 'unavailable', error: 'run health has not been derived' },
-        },
-      },
-    },
-  };
+  return runSummarySource([lane]);
 }
 
 function jsonResponse(payload: unknown): Response {
@@ -729,6 +755,47 @@ function jsonResponse(payload: unknown): Response {
     status: 200,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  const url = input instanceof Request
+    ? input.url
+    : input instanceof URL
+      ? input.toString()
+      : String(input);
+  return stripSameOrigin(url);
+}
+
+function stripSameOrigin(url: string): string {
+  const origin = window.location.origin;
+  return url.startsWith(origin) ? url.slice(origin.length) : url;
+}
+
+function sessionTranscriptFixtureId(id: string): string {
+  return id === 'gc-session-rebase-a1' || id === 'gc-session-rebase-a2'
+    ? 'gc-session-rebase'
+    : id;
+}
+
+function toSupervisorTranscript(transcript: TranscriptResult) {
+  return {
+    id: transcript.session_id,
+    template: transcript.template ?? '',
+    provider: transcript.provider ?? '',
+    format: transcript.format ?? 'conversation',
+    turns: transcript.turns,
+  };
 }
 
 function nodePressed(name: RegExp): string | null {
@@ -746,11 +813,37 @@ function requireCityEventSource(): FakeEventSource {
 }
 
 function sessionEventSources(): FakeEventSource[] {
-  return eventSources.filter((eventSource) => eventSource.url.includes('session-stream'));
+  return eventSources.filter((eventSource) => eventSource.url.includes('/session/'));
 }
 
 function runUrls(): string[] {
   return fetchUrls.filter((url) => url.startsWith('/api/city/test-city/runs/'));
+}
+
+function diffUrls(): string[] {
+  return fetchUrls.filter((url) => (
+    url.startsWith('/api/city/test-city/runs/') && url.includes('/diff')
+  ));
+}
+
+function terminalDetail(): FormulaRunDetail {
+  return {
+    ...detail,
+    progress: {
+      ...detail.progress,
+      visibleNodeCount: 8,
+      statusCounts: { done: 8 },
+      allStatusCounts: { done: 8 },
+    },
+    nodes: detail.nodes.map((node) => ({
+      ...node,
+      status: 'done',
+      executionInstances: node.executionInstances.map((instance) => ({
+        ...instance,
+        status: 'done',
+      })),
+    })),
+  };
 }
 
 function withoutNode(detailValue: FormulaRunDetail, nodeId: string): FormulaRunDetail {

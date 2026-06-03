@@ -227,6 +227,10 @@ export type RunExecutionPath =
   | { kind: 'known'; path: string }
   | { kind: 'unavailable'; reason: 'missing_cwd_and_rig_root' };
 
+export interface RunDiffRequest {
+  executionPath: RunExecutionPath;
+}
+
 export type RunSnapshotSequence =
   | { kind: 'known'; seq: number }
   | { kind: 'unavailable'; reason: 'supervisor_omitted' };

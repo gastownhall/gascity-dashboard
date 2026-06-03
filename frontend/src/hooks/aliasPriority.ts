@@ -23,7 +23,7 @@ export interface AliasBucket {
 
 export interface PrioritizeAliasesInput {
   operator: string;
-  /** Aliases observed in /api/sessions (alphabet/casing as supervisor emits). */
+  /** Aliases observed in supervisor sessions (alphabet/casing as supervisor emits). */
   sessionAliases: ReadonlyArray<string>;
   /** Aliases observed as `from` OR `to` in the recent mail corpus. */
   mailFromOrTo: ReadonlyArray<string>;

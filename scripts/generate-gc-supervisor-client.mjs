@@ -1,12 +1,21 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 const checkOnly = process.argv.includes('--check');
 const heyApiConfigPath = path.resolve('backend/openapi-ts.config.ts');
-const heyApiOutputPath = path.resolve('backend/src/generated/gc-supervisor-client');
 const heyApiCliPath = path.resolve('node_modules/@hey-api/openapi-ts/bin/run.js');
+const supervisorClientOutputs = [
+  {
+    label: 'backend',
+    path: path.resolve('backend/src/generated/gc-supervisor-client'),
+  },
+  {
+    label: 'frontend',
+    path: path.resolve('frontend/src/generated/gc-supervisor-client'),
+  },
+];
 
 async function generateHeyApiClient(toPath) {
   await rm(toPath, { recursive: true, force: true });
@@ -24,21 +33,39 @@ async function generateHeyApiClient(toPath) {
   if (result.status !== 0) {
     throw new Error(`@hey-api/openapi-ts failed with exit code ${result.status ?? 'unknown'}`);
   }
+  await allowRfc3339OffsetDateTimes(toPath);
+}
+
+async function allowRfc3339OffsetDateTimes(toPath) {
+  const zodPath = path.join(toPath, 'zod.gen.ts');
+  const content = await readFile(zodPath, 'utf8');
+  const patched = content.replaceAll(
+    'z.iso.datetime()',
+    'z.iso.datetime({ offset: true })',
+  );
+  if (patched === content) {
+    throw new Error(`${path.relative(process.cwd(), zodPath)} did not contain generated date-time validators`);
+  }
+  await writeFile(zodPath, patched);
 }
 
 if (checkOnly) {
-  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'gc-supervisor-openapi-'));
-  const tmpHeyApiPath = path.join(tmpDir, 'gc-supervisor-client');
-  try {
-    await generateHeyApiClient(tmpHeyApiPath);
-    await assertDirectoryMatches(tmpHeyApiPath, heyApiOutputPath);
-  } finally {
-    await rm(tmpDir, { recursive: true, force: true });
+  for (const output of supervisorClientOutputs) {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), `gc-supervisor-openapi-${output.label}-`));
+    const tmpHeyApiPath = path.join(tmpDir, 'gc-supervisor-client');
+    try {
+      await generateHeyApiClient(tmpHeyApiPath);
+      await assertDirectoryMatches(tmpHeyApiPath, output.path);
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
   }
-  console.log('generated gc supervisor client is up to date');
+  console.log('generated gc supervisor clients are up to date');
 } else {
-  await generateHeyApiClient(heyApiOutputPath);
-  console.log(`generated ${path.relative(process.cwd(), heyApiOutputPath)}`);
+  for (const output of supervisorClientOutputs) {
+    await generateHeyApiClient(output.path);
+    console.log(`generated ${path.relative(process.cwd(), output.path)}`);
+  }
 }
 
 async function assertDirectoryMatches(expectedPath, actualPath) {
@@ -50,13 +77,13 @@ async function assertDirectoryMatches(expectedPath, actualPath) {
   const actualKeys = Object.keys(actual).sort();
   if (JSON.stringify(expectedKeys) !== JSON.stringify(actualKeys)) {
     throw new Error(
-      'backend/src/generated/gc-supervisor-client is out of date. Run npm run openapi:gc-supervisor:generate.',
+      `${path.relative(process.cwd(), actualPath)} is out of date. Run npm run openapi:gc-supervisor:generate.`,
     );
   }
   for (const key of expectedKeys) {
     if (expected[key] !== actual[key]) {
       throw new Error(
-        `backend/src/generated/gc-supervisor-client/${key} is out of date. Run npm run openapi:gc-supervisor:generate.`,
+        `${path.relative(process.cwd(), path.join(actualPath, key))} is out of date. Run npm run openapi:gc-supervisor:generate.`,
       );
     }
   }

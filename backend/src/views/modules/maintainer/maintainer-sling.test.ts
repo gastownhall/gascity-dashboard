@@ -214,7 +214,7 @@ describe('POST /api/maintainer/sling', { concurrency: false }, () => {
     // Audit must NEVER carry the full bead text.
     const flat = JSON.stringify(row);
     assert.ok(!flat.includes('Please review PR'), 'audit row leaked full text');
-    // Response must NOT carry the full stdout (mail-send precedent: id only).
+    // Response must NOT carry the full stdout.
     assert.equal(res.body.stdout, undefined, 'response leaked stdout');
     assert.equal(res.body.stderr, undefined, 'response leaked stderr');
   });

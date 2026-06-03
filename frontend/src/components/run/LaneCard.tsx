@@ -1,5 +1,7 @@
 import type { RunLane } from 'gas-city-dashboard-shared';
 import { Link } from 'react-router-dom';
+import type { AttentionSeverity } from '../../attention/compose';
+import { attentionListItemProps } from '../../attention/routeHighlight';
 import { formatRelative } from '../../hooks/time';
 import { StageLadder } from './StageLadder';
 
@@ -13,6 +15,7 @@ import { StageLadder } from './StageLadder';
 interface LaneCardProps {
   lane: RunLane;
   now: number;
+  attentionSeverity?: AttentionSeverity | null;
 }
 
 /**
@@ -37,13 +40,22 @@ function phaseLabelTone(
   return 'text-fg';
 }
 
-export function LaneCard({ lane, now }: LaneCardProps) {
+export function LaneCard({
+  lane,
+  now,
+  attentionSeverity = null,
+}: LaneCardProps) {
   const statusEntries = Object.entries(lane.statusCounts).sort((a, b) =>
     statusSortKey(a[0]).localeCompare(statusSortKey(b[0])),
   );
+  const { className: attentionClassName = '', ...attentionProps } =
+    attentionListItemProps(attentionSeverity);
 
   return (
-    <li className="py-4">
+    <li
+      {...attentionProps}
+      className={`py-4 transition-colors duration-150 ease-out-quart ${attentionClassName}`}
+    >
       <div className="flex items-baseline justify-between gap-4">
         <span
           className={`text-label uppercase tracking-wider ${phaseLabelTone(lane.phase)}`}

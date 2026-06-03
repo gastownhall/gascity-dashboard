@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import type { GcBead, SupervisorHealth } from 'gas-city-dashboard-shared';
+import type { GcBead } from 'gas-city-dashboard-shared';
 import { gcSupervisorDecoders } from '../src/gc-supervisor-decoders.js';
 
 // gascity-dashboard-t5l6: Regression test that the schema parameter of the
@@ -80,7 +80,6 @@ test('decoder typing: real gcSupervisorDecoders methods preserve their declared 
   // `GcBead | undefined` (or some other drift), one of these lines fails
   // tsc — the runtime call is also a smoke-check that the real schemas
   // parse a minimal valid payload.
-  type AssertExtends<Sub, Super> = Sub extends Super ? true : false;
   type AssertExact<A, B> = (<T>() => T extends A ? 1 : 2) extends
     (<T>() => T extends B ? 1 : 2) ? true : false;
 
@@ -88,17 +87,6 @@ test('decoder typing: real gcSupervisorDecoders methods preserve their declared 
     ReturnType<typeof gcSupervisorDecoders.getBead>,
     GcBead
   > = true;
-  const _healthReturnsSupervisorHealth: AssertExtends<
-    ReturnType<typeof gcSupervisorDecoders.health>,
-    SupervisorHealth
-  > = true;
   assert.ok(_getBeadReturnsGcBead);
-  assert.ok(_healthReturnsSupervisorHealth);
-
-  const health = gcSupervisorDecoders.health({
-    status: 'ok',
-    uptime_sec: 1,
-  } as never);
-  assert.equal(health.status, 'ok');
-  assert.equal(health.uptime_sec, 1);
+  assert.equal(typeof gcSupervisorDecoders.getBead, 'function');
 });

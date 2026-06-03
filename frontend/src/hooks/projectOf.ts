@@ -1,4 +1,7 @@
-import type { GcAgent, GcBead, GcMailItem, GcSession } from 'gas-city-dashboard-shared';
+import type { GcSession } from 'gas-city-dashboard-shared';
+import type { AgentResponse } from '../generated/gc-supervisor-client/types.gen';
+import type { SupervisorBead } from '../supervisor/beadReads';
+import type { SupervisorMailItem } from '../supervisor/mailReads';
 
 // Per-source project derivation. There is no explicit project field
 // on any of the three wire shapes, so we derive from observable
@@ -23,12 +26,15 @@ import type { GcAgent, GcBead, GcMailItem, GcSession } from 'gas-city-dashboard-
 
 const BEAD_ID_RX = /^(.+?)-[a-z0-9]+(?:\.\d+)?$/i;
 
-export function beadProject(bead: GcBead): string {
+export function beadProject(bead: SupervisorBead): string {
   const m = BEAD_ID_RX.exec(bead.id);
   return m?.[1] ?? bead.id;
 }
 
 export const ORCHESTRATION_PROJECT = 'Orchestration';
+
+// Residual bucket for a row with no rig association and no orchestration role.
+export const NO_RIG_PROJECT = '(no rig)';
 
 // Templates whose sessions are cross-rig orchestration (no specific
 // rig). Per-rig dispatchers (alias '<rig>/control-dispatcher') are
@@ -71,7 +77,7 @@ export function sessionProject(session: GcSession): ProjectBucket {
   }
   const candidate = session.rig ?? session.pool ?? session.template;
   if (!candidate) {
-    return { key: '(no rig)', label: '(no rig)' };
+    return { key: NO_RIG_PROJECT, label: NO_RIG_PROJECT };
   }
   // basename — handle both '/' and '\' for cross-platform safety.
   const parts = candidate.split(/[\\/]/).filter(Boolean);
@@ -79,14 +85,14 @@ export function sessionProject(session: GcSession): ProjectBucket {
   return { key: normalizeRigKey(basename), label: basename };
 }
 
-export function mailProject(mail: GcMailItem): string {
+export function mailProject(mail: SupervisorMailItem): string {
   if (mail.rig && mail.rig.length > 0) return mail.rig;
-  return '(no rig)';
+  return NO_RIG_PROJECT;
 }
 
 // ── Agent grouping (gascity-dashboard-ay6) ───────────────────────────────
 //
-// Parallel to the session-derived helpers above. GcAgent has no `template`
+// Parallel to the session-derived helpers above. AgentResponse has no `template`
 // field (which sessionProject uses to detect cross-rig orchestration), so
 // the agent-side analog keys on `name` (the alias) instead. Cross-rig
 // agents — mayor, the global control dispatcher, oversight-rig.chief-of-staff
@@ -102,7 +108,7 @@ const ORCHESTRATION_AGENT_NAMES: ReadonlySet<string> = new Set([
   'oversight-rig.chief-of-staff',
 ]);
 
-export function isOrchestrationAgent(a: GcAgent): boolean {
+export function isOrchestrationAgent(a: AgentResponse): boolean {
   if (a.rig && a.rig.length > 0) return false;
   return ORCHESTRATION_AGENT_NAMES.has(a.name);
 }
@@ -112,12 +118,12 @@ export function isOrchestrationAgent(a: GcAgent): boolean {
  * the dispatcher role. Mirrors `isPerRigDispatcher` for sessions, but keys
  * on the agent's `name` (the alias) rather than `session.alias`.
  */
-export function isPerRigDispatcherAgent(a: GcAgent): boolean {
+export function isPerRigDispatcherAgent(a: AgentResponse): boolean {
   if (!a.rig || a.rig.length === 0) return false;
   return PER_RIG_DISPATCHER_RX.test(a.name);
 }
 
-export function agentProject(agent: GcAgent): ProjectBucket {
+export function agentProject(agent: AgentResponse): ProjectBucket {
   if (isOrchestrationAgent(agent)) {
     return { key: ORCHESTRATION_PROJECT, label: ORCHESTRATION_PROJECT };
   }
@@ -128,9 +134,20 @@ export function agentProject(agent: GcAgent): ProjectBucket {
   const rig = agent.rig && agent.rig.length > 0 ? agent.rig : undefined;
   const candidate = rig ?? agent.pool;
   if (!candidate) {
-    return { key: '(no rig)', label: '(no rig)' };
+    return { key: NO_RIG_PROJECT, label: NO_RIG_PROJECT };
   }
   const parts = candidate.split(/[\\/]/).filter(Boolean);
   const basename = parts[parts.length - 1] ?? candidate;
   return { key: normalizeRigKey(basename), label: basename };
+}
+
+/**
+ * True when an agent has no rig association — either the pinned cross-rig
+ * Orchestration bucket (mayor, control-dispatcher, oversight chief-of-staff)
+ * or the residual (no rig) bucket. The Agents Rig column renders a neutral
+ * dot for these rather than a pseudo-rig label, since neither is a real rig.
+ */
+export function isAgentOutsideRig(agent: AgentResponse): boolean {
+  const { key } = agentProject(agent);
+  return key === ORCHESTRATION_PROJECT || key === NO_RIG_PROJECT;
 }

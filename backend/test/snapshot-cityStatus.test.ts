@@ -2,13 +2,15 @@ import { test, describe, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
 import type {
-  GcAgent,
-  GcAgentList,
-  GcRig,
-  GcRigList,
   GcSession,
   GcSessionList,
 } from 'gas-city-dashboard-shared';
+import type {
+  AgentResponse,
+  ListBodyAgentResponse,
+  ListBodyRigResponse,
+  RigResponse,
+} from '../src/generated/gc-supervisor-client/types.gen.js';
 
 import {
   aggregateAgentsByProvider,
@@ -55,8 +57,8 @@ function sess(partial: Partial<GcSession>): GcSession {
   };
 }
 
-function agent(partial: Partial<GcAgent>): GcAgent {
-  // sd4: GcAgent factory mirroring `sess` — `running` defaults from `state`
+function agent(partial: Partial<AgentResponse>): AgentResponse {
+  // sd4: AgentResponse factory mirroring `sess` — `running` defaults from `state`
   // so fixtures resemble live data. Provider defaults to 'codex' so tests
   // that don't care about the empty-provider edge case stay terse.
   const state = partial.state ?? 'active';
@@ -72,6 +74,17 @@ function agent(partial: Partial<GcAgent>): GcAgent {
   };
 }
 
+function rig(partial: Partial<RigResponse>): RigResponse {
+  return {
+    name: 'rig-a',
+    path: '/data/rig-a',
+    agent_count: 0,
+    running_count: 0,
+    suspended: false,
+    ...partial,
+  };
+}
+
 describe('aggregateAgentsByProvider', () => {
   // gascity-dashboard-sd4: cityStatus.sessionsByProvider now derives from the
   // /agents roster (authoritative provider info) instead of /sessions, which
@@ -80,7 +93,7 @@ describe('aggregateAgentsByProvider', () => {
   // the undercount completely.
 
   test('aggregates active+total counts when every agent has provider populated', () => {
-    const agents: GcAgent[] = [
+    const agents: AgentResponse[] = [
       agent({ name: 'a-1', provider: 'codex', state: 'active' }),
       agent({ name: 'a-2', provider: 'codex', state: 'asleep' }),
       agent({ name: 'a-3', provider: 'codex', state: 'active' }),
@@ -101,7 +114,7 @@ describe('aggregateAgentsByProvider', () => {
   test('counts an agent as active when running===true even if state is not "active"', () => {
     // Parity with countActiveAgents(sessions): `running === true || state==='active'`.
     // The Agents view treats running as authoritative for "currently doing work."
-    const agents: GcAgent[] = [
+    const agents: AgentResponse[] = [
       agent({ name: 'a-1', provider: 'codex', state: 'asleep', running: true }),
       agent({ name: 'a-2', provider: 'codex', state: 'closed', running: false }),
     ];
@@ -121,7 +134,7 @@ describe('aggregateAgentsByProvider', () => {
       // object built without the field reproduces faithfully.
       const a2 = agent({ name: 'a-2', state: 'active' });
       delete a2.provider;
-      const agents: GcAgent[] = [
+      const agents: AgentResponse[] = [
         agent({ name: 'a-1', provider: 'codex', state: 'active' }),
         a2,
         agent({ name: 'a-3', provider: '', state: 'active' }),
@@ -164,18 +177,20 @@ describe('collectCityStatus', () => {
     // sd4: sessionsByProvider now derives from /agents (authoritative
     // provider info). Fixture the agent roster independently of sessions
     // so the test pins that the agents-derived path is in effect.
-    const agentList: GcAgentList = {
+    const agentList: ListBodyAgentResponse = {
       items: [
         agent({ name: 'a-1', provider: 'codex', state: 'active' }),
         agent({ name: 'a-2', provider: 'codex', state: 'asleep' }),
         agent({ name: 'a-3', provider: 'claude', state: 'active' }),
       ],
+      total: 3,
     };
-    const rigList: GcRigList = {
+    const rigList: ListBodyRigResponse = {
       items: [
-        { name: 'rig-a', path: '/data/rig-a' },
-        { name: 'rig-b', path: '/data/rig-b' },
+        rig({ name: 'rig-a', path: '/data/rig-a' }),
+        rig({ name: 'rig-b', path: '/data/rig-b' }),
       ],
+      total: 2,
     };
 
     const summary = await collectCityStatus({
@@ -220,17 +235,18 @@ describe('collectCityStatus', () => {
       ],
       total: 2,
     };
-    const agentList: GcAgentList = {
+    const agentList: ListBodyAgentResponse = {
       items: [
         agent({ name: 'a-1', provider: 'codex', state: 'active' }),
         agent({ name: 'a-2', provider: 'claude', state: 'asleep' }),
       ],
+      total: 2,
     };
 
     const summary = await collectCityStatus({
       listSessions: async () => sessionList,
       listAgents: async () => agentList,
-      listRigs: async () => ({ items: [] }),
+      listRigs: async () => ({ items: [], total: 0 }),
     });
 
     assert.deepEqual(summary.sessionsByProvider, [
@@ -242,8 +258,8 @@ describe('collectCityStatus', () => {
   test('empty sessions and empty rigs remain zero counts; maxSessions still unavailable', async () => {
     const summary = await collectCityStatus({
       listSessions: async () => ({ items: [], total: 0 }),
-      listAgents: async () => ({ items: [] }),
-      listRigs: async () => ({ items: [] }),
+      listAgents: async () => ({ items: [], total: 0 }),
+      listRigs: async () => ({ items: [], total: 0 }),
     });
 
     assert.equal(summary.activeAgents, 0);
@@ -268,7 +284,7 @@ describe('collectCityStatus', () => {
         listAgents: async () => {
           throw new Error('gc supervisor returned 502');
         },
-        listRigs: async () => ({ items: [] }),
+        listRigs: async () => ({ items: [], total: 0 }),
       }),
       /gc supervisor returned 502/,
     );
@@ -282,7 +298,7 @@ describe('collectCityStatus', () => {
     await assert.rejects(
       collectCityStatus({
         listSessions: async () => ({ items: [], total: 0 }),
-        listAgents: async () => ({ items: [] }),
+        listAgents: async () => ({ items: [], total: 0 }),
         listRigs: async () => {
           throw new Error('gc supervisor returned 502');
         },
@@ -296,17 +312,18 @@ describe('collectCityStatus', () => {
     // `partial: true` with `items` normalized to `[]` (one or more rig
     // backends failed during aggregation), the collector MUST surface
     // the degradation signal so the operator sees "rigs degraded"
-    // rather than "no rigs configured." Convention mirrors
-    // backend/src/routes/links.ts:118 and routes/mail.ts:62.
-    const rigList: GcRigList = {
+    // rather than "no rigs configured." Convention mirrors links and
+    // direct supervisor mail reads.
+    const rigList: ListBodyRigResponse = {
       items: [],
       partial: true,
       partial_errors: ['backend A: connection refused', 'backend B: 502'],
+      total: 0,
     };
 
     const summary = await collectCityStatus({
       listSessions: async () => ({ items: [], total: 0 }),
-      listAgents: async () => ({ items: [] }),
+      listAgents: async () => ({ items: [], total: 0 }),
       listRigs: async () => rigList,
     });
 
@@ -318,14 +335,15 @@ describe('collectCityStatus', () => {
     // Supervisor can return both: some backends succeeded (items present)
     // AND some backends failed (partial: true). Both signals must reach
     // the operator — we keep the items we got AND mark degradation.
-    const rigList: GcRigList = {
-      items: [{ name: 'rig-a', path: '/data/rig-a' }],
+    const rigList: ListBodyRigResponse = {
+      items: [rig({ name: 'rig-a', path: '/data/rig-a' })],
       partial: true,
+      total: 1,
     };
 
     const summary = await collectCityStatus({
       listSessions: async () => ({ items: [], total: 0 }),
-      listAgents: async () => ({ items: [] }),
+      listAgents: async () => ({ items: [], total: 0 }),
       listRigs: async () => rigList,
     });
 
@@ -336,37 +354,34 @@ describe('collectCityStatus', () => {
   test('rigs partial_errors non-empty without partial: true still surfaces degradation', async () => {
     // Defensive parity with links.ts:118 / mail.ts:62: either signal
     // (partial===true OR partial_errors non-empty) is sufficient.
-    const rigList: GcRigList = {
-      items: [{ name: 'rig-a', path: '/data/rig-a' }],
+    const rigList: ListBodyRigResponse = {
+      items: [rig({ name: 'rig-a', path: '/data/rig-a' })],
       partial_errors: ['backend X: timeout'],
+      total: 1,
     };
 
     const summary = await collectCityStatus({
       listSessions: async () => ({ items: [], total: 0 }),
-      listAgents: async () => ({ items: [] }),
+      listAgents: async () => ({ items: [], total: 0 }),
       listRigs: async () => rigList,
     });
 
     assert.equal(summary.rigsPartial, true);
   });
 
-  test('GcRig fixture projects to CityRig with name+path only (19w.2 regression guard)', async () => {
+  test('RigResponse fixture projects to CityRig with name+path only (19w.2 regression guard)', async () => {
     // 19w.2: toCityRig delegation-only mapper was dropped in favor of an
-    // inline projection at the call site. GcRig and CityRig are structurally
-    // equivalent ({ name: string; path: string }); the inline projection
-    // preserves the explicit field-strip so a future widening of GcRig
-    // upstream cannot silently leak new fields into the snapshot wire shape.
+    // inline projection at the call site. The generated RigResponse carries
+    // supervisor fields that CityRig must not expose.
     // This test pins that contract.
-    const fixture: GcRig = { name: 'rig-a', path: '/data/rig-a' };
-    // Cast to a wider shape to simulate GcRig being widened upstream with
-    // a field that has not yet been exposed in CityRig — the inline
-    // projection must drop it.
-    const widened = { ...fixture, agent_count: 7, running_count: 3 } as GcRig;
-    const rigList: GcRigList = { items: [widened] };
+    const rigList: ListBodyRigResponse = {
+      items: [rig({ name: 'rig-a', path: '/data/rig-a', agent_count: 7, running_count: 3 })],
+      total: 1,
+    };
 
     const summary = await collectCityStatus({
       listSessions: async () => ({ items: [], total: 0 }),
-      listAgents: async () => ({ items: [] }),
+      listAgents: async () => ({ items: [], total: 0 }),
       listRigs: async () => rigList,
     });
 
@@ -379,8 +394,11 @@ describe('collectCityStatus', () => {
     // (the field is optional so callers can use truthy checks).
     const summary = await collectCityStatus({
       listSessions: async () => ({ items: [], total: 0 }),
-      listAgents: async () => ({ items: [] }),
-      listRigs: async () => ({ items: [{ name: 'rig-a', path: '/data/rig-a' }] }),
+      listAgents: async () => ({ items: [], total: 0 }),
+      listRigs: async () => ({
+        items: [rig({ name: 'rig-a', path: '/data/rig-a' })],
+        total: 1,
+      }),
     });
 
     assert.equal(summary.rigsPartial, undefined);

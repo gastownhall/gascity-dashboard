@@ -1,13 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import type { GcAgent } from 'gas-city-dashboard-shared';
-import { buildAgentSynopsis, stateTone } from './Agents';
+import type { AgentResponse } from '../generated/gc-supervisor-client/types.gen';
+import { AGENT_CHIPS, buildAgentSynopsis, stateTone } from './Agents';
 
 // gascity-dashboard-ay6: the Agents view consumes the supervisor's
-// first-class agent roster (GcAgent), not the session list. These tests
-// pin the state→tone and synopsis-count contracts the table still relies
-// on for the State column and the page synopsis line.
+// first-class agent roster (AgentResponse), not the session list. These tests
+// pin the chip-coverage invariant on the agent shape: every state the
+// supervisor reports must match at least one chip, otherwise agents in
+// that state vanish silently when any chip is active (parallels the bug
+// from gascity-dashboard-9yb on the session side).
 
-function mkAgent(state: string, overrides: Partial<GcAgent> = {}): GcAgent {
+// AgentResponse.state is a free `string` in the OpenAPI; this is the set
+// observed in this deployment + the named states the supervisor commits
+// to today. Same conservative posture as the previous NAMED_STATES list.
+const NAMED_STATES = [
+  'creating',
+  'active',
+  'asleep',
+  'detached',
+  'failed',
+  'closed',
+] as const;
+
+function mkAgent(state: string, overrides: Partial<AgentResponse> = {}): AgentResponse {
   return {
     name: `agent-${state}`,
     available: true,
@@ -17,6 +31,63 @@ function mkAgent(state: string, overrides: Partial<GcAgent> = {}): GcAgent {
     ...overrides,
   };
 }
+
+describe('AGENT_CHIPS', () => {
+  it('every named agent state matches at least one chip', () => {
+    for (const state of NAMED_STATES) {
+      const agent = mkAgent(state);
+      const matched = AGENT_CHIPS.some((chip) => chip.match(agent));
+      expect(
+        matched,
+        `state "${state}" must match at least one chip, otherwise it disappears when any chip is active`,
+      ).toBe(true);
+    }
+  });
+
+  it('exposes a "detached" chip so detached agents stay visible under chip filters', () => {
+    const detached = mkAgent('detached');
+    const detachedChip = AGENT_CHIPS.find((chip) => chip.id === 'detached');
+    expect(detachedChip, 'detached chip should exist').toBeDefined();
+    expect(detachedChip?.match(detached)).toBe(true);
+  });
+
+  it('detached agents match only the detached chip when not running', () => {
+    const detached = mkAgent('detached');
+    const matchingIds = AGENT_CHIPS.filter((chip) => chip.match(detached)).map(
+      (chip) => chip.id,
+    );
+    expect(matchingIds).toEqual(['detached']);
+  });
+
+  it('a detached agent whose process is still running matches BOTH the running and detached chips', () => {
+    // gc can report state='detached' (tmux disconnected) while the
+    // underlying process is still running. The running chip keys on
+    // a.running===true; the detached chip keys on a.state==='detached'.
+    // Detached-but-running must surface under both filters so an
+    // operator scanning for 'what is alive right now' doesn't lose it
+    // just because the tmux attachment is gone. Mirrors the session-side
+    // invariant from gascity-dashboard-bi9.
+    const detachedAndRunning = mkAgent('detached', { running: true });
+    const matchingIds = AGENT_CHIPS.filter((chip) => chip.match(detachedAndRunning)).map(
+      (chip) => chip.id,
+    );
+    expect(matchingIds).toContain('running');
+    expect(matchingIds).toContain('detached');
+    // Bound the match set: only those two chips, no spurious third match.
+    expect(matchingIds).toHaveLength(2);
+  });
+
+  it('suspended agents match the suspended chip regardless of state', () => {
+    // Suspended is a roster-side signal the session list never carried
+    // (a suspended agent has no session). The dedicated chip lets the
+    // operator slice the new agent surface by it.
+    const suspended = mkAgent('asleep', { suspended: true });
+    const matchingIds = AGENT_CHIPS.filter((chip) => chip.match(suspended)).map(
+      (chip) => chip.id,
+    );
+    expect(matchingIds).toContain('suspended');
+  });
+});
 
 describe('stateTone', () => {
   it('classifies detached agents explicitly (not via default fallthrough)', () => {
@@ -37,7 +108,7 @@ describe('stateTone', () => {
 
 describe('buildAgentSynopsis', () => {
   it('reports detached agents as a distinct count, not bucketed under idle', () => {
-    const rows: GcAgent[] = [
+    const rows: AgentResponse[] = [
       mkAgent('active'),
       mkAgent('asleep'),
       mkAgent('asleep'),
@@ -50,12 +121,12 @@ describe('buildAgentSynopsis', () => {
   });
 
   it('omits detached from the synopsis when there are no detached agents', () => {
-    const rows: GcAgent[] = [mkAgent('active'), mkAgent('asleep')];
+    const rows: AgentResponse[] = [mkAgent('active'), mkAgent('asleep')];
     expect(buildAgentSynopsis(rows)).not.toContain('detached');
   });
 
   it('breaks suspended out as its own count', () => {
-    const rows: GcAgent[] = [
+    const rows: AgentResponse[] = [
       mkAgent('active'),
       mkAgent('asleep', { suspended: true }),
     ];

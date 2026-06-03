@@ -9,29 +9,18 @@ import type {
 import type { AdminConfig } from '../config.js';
 import { GcClient } from '../gc-client.js';
 import { csrfValidate } from '../middleware/csrf.js';
-import { sessionsRouter } from '../routes/sessions.js';
-import { sessionStreamRouter } from '../routes/session-stream.js';
 import { agentsRouter } from '../routes/agents.js';
-import { beadsRouter } from '../routes/beads.js';
 import { runsRouter } from '../routes/runs.js';
-import { linksRouter } from '../routes/links.js';
-import { mailRouter } from '../routes/mail.js';
-import { mailSendRouter } from '../routes/mail-send.js';
 import { createDoltNomsSampler, doltRouter, type DoltNomsSampler } from '../routes/dolt.js';
-import { eventsRouter } from '../routes/events.js';
-import { homePendingRouter } from '../routes/home-pending.js';
-import { snapshotRouter } from '../routes/snapshot.js';
-import { createSnapshotService } from '../snapshot/service.js';
 import { ALL_MODULES } from '../views/registry.js';
 import { resolveEnabledFirstPartyIds } from '../views/enabled.js';
 import { bind, type CityContext } from '../views/types.js';
 
 /**
  * One city's worth of dashboard runtime (gascity-dashboard-ucc). Each
- * CityRuntime owns its OWN GcClient + CityContext + SnapshotService + module
+ * CityRuntime owns its OWN GcClient + CityContext + module
  * workers + doltNomsSampler, so two cities can never bleed GcClient inflight
- * coalescing (operationKey carries no cityName) or SnapshotService
- * progressMarks (per-service closure state). The runtime exposes a single
+ * coalescing (operationKey carries no cityName). The runtime exposes a single
  * `router` that the dispatch middleware mounts under `/api/city/:cityName/`.
  */
 export interface CityRuntime {
@@ -48,9 +37,8 @@ export interface CityRuntime {
  * `cityPath` is the supervisor-reported absolute host directory for the
  * city. It is an EXTERNAL/UNTRUSTED host path (decision: keep it separate
  * from cityDataDir, which derives from the validated cityName segment). The
- * registry passes the supervisor's CityInfo... but CityInfo deliberately
- * omits the host path on the wire, so the registry sources cityPath from the
- * raw supervisor list at build time and hands it here host-side only.
+ * registry sources it from the supervisor city list and hands it here
+ * host-side only.
  */
 export interface CreateCityRuntimeOptions {
   cityName: string;
@@ -82,7 +70,7 @@ export function createCityRuntime(opts: CreateCityRuntimeOptions): CityRuntime {
     useFixtures: config.useFixtures,
     // Always emit the explicit resolved firstParty id list (possibly empty)
     // so the wire is unambiguous and the frontend filter never has to guess
-    // what an unset env meant. Core-only default (PR-D) surfaces as `[]`.
+    // what an unset env meant. Core-only default surfaces as `[]`.
     enabledModules: [...enabledFirstPartyIds],
     defaultView: config.defaultView,
   };
@@ -109,7 +97,6 @@ export function createCityRuntime(opts: CreateCityRuntimeOptions): CityRuntime {
   router.get('/config', (_req, res) => {
     res.json(dashboardConfig);
   });
-  router.use('/sessions', sessionsRouter(gc));
   // gascity-dashboard-a9yi: do NOT pass cityPath as the execution-path rigRoot
   // fallback. cityPath is the city config/runtime dir, never a per-run worktree
   // and not a git repo — injecting it made runs with no worktree metadata render
@@ -119,18 +106,8 @@ export function createCityRuntime(opts: CreateCityRuntimeOptions): CityRuntime {
   // git reads are confined to sanctioned roots. Empty (default) keeps the
   // prior shape-only validation. cityPath is deliberately NOT a member of this
   // allowlist (a9yi: it's the city config dir, not a run worktree).
-  router.use('/runs', runsRouter(gc, { runCwdAllowedRoots: config.runCwdAllowedRoots }));
-  router.use('/links', linksRouter(gc));
-  router.use('/agents', agentsRouter({ cityPath, gc }));
-  router.use('/beads', beadsRouter(gc, cityPath));
-  router.use('/mail', mailRouter(gc));
-  router.use(
-    '/mail-send',
-    mailSendRouter({
-      sendMail: (to, subject, body) =>
-        gc.sendMail({ to, subject, body, from: 'human' }),
-    }),
-  );
+  router.use('/runs', runsRouter({ runCwdAllowedRoots: config.runCwdAllowedRoots }));
+  router.use('/agents', agentsRouter({ cityPath }));
 
   const moduleWorkers: BackgroundWorker[] = [];
   for (const mod of mountedModules) {
@@ -146,26 +123,6 @@ export function createCityRuntime(opts: CreateCityRuntimeOptions): CityRuntime {
     fetchStatus: () => gc.getStatus(),
   });
   router.use('/dolt-noms', doltRouter(doltNomsSampler));
-
-  const snapshotService = createSnapshotService({ gc, config: dashboardConfig });
-  router.use('/snapshot', snapshotRouter(snapshotService));
-  // Home-view pending-decision SSE (gascity-dashboard-26zl). Streams this
-  // runtime's pending aggregator; the consumer count lazily activates the
-  // aggregator's per-session fan-out.
-  router.use('/home/pending', homePendingRouter(snapshotService));
-
-  // SSE routes. session-stream + events proxy the supervisor's city-scoped
-  // streams; both read this runtime's gc. Mounted on the per-city router so
-  // they ride the /api/city/:cityName/ prefix.
-  //
-  // The session SSE stream lives under its OWN `/session-stream` prefix
-  // rather than re-using `/sessions` (sessionsRouter above). Two routers on
-  // one prefix made the surface ambiguous — a reader could not tell from the
-  // mount which router owned `/sessions/:id/stream`. A distinct prefix makes
-  // the stream endpoint's owner explicit; the frontend's
-  // `api.sessionStreamUrl` targets `/session-stream/:id/stream` to match.
-  router.use('/session-stream', sessionStreamRouter({ gc }));
-  router.use('/events', eventsRouter({ gc }));
 
   return {
     cityName,

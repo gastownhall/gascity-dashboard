@@ -1,17 +1,19 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type {
-  DashboardMetric,
-  DashboardSnapshot,
   RunCensus,
   RunLane,
   RunLaneHealth,
+  RunSummary,
+  SourceState,
 } from 'gas-city-dashboard-shared';
 import { MemoryRouter } from 'react-router-dom';
-import { api } from '../api/client';
+import { setActiveCity } from '../api/cityBase';
 import { invalidateKey } from '../api/cache';
 import { NowProvider } from '../contexts/NowContext';
 import { assertAtMostOneMark } from '../test/assertions/oneMarkRule';
+import { supervisorApi } from '../supervisor/client';
+import { loadSupervisorRunSummarySource } from '../supervisor/runSummary';
 import { AmbientHomePage } from './AmbientHome';
 
 // gascity-dashboard-kb3 — AmbientHome integration coverage.
@@ -29,12 +31,12 @@ import { AmbientHomePage } from './AmbientHome';
 //   • Deep-link encoding  — encodeURIComponent applied to stuckNode.id.
 //   • R6 no-negative-reassurance — calm sentence is absent, not "all clear".
 
-vi.mock('../api/client', () => ({
-  api: {
-    snapshot: vi.fn(),
-    snapshotRefresh: vi.fn(),
-  },
-  ApiClientError: class extends Error {},
+vi.mock('../supervisor/runSummary', () => ({
+  loadSupervisorRunSummarySource: vi.fn(),
+}));
+
+vi.mock('../supervisor/client', () => ({
+  supervisorApi: vi.fn(),
 }));
 
 // useFaviconSignal mutates the DOM favicon link; setup/teardown the
@@ -50,11 +52,13 @@ beforeEach(() => {
 afterEach(() => {
   document.head.querySelectorAll('#favicon').forEach((n) => n.remove());
   cleanup();
-  invalidateKey('snapshot');
+  invalidateKey('runs:summary:racoon-city');
+  invalidateKey('home:work:racoon-city');
   vi.useRealTimers();
 });
 
-const mockSnapshot = api.snapshot as Mock;
+const mockLoadRunSummary = loadSupervisorRunSummarySource as Mock;
+const mockSupervisorApi = supervisorApi as Mock;
 
 function knownHealth(overrides: Partial<RunLaneHealth> = {}): RunLaneHealth {
   return {
@@ -140,100 +144,59 @@ const DEFAULT_CENSUS: RunCensus = {
   thrashing: 0,
 };
 
-function envelope({
+function runSource({
   lanes = [],
   census = DEFAULT_CENSUS,
   runsStatus = 'fresh' as 'fresh' | 'fixture' | 'stale',
-  generatedAt = '2026-05-29T20:00:00.000Z',
-  // Default the work metric to unavailable so the synopsis renders without an
-  // in-progress clause in tests that don't exercise it; the dedicated synopsis
-  // tests pass an explicit available value.
-  workInProgress = { status: 'unavailable', source: 'work', error: 'unused' } as DashboardMetric,
 }: {
   lanes?: RunLane[];
   census?: RunCensus;
   runsStatus?: 'fresh' | 'fixture' | 'stale';
-  generatedAt?: string;
-  workInProgress?: DashboardMetric;
-} = {}): DashboardSnapshot {
+} = {}): SourceState<RunSummary> {
   return {
-    generatedAt,
-    alerts: [],
-    config: {
-      cityName: 'racoon-city',
-      cityRoot: '/tmp/x',
-      useFixtures: false,
-      enabledModules: null,
-      defaultView: null,
-    },
-    headline: {
-      activeAgents: { status: 'unavailable', source: 'city', error: 'unused' },
-      maxAgents: { status: 'unavailable', source: 'city', error: 'unused' },
-      activeSessions: { status: 'unavailable', source: 'city', error: 'unused' },
-      activeRuns: { status: 'available', value: lanes.length },
-      workInProgress,
-    },
-    sources: {
-      city: { source: 'city', status: 'error', error: 'unused' },
-      resources: { source: 'resources', status: 'error', error: 'unused' },
-      work: {
-        source: 'work',
-        status: 'fresh',
-        fetchedAt: '2026-05-29T20:00:00.000Z',
-        staleAt: '2026-05-29T20:00:45.000Z',
-        error: { kind: 'none' },
-        data: { open: 0, ready: 0, inProgress: 0 },
+    source: 'runs',
+    status: runsStatus,
+    fetchedAt: '2026-05-29T20:00:00.000Z',
+    staleAt: '2026-05-29T20:01:00.000Z',
+    error: { kind: 'none' },
+    data: {
+      totalActive: lanes.length,
+      totalHistorical: 0,
+      historicalLanes: [],
+      runCounts: {
+        total: lanes.length,
+        visible: lanes.length,
+        prReview: 0,
+        designReview: 0,
+        bugfix: 0,
+        blocked: 0,
+        other: 0,
       },
-      runs: {
-        source: 'runs',
-        status: runsStatus,
-        fetchedAt: '2026-05-29T20:00:00.000Z',
-        staleAt: '2026-05-29T20:01:00.000Z',
-        error: { kind: 'none' },
-        data: {
-          totalActive: lanes.length,
-          totalHistorical: 0,
-          historicalLanes: [],
-          runCounts: {
-            total: lanes.length,
-            visible: lanes.length,
-            prReview: 0,
-            designReview: 0,
-            bugfix: 0,
-            blocked: 0,
-            other: 0,
-          },
-          lanes,
-          recentChanges: [],
-          census: { status: 'available', data: census },
-        },
-      },
+      lanes,
+      recentChanges: [],
+      census: { status: 'available', data: census },
     },
   };
 }
 
-function runsErrorEnvelope(): DashboardSnapshot {
-  const e = envelope();
-  e.sources.runs = {
+function runsErrorSource(): SourceState<RunSummary> {
+  return {
     source: 'runs',
     status: 'error',
     error: 'runs source upstream timeout',
   };
-  return e;
 }
 
-function censusUnavailableEnvelope(lanes: RunLane[]): DashboardSnapshot {
-  const e = envelope({ lanes });
-  const wf = e.sources.runs;
-  if (wf.status === 'error') throw new Error('test envelope precondition');
-  e.sources.runs = {
-    ...wf,
+function censusUnavailableSource(lanes: RunLane[]): SourceState<RunSummary> {
+  const source = runSource({ lanes });
+  if (source.status === 'error') throw new Error('test source precondition');
+  return {
+    ...source,
     data: {
-      ...wf.data,
+      ...source.data,
       census: { status: 'unavailable', error: 'run health has not been derived' },
     },
   };
-  return e;
 }
 
 function mount() {
@@ -252,8 +215,15 @@ function mount() {
 const NOW_AT = Date.parse('2026-05-29T20:00:00.000Z');
 
 beforeEach(() => {
-  mockSnapshot.mockReset();
-  invalidateKey('snapshot');
+  setActiveCity('racoon-city');
+  mockLoadRunSummary.mockReset();
+  mockSupervisorApi.mockReset();
+  invalidateKey('runs:summary:racoon-city');
+  invalidateKey('home:work:racoon-city');
+  mockLoadRunSummary.mockResolvedValue(runSource());
+  mockSupervisorApi.mockReturnValue({
+    cityStatus: vi.fn().mockResolvedValue({ work: { open: 0, ready: 0, in_progress: 0 } }),
+  });
   // Deterministic clock for the staleness derivation; useNow() seeds
   // its state from Date.now() at first render. We don't need fake
   // timers because the test snapshots only need ONE point in time and
@@ -276,7 +246,7 @@ describe('AmbientHomePage', () => {
       knownDenominator: 3,
       byPhase: { ...DEFAULT_CENSUS.byPhase, implementation: 3 },
     };
-    mockSnapshot.mockResolvedValue(envelope({ lanes, census }));
+    mockLoadRunSummary.mockResolvedValue(runSource({ lanes, census }));
 
     const { container } = mount();
     await waitFor(() => expect(screen.getByTestId('phase-census')).toBeTruthy());
@@ -299,9 +269,9 @@ describe('AmbientHomePage', () => {
     // The bug: a claimed (in_progress) bead never surfaced because the
     // run-lane census only counts formula-run lanes. The work headline metric
     // closes that gap — its value must appear in the Home synopsis.
-    mockSnapshot.mockResolvedValue(
-      envelope({ workInProgress: { status: 'available', value: 3 } }),
-    );
+    mockSupervisorApi.mockReturnValue({
+      cityStatus: vi.fn().mockResolvedValue({ work: { open: 0, ready: 0, in_progress: 3 } }),
+    });
 
     mount();
     await waitFor(() => expect(screen.getByTestId('phase-census')).toBeTruthy());
@@ -310,9 +280,9 @@ describe('AmbientHomePage', () => {
   });
 
   it('omits the in-progress clause when the work source is unavailable', async () => {
-    mockSnapshot.mockResolvedValue(
-      envelope({ workInProgress: { status: 'unavailable', source: 'work', error: 'down' } }),
-    );
+    mockSupervisorApi.mockReturnValue({
+      cityStatus: vi.fn().mockRejectedValue(new Error('down')),
+    });
 
     mount();
     await waitFor(() => expect(screen.getByTestId('phase-census')).toBeTruthy());
@@ -334,7 +304,7 @@ describe('AmbientHomePage', () => {
       unverifiable: 1,
       byPhase: { ...DEFAULT_CENSUS.byPhase, implementation: 3 },
     };
-    mockSnapshot.mockResolvedValue(envelope({ lanes, census }));
+    mockLoadRunSummary.mockResolvedValue(runSource({ lanes, census }));
 
     mount();
     await waitFor(() => expect(screen.getByTestId('phase-census')).toBeTruthy());
@@ -371,7 +341,9 @@ describe('AmbientHomePage', () => {
       thrashing: 1, // already gated server-side to known
       byPhase: { ...DEFAULT_CENSUS.byPhase, implementation: 2 },
     };
-    mockSnapshot.mockResolvedValue(envelope({ lanes: [stalledLane, inferredOlderLane], census }));
+    mockLoadRunSummary.mockResolvedValue(
+      runSource({ lanes: [stalledLane, inferredOlderLane], census }),
+    );
 
     const { container } = mount();
     await waitFor(() => expect(screen.getByTestId('status-sentence')).toBeTruthy());
@@ -417,7 +389,7 @@ describe('AmbientHomePage', () => {
       thrashing: 0,
       byPhase: { ...DEFAULT_CENSUS.byPhase, implementation: 1 },
     };
-    mockSnapshot.mockResolvedValue(envelope({ lanes: [inferredOnlyLane], census }));
+    mockLoadRunSummary.mockResolvedValue(runSource({ lanes: [inferredOnlyLane], census }));
 
     const { container } = mount();
     await waitFor(() => expect(screen.getByTestId('phase-census')).toBeTruthy());
@@ -449,7 +421,7 @@ describe('AmbientHomePage', () => {
       knownDenominator: 2,
       byPhase: { ...DEFAULT_CENSUS.byPhase, implementation: 2 },
     };
-    mockSnapshot.mockResolvedValue(envelope({ lanes: [decisionLane, calmLane], census }));
+    mockLoadRunSummary.mockResolvedValue(runSource({ lanes: [decisionLane, calmLane], census }));
 
     const { container } = mount();
     await waitFor(() => expect(screen.getByTestId('phase-census')).toBeTruthy());
@@ -465,7 +437,7 @@ describe('AmbientHomePage', () => {
   });
 
   it('renders a clear error when the runs source is in error state', async () => {
-    mockSnapshot.mockResolvedValue(runsErrorEnvelope());
+    mockLoadRunSummary.mockResolvedValue(runsErrorSource());
     mount();
     await waitFor(() =>
       expect(screen.getByTestId('runs-source-error')).toBeTruthy(),
@@ -474,7 +446,7 @@ describe('AmbientHomePage', () => {
   });
 
   it('renders the census-unavailable affordance (and only that) when the engine has not derived', async () => {
-    mockSnapshot.mockResolvedValue(censusUnavailableEnvelope([]));
+    mockLoadRunSummary.mockResolvedValue(censusUnavailableSource([]));
     mount();
     await waitFor(() => expect(screen.getByTestId('census-unavailable')).toBeTruthy());
     expect(screen.queryByTestId('phase-census')).toBeNull();

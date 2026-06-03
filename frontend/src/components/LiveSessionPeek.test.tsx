@@ -1,6 +1,10 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GcAgent, GcSession, TranscriptResult } from 'gas-city-dashboard-shared';
+import type { GcSession } from 'gas-city-dashboard-shared';
+import type {
+  AgentResponse,
+  SessionTranscriptGetResponse,
+} from '../generated/gc-supervisor-client/types.gen';
 import {
   LiveSessionPeek,
   isAgentStreamable,
@@ -59,39 +63,39 @@ function jsonResponse(payload: unknown): Response {
   });
 }
 
-const snapshot: TranscriptResult = {
-  session_id: 's1',
+const snapshot: SessionTranscriptGetResponse = {
+  id: 's1',
+  template: 'mayor',
+  provider: 'claude',
+  format: 'conversation',
   turns: [{ role: 'assistant', text: 'snapshot turn body' }],
-  total_chars: 18,
-  captured_at: '2026-05-27T00:00:00Z',
-  truncated: false,
 };
 
 function session(overrides: Partial<GcSession>): GcSession {
   return { id: 's1', state: 'active', ...overrides } as GcSession;
 }
 
-// gascity-dashboard-ay6 / Phase-4 follow-up: minimal GcAgent factory for
+// gascity-dashboard-ay6 / Phase-4 follow-up: minimal AgentResponse factory for
 // the isAgentStreamable boundary tests. Matches the shape AgentSchema
-// emits (name + state + optional session/running). Cast through unknown
-// because GcAgent carries a wider set of fields than the boundary cares
-// about and we don't want a per-test ceremony to fill them.
-function agent(overrides: Partial<GcAgent> & { sessionPresent?: boolean }): GcAgent {
+// emits (name + state + optional session/running).
+function agent(overrides: Partial<AgentResponse> & { sessionPresent?: boolean }): AgentResponse {
   const { sessionPresent, ...rest } = overrides;
   // Build the session field conditionally so exactOptionalPropertyTypes
   // doesn't complain about a `session: undefined` assignment when no
   // session is requested. Spreading is the idiom that satisfies the
   // strict optionality contract.
   const sessionField = sessionPresent && !('session' in rest)
-    ? { session: { name: 's1', last_activity: '2026-05-29T00:00:00Z' } as NonNullable<GcAgent['session']> }
+    ? { session: { name: 's1', attached: false, last_activity: '2026-05-29T00:00:00Z' } }
     : {};
   return {
     name: 'a1',
+    available: true,
     state: 'asleep',
     running: false,
+    suspended: false,
     ...rest,
     ...sessionField,
-  } as GcAgent;
+  };
 }
 
 describe('streamBadge', () => {
@@ -162,8 +166,13 @@ describe('LiveSessionPeek (streaming)', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url === '/api/city/test-city/sessions/s1/peek') return jsonResponse(snapshot);
+        const url = requestUrl(input);
+        if (url === '/gc-supervisor/v0/city/test-city/session/s1/transcript?format=conversation') {
+          return jsonResponse(snapshot);
+        }
+        if (url === '/api/city/test-city/sessions/s1/peek') {
+          throw new Error('old dashboard session peek route should not be called');
+        }
         throw new Error(`unexpected fetch: ${url}`);
       }),
     );
@@ -201,3 +210,17 @@ describe('LiveSessionPeek (streaming)', () => {
     expect(eventSources).toHaveLength(0);
   });
 });
+
+function requestUrl(input: RequestInfo | URL): string {
+  const url = input instanceof Request
+    ? input.url
+    : input instanceof URL
+      ? input.toString()
+      : String(input);
+  return stripSameOrigin(url);
+}
+
+function stripSameOrigin(url: string): string {
+  const origin = window.location.origin;
+  return url.startsWith(origin) ? url.slice(origin.length) : url;
+}

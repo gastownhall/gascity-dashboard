@@ -52,6 +52,16 @@ describe("useGcEventRefresh", () => {
     expect(result.current).toBe("open");
   });
 
+  it("opens the direct supervisor city event stream instead of the dashboard stream mirror", () => {
+    renderHook(() =>
+      useGcEventRefresh([GC_EVENT_PREFIX.bead], vi.fn()),
+    );
+
+    expect(String(eventSources[0]?.url)).toBe(
+      "/gc-supervisor/v0/city/test-city/events/stream",
+    );
+  });
+
   it("lets callers ignore prefix-matching events outside their projection", () => {
     const onMatch = vi.fn();
     const { result } = renderHook(() =>

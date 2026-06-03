@@ -1,4 +1,8 @@
-import type { RunDiffResponse, RunScopeKind } from 'gas-city-dashboard-shared';
+import type {
+  RunDiffResponse,
+  RunExecutionPath,
+  RunScopeKind,
+} from 'gas-city-dashboard-shared';
 import { errorMessage } from 'gas-city-dashboard-shared';
 import { api } from '../api/client';
 import { reportClientError } from '../lib/clientErrorReporting';
@@ -33,25 +37,27 @@ export type RunDiffLoadState =
 
 export function useRunDiff(
   runId: string | undefined,
+  executionPath: RunExecutionPath | undefined,
   scopeKind?: RunScopeKind,
   scopeRef?: string,
 ): RunDiffLoadState {
-  const key = runDiffCacheKey(runId, scopeKind, scopeRef);
+  const key = runDiffCacheKey(runId, executionPath, scopeKind, scopeRef);
   const { data, loading, error, refresh } = useCachedData(
     key,
-    () => loadRunDiff(runId, scopeKind, scopeRef),
+    () => loadRunDiff(runId, executionPath, scopeKind, scopeRef),
     {
-      // Explicit refresh forces the backend to re-assemble (bypassing the
-      // shared run-detail cache the diff now reads from) so a deliberate
-      // refresh re-fetches in lockstep with the detail (gascity-dashboard-wqsk).
-      refreshFetcher: () => loadRunDiff(runId, scopeKind, scopeRef, true),
+      // Explicit refresh re-reads local git state for the same supervisor-
+      // resolved execution path, in lockstep with detail refreshes.
+      refreshFetcher: () => loadRunDiff(runId, executionPath, scopeKind, scopeRef, true),
       onError: (err) => {
         if (runId !== undefined) reportRunDiffError('load diff', runId, err);
       },
     },
   );
 
-  if (runId === undefined) return { kind: 'idle', refresh: noopRefresh };
+  if (runId === undefined || executionPath === undefined) {
+    return { kind: 'idle', refresh: noopRefresh };
+  }
   if (data?.kind === 'loaded') {
     return {
       kind: 'ready',
@@ -66,16 +72,17 @@ export function useRunDiff(
 
 async function loadRunDiff(
   runId: string | undefined,
+  executionPath: RunExecutionPath | undefined,
   scopeKind?: RunScopeKind,
   scopeRef?: string,
   refresh?: boolean,
 ): Promise<RunDiffPayload> {
-  if (!runId) return { kind: 'unrequested' };
+  if (!runId || executionPath === undefined) return { kind: 'unrequested' };
   const params: { scopeKind?: RunScopeKind; scopeRef?: string; refresh?: boolean } = {};
   if (scopeKind !== undefined) params.scopeKind = scopeKind;
   if (scopeRef !== undefined) params.scopeRef = scopeRef;
   if (refresh) params.refresh = true;
-  const diff = await api.runDiff(runId, params);
+  const diff = await api.runDiff(runId, { executionPath }, params);
   return { kind: 'loaded', diff };
 }
 
@@ -103,14 +110,22 @@ function reportRunDiffError(
 
 function runDiffCacheKey(
   runId: string | undefined,
+  executionPath: RunExecutionPath | undefined,
   scopeKind?: RunScopeKind,
   scopeRef?: string,
 ): string {
   const parts = [
     'formula-run-diff',
     runId ?? 'missing',
+    executionPathCacheKey(executionPath),
     scopeKind ?? 'default',
     scopeRef ?? 'default',
   ];
   return parts.join(':');
+}
+
+function executionPathCacheKey(executionPath: RunExecutionPath | undefined): string {
+  if (executionPath === undefined) return 'path:missing';
+  if (executionPath.kind === 'known') return `path:${executionPath.path}`;
+  return `path:${executionPath.reason}`;
 }

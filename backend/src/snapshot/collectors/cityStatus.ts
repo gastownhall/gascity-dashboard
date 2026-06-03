@@ -2,12 +2,14 @@ import type {
   CitySessionProvider,
   CityStatusSummary,
   DashboardMetric,
-  GcAgent,
-  GcAgentList,
-  GcRigList,
   GcSession,
   GcSessionList,
 } from 'gas-city-dashboard-shared';
+import type {
+  AgentResponse,
+  ListBodyAgentResponse,
+  ListBodyRigResponse,
+} from '../../generated/gc-supervisor-client/types.gen.js';
 import { type GcClient } from '../../gc-client.js';
 import { LOG_COMPONENT, logWarn, sanitizeForLog } from '../../logging.js';
 import { SourceCache } from '../cache.js';
@@ -54,9 +56,9 @@ export interface CollectCityStatusOptions {
   /** Live upstream loader for sessions. */
   listSessions: () => Promise<GcSessionList>;
   /** Live upstream loader for agents (authoritative provider source). */
-  listAgents: () => Promise<GcAgentList>;
+  listAgents: () => Promise<ListBodyAgentResponse>;
   /** Live upstream loader for rigs. */
-  listRigs: () => Promise<GcRigList>;
+  listRigs: () => Promise<ListBodyRigResponse>;
 }
 
 export interface CreateCityStatusSourceCacheOptions {
@@ -67,9 +69,9 @@ export interface CreateCityStatusSourceCacheOptions {
   /** Test seam: override the listSessions binding to avoid a real GcClient. */
   listSessions?: (() => Promise<GcSessionList>) | undefined;
   /** Test seam: override the listAgents binding to avoid a real GcClient. */
-  listAgents?: (() => Promise<GcAgentList>) | undefined;
+  listAgents?: (() => Promise<ListBodyAgentResponse>) | undefined;
   /** Test seam: override the listRigs binding to avoid a real GcClient. */
-  listRigs?: (() => Promise<GcRigList>) | undefined;
+  listRigs?: (() => Promise<ListBodyRigResponse>) | undefined;
 }
 
 const ACTIVE_STATES = new Set<string>(['active', 'creating']);
@@ -117,15 +119,18 @@ export async function collectCityStatus(
   ]);
 
   const sessions = sessionList.items;
-  const sessionsByProvider = aggregateAgentsByProvider(agentList.items);
+  const agents = agentList.items ?? [];
+  const sessionsByProvider = aggregateAgentsByProvider(agents);
   const activeSessions = countActiveSessions(sessions);
+
+  const rigs = rigList.items ?? [];
 
   // gascity-dashboard-19w.1: supervisor-reported wire-partial on a 200
   // response (one or more rig backends failed during aggregation) is a
   // degradation signal, not an outage — propagate it so the operator
   // sees "rigs degraded" rather than an apparent "no rigs configured."
-  // Mirrors the convention in backend/src/routes/links.ts and
-  // routes/mail.ts. Per CLAUDE.md "Don't Swallow Errors".
+  // Mirrors the convention in direct supervisor entity-link and mail reads.
+  // Per CLAUDE.md "Don't Swallow Errors".
   const rigsPartial =
     rigList.partial === true || (rigList.partial_errors?.length ?? 0) > 0;
   if (rigsPartial) {
@@ -163,11 +168,10 @@ export async function collectCityStatus(
     maxSessions: unavailableCityMetric(MAX_SESSIONS_UNAVAILABLE_REASON),
     sessionsByProvider,
     // gascity-dashboard-19w.2: inline projection (no toCityRig delegate).
-    // GcRig and CityRig are structurally equivalent today; the explicit
-    // {name, path} pick keeps the field-strip in place so a future upstream
-    // widening of GcRig (agent_count, running_count, etc.) does not silently
-    // leak into the CityStatusSummary wire shape.
-    rigs: rigList.items.map(({ name, path }) => ({ name, path })),
+    // Generated RigResponse carries supervisor-only fields such as
+    // agent_count/running_count/suspended. The explicit {name, path} pick keeps
+    // those out of the CityStatusSummary wire shape.
+    rigs: rigs.map(({ name, path }) => ({ name, path })),
   };
   if (rigsPartial) {
     summary.rigsPartial = true;
@@ -209,7 +213,7 @@ export async function collectCityStatus(
  * a single per-call warn (matches aggregateSessionsByProvider's contract).
  */
 export function aggregateAgentsByProvider(
-  agents: ReadonlyArray<GcAgent>,
+  agents: ReadonlyArray<AgentResponse>,
 ): CitySessionProvider[] {
   const buckets = new Map<string, { active: number; total: number }>();
   let emptyProviderCount = 0;
@@ -241,7 +245,7 @@ export function aggregateAgentsByProvider(
     .sort((a, b) => b.active - a.active || a.provider.localeCompare(b.provider));
 }
 
-function isAgentActive(agent: GcAgent): boolean {
+function isAgentActive(agent: AgentResponse): boolean {
   return agent.running === true || isActive(agent.state);
 }
 

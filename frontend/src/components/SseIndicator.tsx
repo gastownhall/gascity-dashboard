@@ -1,8 +1,8 @@
 import type { GcEventConnState } from '../hooks/useGcEvents';
 import { StatusBadge, type StatusTone } from './StatusBadge';
 
-// Live-connection indicator for views that subscribe to /api/events/stream
-// via useGcEventRefresh. Renders a small StatusBadge surfacing whether
+// Live-connection indicator for views that subscribe to the supervisor city
+// event stream via useGcEventRefresh. Renders a small StatusBadge surfacing whether
 // the SSE stream is healthy. Operator-readable wording in the badge
 // (live / connecting / offline); the raw machine state goes in the
 // hover title for parity with the rest of the StatusBadge usage.

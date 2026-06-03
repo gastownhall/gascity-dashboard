@@ -12,8 +12,8 @@ Until then, this repo exists so the dashboard can move quickly as a standalone N
 
 ## What it shows
 
-- **Agents** — every session's state at a glance, with a Peek modal for `gc session peek` snapshots.
-- **Beads** — engineering work in `gc bd` (system noise filtered by default), with inline claim / close / nudge and click-to-filter label chips.
+- **Agents** — every session's state at a glance, with supervisor transcript peeks and composed agent directives.
+- **Beads** — engineering work in `gc bd` (system noise filtered by default), with supervisor-backed claim / close / nudge and click-to-filter label chips.
 - **Runs** — active formula runs, with graph.v2 run details, node session transcripts, and current execution-folder git diffs.
 - **Mail** — read any agent's inbox via a persistent "Reading as" strip. Sends always go from the operator; impersonation is read-only.
 - **Health** — supervisor state, host memory + load, admin process stats, plus a 24-hour dolt-noms trend sparkline.
@@ -29,7 +29,7 @@ npm run build:shared            # types must build first
 # Terminal 1 — backend on :8081
 npm run dev:backend
 
-# Terminal 2 — Vite dev server on :5174, proxies /api → :8081
+# Terminal 2 — Vite dev server on :5174, proxies /api and /gc-supervisor → :8081
 npm run dev:frontend
 ```
 
@@ -95,7 +95,8 @@ Full threat model: [`specs/architecture/security.md`](specs/architecture/securit
 
 - **Backend** — Node 20 + Express + TypeScript. Single port serves API at `/api/*` and the SPA from `/`.
 - **Frontend** — React 18 + Vite + TypeScript + Tailwind, self-hosted Inter Variable. Single-page app, statically served by the backend in production.
-- **Shared types** — `gas-city-dashboard-shared` workspace package. Wire-shape drift becomes a compile error on both sides.
+- **Supervisor client** — generated OpenAPI client artifacts in backend and frontend. GC-owned resources should use these generated supervisor types directly.
+- **Shared types** — `gas-city-dashboard-shared` workspace package for dashboard-owned `/api/*` DTOs and UI contracts, not supervisor DTO mirrors.
 - **Deploy** — systemd user unit. Deliberately _not_ managed by `gc [[services]]`; see [`specs/architecture/overview.md`](specs/architecture/overview.md) for why the dashboard must outlive supervisor outages.
 
 ## Layout
@@ -104,7 +105,7 @@ Full threat model: [`specs/architecture/security.md`](specs/architecture/securit
 gas-city-dashboard/
 ├── package.json              # npm workspace root
 ├── DESIGN.md                 # binding visual contract (agent-facing design standard)
-├── shared/                   # wire-shape types
+├── shared/                   # dashboard-owned API and UI contract types
 ├── backend/                  # Express + TS
 │   └── src/{server.ts,middleware,routes,gc-client.ts,exec.ts,audit.ts}
 ├── frontend/                 # React + Vite + Tailwind

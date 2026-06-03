@@ -1,6 +1,6 @@
-// Backend module registry — the single list iterated by app.ts. PR-A
-// contains `health`; PR-B2 adds `maintainer`; later PRs add the
-// remaining first-party modules per PRD §7.
+// Backend module registry — the single list iterated by app.ts for per-city
+// optional modules. Core dashboard-local routes such as Health are mounted
+// directly in app.ts because they do not belong to the GC city request plane.
 //
 // `ALL_MODULES` is typed as `ReadonlyArray<BackendModule<unknown>>`
 // rather than `BackendModule<any>` so the type system still tracks the
@@ -10,7 +10,6 @@
 // closure (see views/types.ts). No `as never` anywhere.
 
 import type { BackendModule } from './types.js';
-import { healthBackend } from './modules/health.module.js';
 import { maintainerBackend } from './modules/maintainer/maintainer.module.js';
 
 /** Erases a module's concrete Deps to `unknown` so heterogeneous modules
@@ -22,6 +21,5 @@ function register<D>(mod: BackendModule<D>): BackendModule<unknown> {
 }
 
 export const ALL_MODULES: ReadonlyArray<BackendModule<unknown>> = [
-  register(healthBackend),
   register(maintainerBackend),
 ];

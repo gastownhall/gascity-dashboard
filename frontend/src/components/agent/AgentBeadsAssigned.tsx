@@ -1,13 +1,13 @@
-import type { GcBead } from 'gas-city-dashboard-shared';
+import type { SupervisorBead } from '../../supervisor/beadReads';
 
 export function AgentBeadsAssigned({
   beads,
   loading,
   onSelect,
 }: {
-  beads: ReadonlyArray<GcBead>;
+  beads: ReadonlyArray<SupervisorBead>;
   loading: boolean;
-  onSelect: (bead: GcBead) => void;
+  onSelect: (bead: SupervisorBead) => void;
 }) {
   return (
     <section className="mb-12">

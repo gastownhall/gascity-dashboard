@@ -2,42 +2,82 @@
 
 > Engineer's-eye summary of decisions that affect implementation. For the product framing, read the [product spec](../requirements/product.md); for the visual register, read [`DESIGN.md`](../../DESIGN.md), the binding visual contract at the repo root. The architectural shape (the security model, the shared DTO contract, the systemd separation from `gc-supervisor`) is inherited from the [Wldc4rd/citadel](https://github.com/Wldc4rd/citadel) fork and remains intentional here.
 
-## Stack: Node + TypeScript end-to-end
+## Architecture target: direct supervisor for GC-owned data
+
+This repository is temporary: the intended end state is to fold this dashboard
+back into `gastownhall/gascity` as the replacement for the existing
+`gc dashboard`. That target changes the ownership boundary:
+
+- The **browser** should call the GC supervisor API directly for every
+  GC-owned resource the supervisor can expose, using a generated OpenAPI client.
+- The **dashboard service** should own only local/non-supervisor capabilities:
+  static hosting, runtime config, `git`/`gh` evidence, local build logs,
+  host/process/dolt-noms health, client-error telemetry, and audit rows.
+- Missing GC data or writes are upstream supervisor API gaps, tracked in
+  [`../gc-supervisor-api-gaps.md`](../gc-supervisor-api-gaps.md). Do not create
+  permanent dashboard-server GC facades to compensate.
+- A same-origin supervisor proxy is acceptable for standalone development, CSP,
+  or SSH forwarding, but only as a transport relay. In this repo the proxy is
+  mounted at `/gc-supervisor/*` and forwards supervisor `/health` plus `/v0/*`.
+  It must not parse, validate, map, strip, cache, or rename supervisor DTOs.
+
+Current code still contains a dashboard-server GC mirror layer. The migration
+plan to delete it lives in
+[`../plans/direct-supervisor-client-migration.md`](../plans/direct-supervisor-client-migration.md).
+
+## Stack: TypeScript end-to-end
 
 - Backend: Node 22.13+ + Express + TypeScript.
 - Frontend: React 18 + Vite + TypeScript + Tailwind. Self-hosted Inter Variable.
-- **Shared DTOs**: `shared/` workspace package (`gas-city-dashboard-shared`) exports the dashboard-owned `/api/*` DTOs imported by **both** backend and frontend. The GC supervisor wire client/types are generated backend-only from OpenAPI, then translated at the backend edge into these DTOs. When the dashboard contract changes, a compile error surfaces the breakage instead of an undefined at runtime.
+- **Generated supervisor client**: GC-owned browser surfaces use generated
+  supervisor OpenAPI types/client directly.
+- **Shared DTOs**: `shared/` workspace package (`gas-city-dashboard-shared`)
+  remains for dashboard-owned service DTOs and UI/module contracts. It should
+  not mirror supervisor wire shapes that the generated client already owns.
 
 Rejected alternatives:
 
 - **Python + FastAPI** — deploy messier (venv vs system), no shared types, slower to build this shape.
 - **Go** — wrong coupling direction (admin tool shouldn't carry gc-the-orchestrator's lang dep).
-- **Direct-from-frontend (no backend)** — doesn't work; peek + git + system-health need shell-exec.
+- **Permanent dashboard-server supervisor facade** — rejected for the target
+  architecture. It duplicates the supervisor contract and makes this dashboard
+  harder to fold back into `gascity`.
 
-## Real-time: same-origin SSE proxy (Phase C — ✅ shipped)
+## Real-time: direct supervisor streams, proxy only for transport
 
-Architect addendum **td-wisp-ijk7g** (mechanic td-wisp-e1v14) corrected the earlier reading: `/v0/city/{name}/events/stream` IS SSE today (the `/stream` suffix; the previous probe missed it). The dashboard now proxies supervisor SSE through the backend instead of opening the supervisor origin directly from the browser.
+The supervisor exposes SSE at `/v0/city/{name}/events/stream` and session
+streams under the supervisor API. Target behavior is to consume those streams
+through the generated/browser supervisor surface when the browser can reach the
+supervisor origin.
 
-Why same-origin wins here:
+When standalone development needs one forwarded port or a stricter CSP,
+same-origin stream proxying remains allowed as a transport-only compatibility
+path:
 
-- CSP stays simple: browser `connect-src` remains `self`.
-- Remote/SSH-forwarded development needs one browser-visible port, not dashboard plus supervisor.
-- EventSource can send cookies but cannot attach custom CSRF headers; keeping streams as GET-only same-origin routes preserves the existing Origin/Host defenses without special frontend CORS paths.
-- City events and per-session streams share one backend proxy helper (`backend/src/routes/sse-proxy.ts`) for upstream fetch, heartbeat, backpressure, disconnect cleanup, and `Last-Event-ID` forwarding.
+- CSP can stay `connect-src 'self'`.
+- Remote/SSH-forwarded development can expose one browser-visible port.
+- The proxy forwards `Last-Event-ID`, backpressure, heartbeat, and disconnects.
+- The proxy does **not** inspect event payloads or own invalidation semantics.
 
-Current flow:
+Migration flow:
 
-- `frontend/src/hooks/useGcEvents.ts::useGcEventRefresh(prefixes, onMatch)` opens `EventSource('/api/events/stream')`.
-- `backend/src/routes/events.ts` proxies `/api/events/stream` to `/v0/city/{name}/events/stream`.
-- `frontend/src/hooks/useSessionStream.ts` opens `EventSource('/api/sessions/:id/stream')` only for active selected run-node sessions and exposes live/connecting/closed state to the run session panel.
-- `backend/src/routes/session-stream.ts` proxies that stream to `/v0/city/{name}/session/{id}/stream`.
-- The browser forwards `Last-Event-ID` automatically on reconnect; the backend proxy also accepts explicit `?after=` and forwards the cursor upstream.
-- Agents, Beads, and Runs subscribe to matching event prefixes and refresh their cached data. Runs route event-driven refreshes through `/api/snapshot/refresh` so it bypasses the snapshot TTL.
+- City event consumers and selected-session stream consumers now use supervisor
+  EventSource URLs through the transport path.
+- If a same-origin proxy remains, mount it on an explicitly transport-named
+  path such as `/gc-supervisor/*`, not as a dashboard DTO endpoint.
+- Agents, Beads, Runs, and Formula Run Detail subscribe to supervisor event
+  prefixes and refresh generated-client queries directly.
 - Belt-and-braces still applies: every panel has a manual Refresh button for the tab-sleep / laptop-close case.
 
-## Health (Phase C — ✅ shipped)
+## Activity + Health (Phase C — ✅ shipped)
 
-- **Health** (`/health`): three cards — admin process state (pid/uptime/rss/heap/node version), host state (cpus, 1/5/15 load, mem free, host uptime), gc supervisor's own `/v0/city/{name}/health` response (status/version/uptime). 30 s auto-refresh while tab is visible. Below the cards: a dolt-noms 24 h trend sparkline pulled from `/api/dolt-noms/trend`.
+- **Activity** (`/activity`): split ownership. Supervisor activity/events come
+  from the generated supervisor client. Local repository evidence stays on
+  `/api/git/commits?view=<enum>` because it shells out to `git` against the
+  dashboard host repo.
+- **Health** (`/health`): split ownership. Supervisor health comes from the
+  generated supervisor client. Host/process/dolt-noms health stays on the
+  dashboard service because it reads the local process and filesystem.
 
 ## Dolt-noms ring buffer
 
@@ -49,15 +89,19 @@ returns `available: false` with a concrete `reason` instead of fake zeros. The
 Health page renders that reason directly so operators can fix configuration
 without digging through code.
 
-## Peek is HTTP, not shell-exec
+## Transcript peek is supervisor HTTP
 
-Same architect addendum: `GET /v0/city/{name}/session/{id}/transcript` returns structured JSON with `turns: [{role, text}, ...]`. The dashboard fetches the transcript via the backend's `GcClient.fetchTranscript`, sanitises each turn's text server-side (ANSI/OSC/control-char strip, per-turn 16 KB cap, total 256 KB cap), and the frontend renders each turn as a role-tagged block.
+`GET /v0/city/{name}/session/{id}/transcript` returns structured JSON with
+`turns: [{role, text}, ...]`. Target behavior is to fetch it through the
+generated supervisor client and render it as escaped React text.
 
-Why we still go through the backend for peek (rather than calling gc direct from the browser):
+Security rule:
 
-- The frontend's CSRF / audit posture stays uniform across read + write paths.
-- Server-side sanitisation is the load-bearing XSS defence; doing it in one place (`routes/sessions.ts::buildTranscriptResult`) avoids the temptation to skip it on a client-only path.
-- Future SSE upgrade for live-tail can swap from the polled transcript to the streaming endpoint without re-architecting the consumer.
+- Do not render transcript content as HTML.
+- If ANSI color is preserved, convert to React nodes rather than
+  `dangerouslySetInnerHTML`.
+- Any sanitization needed for terminal control characters belongs in a shared
+  frontend-safe rendering utility, not in a server-only GC DTO adapter.
 
 ## Deploy: systemd user unit (NOT `gc [[services]]`)
 
@@ -73,20 +117,19 @@ systemd is boring, well-understood, and `journalctl`-debuggable. `ExecStartPre` 
 
 ```
    operator (browser)
+        ├── generated supervisor client → gc supervisor /v0/*
         │
-        │  HTTP/loopback :8081
+        │  same-origin HTTP :8081 for dashboard-local APIs
         ▼
    ┌──────────────────────┐
    │  Express server      │  ← single process, supervised by systemd
-   │  - /api/*            │
+   │  - local /api/*      │
    │  - SPA at /          │  (express.static, immutable cache on hashed assets)
-   │  - SSE at /api/events│  (Phase C)
+   │  - /gc-supervisor/*  │  (transport-only supervisor proxy)
    │  - Audit → events.jsonl
    └──────────┬───────────┘
               │
-              ├── HTTP → gc supervisor (:8372)  — reads
-              │
-              └── spawn() → `gc` CLI            — whitelisted writes
+              └── spawn() → git / gh only       — whitelisted local evidence
 ```
 
 ## Stateful Components
@@ -108,10 +151,9 @@ deliberately isolated so a future multi-instance design has clear seams:
 - `backend/src/maintainer/slung-state.ts` serializes writes through a module
   write chain around one JSON file. Multi-instance deployment would replace it
   with a transactional store or a lock-backed file writer.
-- `backend/src/gc-client.ts` owns an in-flight request map for request
-  deduplication inside one Node process. Multi-instance deployment would either
-  accept per-process dedupe or move that cache behind a shared supervisor-aware
-  gateway.
+- Generated supervisor-client query caches belong in the browser data layer.
+  The dashboard service should not own per-supervisor-resource caches after the
+  direct-client migration.
 - `backend/src/middleware/csrf.ts` owns the boot-scoped double-submit token.
   Multi-instance deployment would need shared token material or sticky sessions.
 
@@ -121,9 +163,15 @@ and stop with the process wrapper instead of hidden module startup.
 
 ## Trust boundaries
 
-- **Browser ↔ backend**: same-origin, Host-allowlist, Origin check, CSP, CSRF on writes. See `security.md`.
-- **Backend ↔ gc supervisor**: loopback HTTP through the generated backend-only OpenAPI client. The backend validates/translates supervisor responses at the edge into dashboard DTOs; there is no signature verification.
-- **Backend ↔ shell (`gc` CLI)**: whitelisted commands only, `shell: false`, clean env, param schemas. See `security.md`.
+- **Browser ↔ gc supervisor**: generated OpenAPI client for GC-owned resources.
+  In standalone mode this may be direct to the supervisor origin or through a
+  transport-only same-origin proxy.
+- **Browser ↔ dashboard service**: same-origin, Host-allowlist, Origin check,
+  CSP, CSRF on dashboard-service writes. See `security.md`.
+- **Dashboard service ↔ shell (`git`/`gh`)**: whitelisted commands only,
+  `shell: false`, clean env, param schemas. See `security.md`.
+- **Dashboard service ↔ gc supervisor**: transitional only or transport-only.
+  Do not add new permanent dashboard DTO routes for GC-owned resources.
 
 ## Phasing
 

@@ -1,10 +1,20 @@
-import type { GcMailItem } from 'gas-city-dashboard-shared';
 import { StatusBadge } from '../StatusBadge';
 import { PROMPT_INJECTION_NOTICE } from '../../lib/constants';
+import type { AttentionSeverity } from '../../attention/compose';
+import type { SupervisorMailItem } from '../../supervisor/mailReads';
 
-export function ThreadMessage({ message }: { message: GcMailItem }) {
+export function ThreadMessage({
+  message,
+  attentionSeverity = null,
+}: {
+  message: SupervisorMailItem;
+  attentionSeverity?: AttentionSeverity | null;
+}) {
   return (
-    <article className="space-y-3 pb-4 border-b border-rule last:border-0">
+    <article
+      {...attentionAttrs(attentionSeverity)}
+      className={`space-y-3 pb-4 border-b border-rule last:border-0 ${attentionClass(attentionSeverity)}`}
+    >
       <header className="flex items-baseline justify-between gap-3">
         <div className="text-label uppercase tracking-wider text-fg-muted truncate">
           <span className="text-fg font-medium">{message.from}</span>
@@ -22,6 +32,18 @@ export function ThreadMessage({ message }: { message: GcMailItem }) {
       </pre>
     </article>
   );
+}
+
+function attentionAttrs(
+  severity: AttentionSeverity | null,
+): { 'data-attention-severity'?: AttentionSeverity } {
+  return severity === null ? {} : { 'data-attention-severity': severity };
+}
+
+function attentionClass(severity: AttentionSeverity | null): string {
+  if (severity === 'attention') return 'bg-accent/10';
+  if (severity === 'watch') return 'bg-warn/10';
+  return '';
 }
 
 function formatAbsolute(iso: string): string {

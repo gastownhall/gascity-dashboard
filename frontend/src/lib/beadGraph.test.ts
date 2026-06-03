@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { GcBead, BeadStatus } from 'gas-city-dashboard-shared';
+import type { BeadStatus } from 'gas-city-dashboard-shared';
+import type { SupervisorBead } from '../supervisor/beadReads';
 import {
   BOARD_COLUMNS,
   buildBeadGraph,
@@ -12,14 +13,13 @@ import {
 function bead(
   id: string,
   status: BeadStatus,
-  extra: Partial<GcBead> = {},
-): GcBead {
+  extra: Partial<SupervisorBead> = {},
+): SupervisorBead {
   return {
     id,
     title: `bead ${id}`,
     status,
     issue_type: 'task',
-    priority: null,
     created_at: '2026-05-01T00:00:00Z',
     ...extra,
   };
@@ -77,7 +77,7 @@ describe('buildBeadGraph — forward / inverse edges', () => {
 });
 
 describe('buildBeadGraph — column placement', () => {
-  function columnOf(beads: GcBead[], id: string): BoardColumnId | undefined {
+  function columnOf(beads: SupervisorBead[], id: string): BoardColumnId | undefined {
     return buildBeadGraph(beads).nodes.get(id)?.column;
   }
 
@@ -123,10 +123,10 @@ describe('buildBeadGraph — column contents', () => {
     }
   });
 
-  it('sorts within a column by priority (nulls last), then id', () => {
+  it('sorts within a column by priority (missing last), then id', () => {
     const graph = buildBeadGraph([
       bead('Z', 'in_progress', { priority: 2 }),
-      bead('A', 'in_progress', { priority: null }),
+      bead('A', 'in_progress'),
       bead('M', 'in_progress', { priority: 0 }),
     ]);
     expect(graph.columns.in_progress.map((n) => n.bead.id)).toEqual([

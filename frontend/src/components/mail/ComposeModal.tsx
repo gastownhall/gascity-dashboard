@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, formatApiError } from '../../api/client';
+import { formatApiError } from '../../api/client';
 import { OPERATOR_ALIAS, useViewingAs } from '../../contexts/ViewingAsContext';
 import { displayLabel } from '../../hooks/aliasPriority';
+import { sendSupervisorMail } from '../../supervisor/mailWrites';
 import { Button } from '../Button';
 import { Field } from '../Field';
 import { Modal } from '../Modal';
@@ -34,7 +35,7 @@ export function ComposeModal({ open, onClose, onSent }: ComposeModalProps) {
     setSending(true);
     setError(null);
     try {
-      await api.sendMail({ to, subject, body });
+      await sendSupervisorMail({ to, subject, body });
       onSent();
     } catch (err) {
       setError(formatApiError(err, 'send failed'));

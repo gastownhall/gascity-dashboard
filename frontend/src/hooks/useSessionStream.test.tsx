@@ -1,16 +1,19 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
-import type { TranscriptResult } from 'gas-city-dashboard-shared';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { api } from '../api/client';
 import { reportClientError } from '../lib/clientErrorReporting';
+import type { SessionTranscriptView } from '../supervisor/sessionReads';
+import type * as SessionReads from '../supervisor/sessionReads';
 import { useSessionStream } from './useSessionStream';
 
-vi.mock('../api/client', () => ({
-  api: {
-    peekSession: vi.fn(),
-    sessionStreamUrl: vi.fn((sessionId: string) => `/api/sessions/${sessionId}/stream`),
-  },
-}));
+const mockFetchSupervisorSessionTranscript = vi.hoisted(() => vi.fn());
+
+vi.mock('../supervisor/sessionReads', async (importOriginal) => {
+  const actual = await importOriginal<typeof SessionReads>();
+  return {
+    ...actual,
+    fetchSupervisorSessionTranscript: mockFetchSupervisorSessionTranscript,
+  };
+});
 
 vi.mock('../lib/clientErrorReporting', () => ({
   reportClientError: vi.fn(() => Promise.resolve({ status: 'reported' })),
@@ -19,21 +22,22 @@ vi.mock('../lib/clientErrorReporting', () => ({
 const eventSources: FakeEventSource[] = [];
 const mockReportClientError = reportClientError as Mock;
 
-const transcript: TranscriptResult = {
-  session_id: 'gc-session-1',
+const transcript: SessionTranscriptView = {
+  id: 'gc-session-1',
+  template: 'mayor',
+  provider: 'claude',
+  format: 'conversation',
   turns: [{ role: 'assistant', text: 'initial' }],
   total_chars: 7,
   captured_at: '2026-05-27T10:00:00Z',
   truncated: false,
-  format: 'conversation',
 };
 
 describe('useSessionStream', () => {
   beforeEach(() => {
     eventSources.length = 0;
     vi.stubGlobal('EventSource', FakeEventSource);
-    vi.mocked(api.peekSession).mockReset();
-    vi.mocked(api.sessionStreamUrl).mockClear();
+    mockFetchSupervisorSessionTranscript.mockReset();
     mockReportClientError.mockClear();
   });
 
@@ -52,7 +56,7 @@ describe('useSessionStream', () => {
   });
 
   it('loads the snapshot, opens the stream, and appends turn frames', async () => {
-    vi.mocked(api.peekSession).mockResolvedValue(transcript);
+    mockFetchSupervisorSessionTranscript.mockResolvedValue(transcript);
 
     const { result } = renderHook(() => useSessionStream('gc-session-1', true));
 
@@ -67,6 +71,9 @@ describe('useSessionStream', () => {
       result: transcript,
       stream: { status: 'connecting' },
     });
+    expect(eventSources[0]?.url).toBe(
+      '/gc-supervisor/v0/city/test-city/session/gc-session-1/stream',
+    );
 
     act(() => eventSources[0]?.open());
     expect(result.current).toMatchObject({
@@ -89,7 +96,7 @@ describe('useSessionStream', () => {
   });
 
   it('keeps the transcript visible while surfacing malformed stream frames', async () => {
-    vi.mocked(api.peekSession).mockResolvedValue(transcript);
+    mockFetchSupervisorSessionTranscript.mockResolvedValue(transcript);
 
     const { result } = renderHook(() => useSessionStream('gc-session-1', true));
     await flush();
@@ -111,7 +118,7 @@ describe('useSessionStream', () => {
   });
 
   it('reports initial transcript load failure without nullable result fields', async () => {
-    vi.mocked(api.peekSession).mockRejectedValue(new Error('peek failed'));
+    mockFetchSupervisorSessionTranscript.mockRejectedValue(new Error('peek failed'));
 
     const { result } = renderHook(() => useSessionStream('gc-session-1', true));
     await flush();

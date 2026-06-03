@@ -1,11 +1,15 @@
 import {
   GC_EVENT_PREFIX,
-  type DashboardSnapshot,
+  type RunLane,
+  type RunSummary,
+  type SourceState,
   type SourceStatus,
 } from 'gas-city-dashboard-shared';
 import { useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api } from '../api/client';
+import { getActiveCity } from '../api/cityBase';
+import { useAttentionModel } from '../attention/context';
+import { resourceAttentionSeverity } from '../attention/routeHighlight';
 import { Button } from '../components/Button';
 import { PageHeader } from '../components/PageHeader';
 import { PartialDataNotice } from '../components/PartialDataNotice';
@@ -18,18 +22,18 @@ import { useNow } from '../contexts/NowContext';
 import { formatRelative } from '../hooks/time';
 import { useCachedData } from '../hooks/useCachedData';
 import { useGcEventRefresh } from '../hooks/useGcEvents';
+import { loadSupervisorRunSummarySource } from '../supervisor/runSummary';
 
 // /runs route (gascity-dashboard-0t6, made live in
-// gascity-dashboard-bqn). Reads /api/snapshot via useCachedData for
-// the initial cache-warm paint; explicit refresh() routes through
-// /api/snapshot/refresh?sources=runs which bypasses the backend's
-// 60s runs cache TTL. Both the manual Refresh button and the
-// SSE-driven onMatch callback share that one bypass code path, so the
-// in-memory snapshot cache and the React state always reflect the
-// latest force-refresh — no last-write-wins race between concurrent
-// mount-GET and event-driven POST.
+// gascity-dashboard-bqn). Reads the direct supervisor run summary source
+// through useCachedData for the initial cache-warm paint. Both the manual
+// Refresh button and the SSE-driven onMatch callback share that one loader
+// path, so the in-memory run-summary cache and React state always reflect the
+// same refresh result — no last-write-wins race between concurrent initial
+// load and event-driven refresh.
 //
-// Live updates: useGcEventRefresh subscribes to /api/events/stream and
+// Live updates: useGcEventRefresh subscribes to the direct supervisor city
+// event stream and
 // fires onMatch when a bead.* event arrives. The hook coalesces its
 // own bursts to ~1 fire per 2.5s; we layer a 10s in-component debounce
 // floor on top because runs refresh triggers a full upstream
@@ -49,23 +53,24 @@ const HISTORY_QUERY_PARAM = 'history';
 const HISTORY_QUERY_VALUE = '1';
 
 export function RunsPage() {
+  const attention = useAttentionModel();
+  const cityName = getActiveCity();
   const { data, loading, error, refresh } = useCachedData(
-    "snapshot",
-    () => api.snapshot(),
-    { refreshFetcher: () => api.snapshotRefresh(["runs"]) },
+    `runs:summary:${cityName ?? 'no-city'}`,
+    loadSupervisorRunSummarySource,
   );
   const [searchParams, setSearchParams] = useSearchParams();
   // gascity-dashboard-yh5i: ?history=1 toggles the historical lane
-  // section. Pure render-time state — the snapshot already carries both
+  // section. Pure render-time state — the summary already carries both
   // active + historical arrays, so the toggle does not trigger a fetch
-  // and useCachedData's 'snapshot' cache key stays stable across modes.
+  // and useCachedData's run-summary cache key stays stable across modes.
   const showHistory = searchParams.get(HISTORY_QUERY_PARAM) === HISTORY_QUERY_VALUE;
   const now = useNow();
   const runsStatusRef = useRef<SourceStatus | null>(null);
   const loadingRef = useRef(loading);
   loadingRef.current = loading;
   const lastRefreshAtRef = useRef(0);
-  const runs = data?.sources.runs ?? null;
+  const runs = data ?? null;
   runsStatusRef.current = runs?.status ?? null;
   const runsData =
     runs?.status === 'fresh' || runs?.status === 'fixture' || runs?.status === 'stale'
@@ -113,6 +118,10 @@ export function RunsPage() {
   }, [refresh]);
 
   const sseState = useGcEventRefresh([GC_EVENT_PREFIX.bead], onSseMatch);
+  const runAttentionSeverity = useCallback(
+    (lane: RunLane) => resourceAttentionSeverity(attention, 'runs', lane.id),
+    [attention],
+  );
 
   const synopsis = runSynopsis(data);
 
@@ -193,19 +202,23 @@ export function RunsPage() {
       {data === undefined || runs === null ? (
         <p className="text-body text-fg-muted italic">Loading formula runs.</p>
       ) : (
-        <RunMap source={runs} now={now} showHistory={showHistory} />
+        <RunMap
+          source={runs}
+          now={now}
+          showHistory={showHistory}
+          attentionSeverity={runAttentionSeverity}
+        />
       )}
     </section>
   );
 }
 
-function runSynopsis(data: DashboardSnapshot | undefined): string {
+function runSynopsis(data: SourceState<RunSummary> | undefined): string {
   if (data === undefined) return "Loading formula run lanes.";
 
-  const metric = data.headline.activeRuns;
-  if (metric.status === "available") {
-    return `${metric.value} active runs across the supervisor's bead store. ${RUN_PHASE_GRAMMAR}`;
+  if (data.status !== 'error') {
+    return `${data.data.totalActive} active runs across the supervisor's bead store. ${RUN_PHASE_GRAMMAR}`;
   }
 
-  return `Run counts unavailable: ${metric.error}. ${RUN_PHASE_GRAMMAR}`;
+  return `Run counts unavailable: ${data.error}. ${RUN_PHASE_GRAMMAR}`;
 }

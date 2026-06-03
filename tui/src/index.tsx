@@ -28,7 +28,9 @@ function main(): void {
     if (useAlt) process.stdout.write(ALT_LEAVE);
   };
 
-  const app = render(<App baseUrl={config.baseUrl} city={config.city} />);
+  const app = render(
+    <App baseUrl={config.baseUrl} city={config.city} compact={config.compact} mouse={config.mouse} />,
+  );
   app.waitUntilExit().then(restore, restore);
   // Belt-and-suspenders: leave the alt screen even on an abrupt exit so the
   // user's terminal is never left in the alternate buffer.

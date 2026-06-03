@@ -313,34 +313,6 @@ describe('GcClient error handling', () => {
     assert.equal(snapshot.run_id, 'wf/one');
   });
 
-  test('fetches health through the generated city-scoped supervisor path', async () => {
-    let seenUrl = '';
-    fake.setHandler((req, res) => {
-      seenUrl = req.url ?? '';
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        status: 'ok',
-        version: 'dev',
-        city: 'city one',
-        uptime_sec: 12,
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'city one',
-      defaultTimeoutMs: 5_000,
-    });
-    const health = await gc.health();
-    assert.deepEqual(health, {
-      status: 'ok',
-      version: 'dev',
-      city: 'city one',
-      uptime_sec: 12,
-    });
-    assert.equal(seenUrl, '/v0/city/city%20one/health');
-  });
-
   test('passes filtered include-closed query when listing beads', async () => {
     let seenUrl = '';
     fake.setHandler((req, res) => {
@@ -532,44 +504,6 @@ describe('GcClient error handling', () => {
     assert.equal(out.total, 0);
   });
 
-  test('F3: listMail accepts items=null and normalizes to []', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        items: null,
-        total: 0,
-        partial: true,
-        partial_errors: ['provider/foo timeout'],
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.listMail();
-    assert.deepEqual(out.items, []);
-    assert.equal(out.partial, true);
-    assert.deepEqual(out.partial_errors, ['provider/foo timeout']);
-  });
-
-  test('F3: listEvents accepts items=null and normalizes to []', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ items: null, total: 0 }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.listEvents();
-    assert.deepEqual(out.items, []);
-    assert.equal(out.total, 0);
-  });
-
   test('F3: listBeads with non-array items (e.g. number) still rejects', async () => {
     // Removing the dead `Array.isArray(items)` guards in routes/* is only
     // safe if the decoder rejects every non-array shape the supervisor
@@ -591,10 +525,9 @@ describe('GcClient error handling', () => {
     );
   });
 
-  // The four list decoders share `listItemsField` — but exercise each
-  // wrapper independently so a future regression in listSessions / listMail
-  // / listEvents (e.g. someone wires up a permissive override) is caught
-  // by its own test instead of relying on listBeads as a proxy.
+  // The list decoders share `listItemsField` — but exercise each wrapper
+  // independently so a future regression is caught by its own test instead
+  // of relying on listBeads as a proxy.
   test('F3: listSessions with non-array items still rejects', async () => {
     fake.setHandler((_req, res) => {
       res.statusCode = 200;
@@ -609,40 +542,6 @@ describe('GcClient error handling', () => {
     await assert.rejects(
       () => gc.listSessions(),
       /invalid gc supervisor listSessions payload/i,
-    );
-  });
-
-  test('F3: listMail with non-array items still rejects', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ items: { not: 'array' } }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.listMail(),
-      /invalid gc supervisor listMail payload/i,
-    );
-  });
-
-  test('F3: listEvents with non-array items still rejects', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ items: 7 }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.listEvents(),
-      /invalid gc supervisor listEvents payload/i,
     );
   });
 
@@ -730,24 +629,6 @@ describe('GcClient error handling', () => {
     assert.equal(out.deps, undefined);
   });
 
-  test('F7/F8: health with city + version absent decodes (wire-drift, surfaceable in UI)', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ status: 'ok', uptime_sec: 12345 }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.health();
-    assert.equal(out.status, 'ok');
-    assert.equal(out.uptime_sec, 12345);
-    assert.equal(out.city, undefined);
-    assert.equal(out.version, undefined);
-  });
-
   // gascity-dashboard-ej9y: /v0/city/<city>/formulas/feed surfaces cross-rig
   // formula runs (rig-stored workflow roots that listBeads doesn't return).
   // The workflows snapshot collector uses this to bootstrap its rig set.
@@ -776,7 +657,7 @@ describe('GcClient error handling', () => {
         ],
         // mfb9: FormulaFeedBody.partial is declared `boolean` (required) in
         // the supervisor's OpenAPI — keep the fixture aligned with the wire
-        // contract so the decoder's RequiredPartialField test passes.
+        // contract the generated supervisor client validates.
         partial: false,
       }));
     });
@@ -786,14 +667,14 @@ describe('GcClient error handling', () => {
       defaultTimeoutMs: 5_000,
     });
     const out = await gc.listFormulaRuns({ scopeKind: 'city', scopeRef: 'ds-research' });
+    assert.ok(out.items);
     assert.equal(out.items.length, 1);
-    assert.equal(out.items[0]?.run_id, 'gc-0ioyjp');
-    assert.equal((out.items[0] as unknown as Record<string, unknown>)?.workflow_id, undefined);
+    assert.equal(out.items[0]?.workflow_id, 'gc-0ioyjp');
     assert.equal(out.items[0]?.root_store_ref, 'rig:gascity');
     assert.equal(out.items[0]?.target, '/home/ds/gascity/polecat');
   });
 
-  test('ej9y: listFormulaRuns accepts items=null + partial signal (mirrors izgc F3 pattern)', async () => {
+  test('ej9y: listFormulaRuns preserves generated items=null + partial signal', async () => {
     fake.setHandler((_req, res) => {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
@@ -809,7 +690,7 @@ describe('GcClient error handling', () => {
       defaultTimeoutMs: 5_000,
     });
     const out = await gc.listFormulaRuns({ scopeKind: 'city', scopeRef: 'ds-research' });
-    assert.deepEqual(out.items, []);
+    assert.equal(out.items, null);
     assert.equal(out.partial, true);
     assert.deepEqual(out.partial_errors, ['monitor backend degraded']);
   });
@@ -856,37 +737,31 @@ describe('GcClient error handling', () => {
 
   // gascity-dashboard-19w: GET /v0/city/{cityName}/rigs replaces the
   // on-disk city.toml parse. These tests pin the GcClient.listRigs
-  // boundary — the snapshot-cityStatus tests inject a pre-decoded
-  // GcRigList directly, so without these the URL + decoder path is
-  // untested.
+  // boundary so the URL + decoder path is tested.
 
   test('19w: listRigs decodes a populated rig list (name+path only)', async () => {
     fake.setHandler((_req, res) => {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
-      // Supervisor's RigResponse carries more fields (agent_count, suspended,
-      // git status, etc.); GcRig is intentionally narrowed to name+path.
-      // RigSchema uses passthrough, so the extras are accepted but not
-          // surfaced in the typed output.
-          res.end(JSON.stringify({
-            items: [
-              {
-                name: 'gascity',
-                path: '/home/ds/gascity/polecat',
-                agent_count: 3,
-                running_count: 1,
-                suspended: false,
-              },
-              {
-                name: 'shared',
-                path: '/home/ds/shared/work',
-                agent_count: 0,
-                running_count: 0,
-                suspended: false,
-              },
-            ],
-            total: 2,
-          }));
+      res.end(JSON.stringify({
+        items: [
+          {
+            name: 'gascity',
+            path: '/home/ds/gascity/polecat',
+            agent_count: 3,
+            running_count: 1,
+            suspended: false,
+          },
+          {
+            name: 'shared',
+            path: '/home/ds/shared/work',
+            agent_count: 0,
+            running_count: 0,
+            suspended: false,
+          },
+        ],
+        total: 2,
+      }));
     });
     const gc = new GcClient({
       baseUrl: fake.baseUrl,
@@ -894,11 +769,12 @@ describe('GcClient error handling', () => {
       defaultTimeoutMs: 5_000,
     });
     const out = await gc.listRigs();
-    assert.equal(out.items.length, 2);
-    assert.equal(out.items[0]?.name, 'gascity');
-    assert.equal(out.items[0]?.path, '/home/ds/gascity/polecat');
-    assert.equal(out.items[1]?.name, 'shared');
-    assert.equal(out.items[1]?.path, '/home/ds/shared/work');
+    const items = out.items ?? [];
+    assert.equal(items.length, 2);
+    assert.equal(items[0]?.name, 'gascity');
+    assert.equal(items[0]?.path, '/home/ds/gascity/polecat');
+    assert.equal(items[1]?.name, 'shared');
+    assert.equal(items[1]?.path, '/home/ds/shared/work');
   });
 
   test('19w: listRigs accepts items=null + partial signal (mirrors izgc F3 pattern)', async () => {
@@ -973,12 +849,8 @@ describe('GcClient error handling', () => {
             context_window: 200_000,
             // Extra supervisor fields (last_output, active_bead) ride through
             // AgentSchema's .passthrough() and remain on the raw decoded
-            // object, but the dashboard-side GcAgent interface intentionally
-            // narrows to fields the Agents view consumes — they are not
-            // exposed on the typed surface, so callers cannot read them
-            // without an unsafe cast. That's the correct boundary: new
-            // supervisor fields don't break decoding, but adopting them in
-            // the dashboard requires an explicit shared-types change.
+            // object, and the generated AgentResponse type keeps them on the
+            // supervisor-owned shape without adding a dashboard shared DTO.
             last_output: 'reviewing PR',
             active_bead: 'gascity-dashboard-ay6',
             session: {
@@ -1007,18 +879,19 @@ describe('GcClient error handling', () => {
       defaultTimeoutMs: 5_000,
     });
     const out = await gc.listAgents();
-    assert.equal(out.items.length, 2);
-    assert.equal(out.items[0]?.name, 'mayor');
-    assert.equal(out.items[0]?.display_name, 'Mayor');
-    assert.equal(out.items[0]?.running, true);
-    assert.equal(out.items[0]?.state, 'active');
-    assert.equal(out.items[0]?.session?.name, 'gc-sess-mayor');
-    assert.equal(out.items[0]?.session?.attached, true);
-    assert.equal(out.items[0]?.session?.last_activity, '2026-05-29T10:00:00Z');
+    const items = out.items ?? [];
+    assert.equal(items.length, 2);
+    assert.equal(items[0]?.name, 'mayor');
+    assert.equal(items[0]?.display_name, 'Mayor');
+    assert.equal(items[0]?.running, true);
+    assert.equal(items[0]?.state, 'active');
+    assert.equal(items[0]?.session?.name, 'gc-sess-mayor');
+    assert.equal(items[0]?.session?.attached, true);
+    assert.equal(items[0]?.session?.last_activity, '2026-05-29T10:00:00Z');
     // The orphan agent's session must be absent (no silent {} fabrication).
-    assert.equal(out.items[1]?.name, 'kb3');
-    assert.equal(out.items[1]?.session, undefined);
-    assert.equal(out.items[1]?.running, false);
+    assert.equal(items[1]?.name, 'kb3');
+    assert.equal(items[1]?.session, undefined);
+    assert.equal(items[1]?.running, false);
   });
 
   test('ay6: listAgents accepts items=null + partial signal (mirrors izgc F3 pattern)', async () => {
@@ -1087,74 +960,6 @@ describe('GcClient error handling', () => {
     assert.equal(out.display_name, 'Mayor');
     assert.equal(out.state, 'active');
     assert.equal(out.running, true);
-  });
-
-  test('rejects malformed mail list payloads at the supervisor boundary', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ items: [{ id: 'mail-1' }], total: 1 }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.listMail(),
-      /invalid gc supervisor listMail payload/i,
-    );
-  });
-
-  test('rejects mail lists missing required envelope fields', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ items: [validMail('mail-1')] }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.listMail(),
-      /invalid gc supervisor listMail payload: payload\.total must be/i,
-    );
-  });
-
-  test('rejects malformed event list payloads at the supervisor boundary', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ items: [{ type: 'session.started' }] }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.listEvents(),
-      /invalid gc supervisor listEvents payload/i,
-    );
-  });
-
-  test('rejects event lists missing required envelope fields', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ items: [] }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.listEvents(),
-      /invalid gc supervisor listEvents payload: payload\.total must be/i,
-    );
   });
 
   test('rejects malformed run snapshots at the supervisor boundary', async () => {
@@ -1265,57 +1070,6 @@ describe('GcClient error handling', () => {
     );
   });
 
-  test('6bv7 F12: listEvents rejects an event missing actor or payload', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        items: [{ seq: 1, type: 'bead.created', ts: '2026-05-29T00:00:00Z' }],
-        total: 1,
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.listEvents(),
-      /invalid gc supervisor listEvents payload/i,
-    );
-  });
-
-  test('6bv7 F13/F14: listEvents forwards total; phantom "next" key is no longer in the typed interior', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      // Supplying the old phantom `next` key must NOT crash the decoder
-      // (.passthrough()), even though the typed GcEventList interface no
-      // longer declares it. Any consumer that still tries to read `next`
-      // through GcEventList would now fail tsc.
-      res.end(JSON.stringify({
-        items: [],
-        next: 12345,
-        total: 17,
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.listEvents();
-    assert.equal(out.total, 17);
-    // Compile-time contract: `next` is no longer on GcEventList, so the
-    // following access is only valid via an explicit cast. That cast is
-    // the new tripwire — any consumer using `next` will need it, and any
-    // ungated `eventList.next` access fails tsc. The runtime assertion
-    // pins the other half of the contract: passthrough() preserves the
-    // wire value (so we don't silently drop supervisor data), but the
-    // typed interior hides it behind the cast.
-    assert.equal((out as unknown as { next?: number }).next, 12345);
-  });
-
   test('6bv7 F14: listBeads rejects a payload missing total', async () => {
     fake.setHandler((_req, res) => {
       res.statusCode = 200;
@@ -1395,7 +1149,7 @@ describe('GcClient error handling', () => {
   test('6bv7 F16: GcBead typed interior no longer declares owner/updated_at/closed_at/dependency_count/dependent_count/comment_count', async () => {
     // These fields were never in the OpenAPI Bead schema. After 6bv7 the
     // typed GcBead interface drops them, so any frontend consumer reading
-    // `bead.updated_at` now fails tsc. Runtime payloads may still include
+    // one of these names now fails tsc. Runtime payloads may still include
     // them (passthrough()) — that is intentional so a future supervisor
     // that DOES add one of these doesn't crash the dash before the SSOT
     // catches up. The contract that matters is the type, not the runtime
@@ -1420,8 +1174,6 @@ describe('GcClient error handling', () => {
     // which is the compile-time signal a future reviewer must explain.
     // @ts-expect-error owner removed from GcBead in 6bv7 (F16)
     void bead.owner;
-    // @ts-expect-error updated_at removed from GcBead in 6bv7 (F16)
-    void bead.updated_at;
     // @ts-expect-error closed_at removed from GcBead in 6bv7 (F16)
     void bead.closed_at;
     // @ts-expect-error dependency_count removed from GcBead in 6bv7 (F16)
@@ -1430,38 +1182,6 @@ describe('GcClient error handling', () => {
     void bead.dependent_count;
     // @ts-expect-error comment_count removed from GcBead in 6bv7 (F16)
     void bead.comment_count;
-  });
-
-  test('6bv7 F17: listMail surfaces priority/cc/reply_to when the supervisor emits them', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        items: [{
-          id: 'mail-1',
-          from: 'agent',
-          to: 'human',
-          subject: 's',
-          body: 'b',
-          created_at: '2026-05-29T00:00:00Z',
-          read: false,
-          priority: 7,
-          cc: ['cc@example.test'],
-          reply_to: 'reply@example.test',
-        }],
-        total: 1,
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.listMail();
-    const item = out.items[0];
-    assert.equal(item?.priority, 7);
-    assert.deepEqual(item?.cc, ['cc@example.test']);
-    assert.equal(item?.reply_to, 'reply@example.test');
   });
 
   test('6bv7 F19: getFormulaDetail rejects a preview node missing title or kind', async () => {
@@ -1678,554 +1398,11 @@ describe('GcClient.sling', () => {
 
 });
 
-// gascity-dashboard-mq2: GcClient.updateBead PATCHes /bead/{id} (the canonical
-// update verb per api-ops-design.md) in place of the `gc bd update` CLI
-// subprocess (the bead-CLAIM path).
-describe('GcClient.updateBead', () => {
-  let fake: Fake;
-  beforeEach(async () => {
-    fake = await startFake();
-  });
-  afterEach(async () => {
-    await fake.close();
-  });
-
-  test('PATCHes the city bead endpoint with the CSRF header + JSON body', async () => {
-    let method: string | undefined;
-    let url: string | undefined;
-    let csrf: string | undefined;
-    let contentType: string | undefined;
-    let bodyRaw = '';
-    fake.setHandler((req, res) => {
-      method = req.method;
-      url = req.url;
-      csrf = req.headers['x-gc-request'] as string | undefined;
-      contentType = req.headers['content-type'] as string | undefined;
-      req.on('data', (c) => (bodyRaw += c));
-      req.on('end', () => {
-        res.statusCode = 200;
-        res.setHeader('content-type', 'application/json');
-        res.end(JSON.stringify({ status: 'ok' }));
-      });
-    });
-    const gc = new GcClient({ baseUrl: fake.baseUrl, cityName: 'test-city', defaultTimeoutMs: 5_000 });
-
-    await gc.updateBead('td-wisp-abc123', { status: 'in_progress', assignee: 'stephanie' });
-
-    assert.equal(method, 'PATCH');
-    assert.equal(url, '/v0/city/test-city/bead/td-wisp-abc123');
-    assert.ok(csrf && csrf.length > 0, 'X-GC-Request header must be present');
-    assert.match(contentType ?? '', /application\/json/);
-    assert.deepEqual(JSON.parse(bodyRaw), {
-      status: 'in_progress',
-      assignee: 'stephanie',
-    });
-  });
-
-  test('URL-encodes the bead id in the path', async () => {
-    let url: string | undefined;
-    fake.setHandler((req, res) => {
-      url = req.url;
-      req.on('data', () => { });
-      req.on('end', () => {
-        res.statusCode = 200;
-        res.setHeader('content-type', 'application/json');
-        res.end(JSON.stringify({ status: 'ok' }));
-      });
-    });
-    const gc = new GcClient({ baseUrl: fake.baseUrl, cityName: 'test-city', defaultTimeoutMs: 5_000 });
-    await gc.updateBead('gc-1/2', { status: 'in_progress' });
-    assert.equal(url, '/v0/city/test-city/bead/gc-1%2F2');
-  });
-
-  test('non-2xx throws a redacted error (status only, no topology)', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 502;
-      res.end('boom');
-    });
-    const gc = new GcClient({ baseUrl: fake.baseUrl, cityName: 'secret-city', defaultTimeoutMs: 5_000 });
-    let err: unknown;
-    try {
-      await gc.updateBead('td-wisp-abc123', { status: 'in_progress' });
-    } catch (e) {
-      err = e;
-    }
-    assert.ok(err instanceof Error, 'expected an Error rejection');
-    const msg = (err as Error).message;
-    assert.match(msg, /502/);
-    assert.doesNotMatch(msg, /secret-city/, `message leaked city name: ${msg}`);
-    assert.doesNotMatch(msg, /127\.0\.0\.1/, `message leaked loopback address: ${msg}`);
-  });
-
-});
-
-// gascity-dashboard-mq2: GcClient.sendMail POSTs to /mail in place of the
-// `gc mail send` CLI subprocess. The supervisor returns 201 with the created
-// Message; the caller reads `id` off the response.
-describe('GcClient.sendMail', () => {
-  let fake: Fake;
-  beforeEach(async () => {
-    fake = await startFake();
-  });
-  afterEach(async () => {
-    await fake.close();
-  });
-
-  test('POSTs to the city mail endpoint with the CSRF header + JSON body, parses the 201 Message', async () => {
-    let method: string | undefined;
-    let url: string | undefined;
-    let csrf: string | undefined;
-    let contentType: string | undefined;
-    let bodyRaw = '';
-    fake.setHandler((req, res) => {
-      method = req.method;
-      url = req.url;
-      csrf = req.headers['x-gc-request'] as string | undefined;
-      contentType = req.headers['content-type'] as string | undefined;
-      req.on('data', (c) => (bodyRaw += c));
-      req.on('end', () => {
-        // Supervisor returns 201 Created on mail send.
-        res.statusCode = 201;
-        res.setHeader('content-type', 'application/json');
-        res.end(
-          JSON.stringify({
-            id: 'td-wisp-xyz789',
-            from: 'human',
-            to: 'mayor',
-            subject: 'status',
-            body: 'all green',
-            created_at: '2026-05-26T00:00:00Z',
-            read: false,
-          }),
-        );
-      });
-    });
-    const gc = new GcClient({ baseUrl: fake.baseUrl, cityName: 'test-city', defaultTimeoutMs: 5_000 });
-
-    const out = await gc.sendMail({ to: 'mayor', subject: 'status', body: 'all green', from: 'human' });
-
-    assert.equal(method, 'POST');
-    assert.equal(url, '/v0/city/test-city/mail');
-    assert.ok(csrf && csrf.length > 0, 'X-GC-Request header must be present');
-    assert.match(contentType ?? '', /application\/json/);
-    assert.deepEqual(JSON.parse(bodyRaw), {
-      to: 'mayor',
-      subject: 'status',
-      body: 'all green',
-      from: 'human',
-    });
-    assert.equal(out.id, 'td-wisp-xyz789');
-  });
-
-  test('non-2xx throws a redacted error (status only, no topology)', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 502;
-      res.end('boom');
-    });
-    const gc = new GcClient({ baseUrl: fake.baseUrl, cityName: 'secret-city', defaultTimeoutMs: 5_000 });
-    let err: unknown;
-    try {
-      await gc.sendMail({ to: 'mayor', subject: 'x', body: 'y', from: 'human' });
-    } catch (e) {
-      err = e;
-    }
-    assert.ok(err instanceof Error, 'expected an Error rejection');
-    const msg = (err as Error).message;
-    assert.match(msg, /502/);
-    assert.doesNotMatch(msg, /secret-city/, `message leaked city name: ${msg}`);
-    assert.doesNotMatch(msg, /127\.0\.0\.1/, `message leaked loopback address: ${msg}`);
-  });
-
-  test('rejects malformed mail-send responses at the supervisor boundary', async () => {
-    fake.setHandler((req, res) => {
-      req.resume();
-      req.on('end', () => {
-        res.statusCode = 201;
-        res.setHeader('content-type', 'application/json');
-        res.end(JSON.stringify({ subject: 'missing id' }));
-      });
-    });
-    const gc = new GcClient({ baseUrl: fake.baseUrl, cityName: 'test-city', defaultTimeoutMs: 5_000 });
-
-    await assert.rejects(
-      () => gc.sendMail({ to: 'mayor', subject: 'x', body: 'y', from: 'human' }),
-      /invalid gc supervisor sendMail payload/i,
-    );
-  });
-});
-
-// gascity-dashboard-hvx: per-formula run history + order feed/history.
-// The cross-formula /formulas/feed is covered above (listFormulaRuns); this
-// block covers the four neighbouring endpoints that have no dashboard
-// consumer yet — adding them here pins the GcClient boundary so the future
-// formula-detail / orders pages don't reinvent the decoder edge.
-describe('GcClient formula/order run history', () => {
-  let fake: Fake;
-  beforeEach(async () => {
-    fake = await startFake();
-  });
-  afterEach(async () => {
-    await fake.close();
-  });
-
-  // ── listFormulaRunsByName ───────────────────────────────────────────────
-
-  test('hvx: listFormulaRunsByName decodes a populated runs payload', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        formula: 'mol-adopt-pr-v2',
-        run_count: 2,
-        recent_runs: [
-          {
-            workflow_id: 'gc-aaa',
-            target: '/home/ds/gascity/polecat',
-            status: 'done',
-            started_at: '2026-05-28T20:00:00Z',
-            updated_at: '2026-05-28T20:42:00Z',
-          },
-          {
-            workflow_id: 'gc-bbb',
-            target: '/home/ds/gascity/polecat',
-            status: 'in_progress',
-            started_at: '2026-05-29T01:11:00Z',
-            updated_at: '2026-05-29T01:15:00Z',
-          },
-        ],
-        partial: false,
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.listFormulaRunsByName('mol-adopt-pr-v2', {
-      scopeKind: 'city',
-      scopeRef: 'ds-research',
-    });
-    assert.equal(out.formula, 'mol-adopt-pr-v2');
-    assert.equal(out.run_count, 2);
-    assert.equal(out.recent_runs.length, 2);
-    assert.equal(out.recent_runs[0]?.run_id, 'gc-aaa');
-    assert.equal((out.recent_runs[0] as unknown as Record<string, unknown>)?.workflow_id, undefined);
-    assert.equal(out.partial, false);
-  });
-
-  test('hvx: listFormulaRunsByName accepts recent_runs=null + partial signal', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        formula: 'mol-adopt-pr-v2',
-        run_count: 0,
-        recent_runs: null,
-        partial: true,
-        partial_errors: ['index backend degraded'],
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.listFormulaRunsByName('mol-adopt-pr-v2', {
-      scopeKind: 'city',
-      scopeRef: 'ds-research',
-    });
-    assert.deepEqual(out.recent_runs, []);
-    assert.equal(out.partial, true);
-    assert.deepEqual(out.partial_errors, ['index backend degraded']);
-  });
-
-  test('hvx: listFormulaRunsByName rejects payload missing required formula field', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      // Missing `formula` — supervisor's OpenAPI declares it required.
-      res.end(JSON.stringify({ run_count: 0, recent_runs: [], partial: false }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.listFormulaRunsByName('mol-adopt-pr-v2', {
-        scopeKind: 'city',
-        scopeRef: 'ds-research',
-      }),
-      /invalid gc supervisor listFormulaRunsByName payload.*formula/i,
-    );
-  });
-
-  test('hvx: listFormulaRunsByName URL-encodes the formula path segment', async () => {
-    // Some formula names embed '/' (e.g. namespaced 'pack/mol-thing'); the
-    // OpenAPI client must encode the path param. The handler observes the
-    // actual URL the client built.
-    let observedPath = '';
-    fake.setHandler((req, res) => {
-      observedPath = req.url ?? '';
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        formula: 'pack/mol-thing',
-        run_count: 0,
-        recent_runs: [],
-        partial: false,
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await gc.listFormulaRunsByName('pack/mol-thing', {
-      scopeKind: 'city',
-      scopeRef: 'ds',
-    });
-    assert.match(observedPath, /formulas\/pack%2Fmol-thing\/runs/);
-  });
-
-  // ── listOrdersFeed ──────────────────────────────────────────────────────
-
-  test('hvx: listOrdersFeed decodes a populated feed', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        items: [
-          {
-            id: 'gc-order1',
-            type: 'order',
-            status: 'pending',
-            title: 'check-mail',
-            scope_kind: 'city',
-            scope_ref: 'ds-research',
-            target: '/home/ds/gascity/polecat',
-            started_at: '2026-05-29T01:00:00Z',
-            updated_at: '2026-05-29T01:00:00Z',
-          },
-        ],
-        partial: false,
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.listOrdersFeed();
-    assert.equal(out.items.length, 1);
-    assert.equal(out.items[0]?.type, 'order');
-    assert.equal(out.items[0]?.title, 'check-mail');
-    assert.equal(out.partial, false);
-  });
-
-  test('hvx: listOrdersFeed accepts items=null + partial signal', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        items: null,
-        partial: true,
-        partial_errors: ['monitor backend degraded'],
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.listOrdersFeed();
-    assert.deepEqual(out.items, []);
-    assert.equal(out.partial, true);
-    assert.deepEqual(out.partial_errors, ['monitor backend degraded']);
-  });
-
-  test('hvx: listOrdersFeed rejects payload missing required partial field', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      // OrdersFeedBody.partial is required (mirrors FormulaFeedBody, mfb9).
-      res.end(JSON.stringify({ items: [] }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.listOrdersFeed(),
-      /invalid gc supervisor listOrdersFeed payload.*partial/i,
-    );
-  });
-
-  // ── listOrderHistory ────────────────────────────────────────────────────
-
-  test('hvx: listOrderHistory decodes a populated history list', async () => {
-    fake.setHandler((req, res) => {
-      // Verify scoped_name query param is forwarded.
-      assert.match(req.url ?? '', /scoped_name=city%3Acheck-mail/);
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        entries: [
-          {
-            bead_id: 'gc-run1',
-            name: 'check-mail',
-            scoped_name: 'city:check-mail',
-            created_at: '2026-05-29T00:00:00Z',
-            capture_output: true,
-            has_output: true,
-            labels: ['gc:order'],
-            store_ref: 'city:ds-research',
-            duration_ms: '4321',
-            exit_code: '0',
-          },
-        ],
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.listOrderHistory('city:check-mail');
-    assert.equal(out.entries.length, 1);
-    assert.equal(out.entries[0]?.bead_id, 'gc-run1');
-    assert.equal(out.entries[0]?.scoped_name, 'city:check-mail');
-    assert.deepEqual(out.entries[0]?.labels, ['gc:order']);
-    assert.equal(out.entries[0]?.duration_ms, '4321');
-  });
-
-  test('hvx: listOrderHistory accepts entries=null (preserves wire shape)', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ entries: null }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.listOrderHistory('city:check-mail');
-    assert.deepEqual(out.entries, []);
-  });
-
-  test('hvx: listOrderHistory rejects entry missing required bead_id', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        entries: [
-          {
-            // bead_id missing — OpenAPI declares it required.
-            name: 'check-mail',
-            scoped_name: 'city:check-mail',
-            created_at: '2026-05-29T00:00:00Z',
-            capture_output: true,
-            has_output: true,
-            labels: null,
-            store_ref: 'city:ds-research',
-          },
-        ],
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.listOrderHistory('city:check-mail'),
-      /invalid gc supervisor listOrderHistory payload.*bead_id/i,
-    );
-  });
-
-  // ── getOrderHistoryDetail ───────────────────────────────────────────────
-
-  test('hvx: getOrderHistoryDetail decodes a populated detail payload', async () => {
-    fake.setHandler((req, res) => {
-      // Verify path parameter encoding and optional store_ref query.
-      assert.match(req.url ?? '', /\/order\/history\/gc-run1/);
-      assert.match(req.url ?? '', /store_ref=city%3Ads-research/);
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        bead_id: 'gc-run1',
-        store_ref: 'city:ds-research',
-        created_at: '2026-05-29T00:00:00Z',
-        labels: ['gc:order'],
-        output: 'hello from check-mail\n',
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.getOrderHistoryDetail('gc-run1', {
-      storeRef: 'city:ds-research',
-    });
-    assert.equal(out.bead_id, 'gc-run1');
-    assert.equal(out.output, 'hello from check-mail\n');
-    assert.deepEqual(out.labels, ['gc:order']);
-  });
-
-  test('hvx: getOrderHistoryDetail accepts labels=null (preserves wire shape)', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        bead_id: 'gc-run1',
-        store_ref: 'city:ds-research',
-        created_at: '2026-05-29T00:00:00Z',
-        labels: null,
-        output: '',
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    const out = await gc.getOrderHistoryDetail('gc-run1');
-    assert.equal(out.labels, null);
-    assert.equal(out.output, '');
-  });
-
-  test('hvx: getOrderHistoryDetail rejects payload missing required output field', async () => {
-    fake.setHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({
-        bead_id: 'gc-run1',
-        store_ref: 'city:ds-research',
-        created_at: '2026-05-29T00:00:00Z',
-        labels: null,
-        // output missing — OpenAPI declares it required.
-      }));
-    });
-    const gc = new GcClient({
-      baseUrl: fake.baseUrl,
-      cityName: 'test',
-      defaultTimeoutMs: 5_000,
-    });
-    await assert.rejects(
-      () => gc.getOrderHistoryDetail('gc-run1'),
-      /invalid gc supervisor getOrderHistoryDetail payload.*output/i,
-    );
-  });
-});
-
 // gascity-dashboard-ucc: GET /v0/cities is the supervisor's city registry.
-// The dashboard decodes it into the CityInfo subset (host `path` omitted
-// from the dashboard's own wire shape) to drive the per-city runtime
-// registry + the frontend switcher.
-describe('GcClient.listCities', () => {
+// Backend use is now host-side only: the per-city runtime registry retains
+// the supervisor host path, while browser city discovery uses the generated
+// frontend supervisor client directly.
+describe('GcClient.listSupervisorCities', () => {
   let fake: Fake;
   beforeEach(async () => {
     fake = await startFake();
@@ -2234,7 +1411,7 @@ describe('GcClient.listCities', () => {
     await fake.close();
   });
 
-  test('decodes the supervisor cities array (host path stays host-side)', async () => {
+  test('decodes the supervisor cities array with host path retained', async () => {
     let seenUrl = '';
     fake.setHandler((req, res) => {
       seenUrl = req.url ?? '';
@@ -2249,17 +1426,15 @@ describe('GcClient.listCities', () => {
       }));
     });
     const gc = new GcClient({ baseUrl: fake.baseUrl, cityName: 'racoon-city', defaultTimeoutMs: 5_000 });
-    const out = await gc.listCities();
+    const out = await gc.listSupervisorCities();
     assert.equal(seenUrl, '/v0/cities');
-    assert.equal(out.total, 2);
-    assert.equal(out.items.length, 2);
-    assert.equal(out.items[0]?.name, 'racoon-city');
-    assert.equal(out.items[0]?.running, true);
-    assert.equal(out.items[0]?.status, 'ready');
-    assert.equal(out.items[1]?.name, 'gas-town');
-    assert.equal(out.items[1]?.running, false);
-    // The untrusted host path must NOT survive onto the dashboard wire shape.
-    assert.equal((out.items[0] as unknown as { path?: string }).path, undefined);
+    assert.equal(out.length, 2);
+    assert.equal(out[0]?.name, 'racoon-city');
+    assert.equal(out[0]?.path, '/home/ds/racoon-city');
+    assert.equal(out[0]?.running, true);
+    assert.equal(out[1]?.name, 'gas-town');
+    assert.equal(out[1]?.path, '/home/ds/gas-town');
+    assert.equal(out[1]?.running, false);
   });
 
   test('rejects a malformed cities payload (item missing required name)', async () => {
@@ -2270,8 +1445,8 @@ describe('GcClient.listCities', () => {
     });
     const gc = new GcClient({ baseUrl: fake.baseUrl, cityName: 'test', defaultTimeoutMs: 5_000 });
     await assert.rejects(
-      () => gc.listCities(),
-      /invalid gc supervisor listCities payload/i,
+      () => gc.listSupervisorCities(),
+      /invalid gc supervisor listSupervisorCities payload/i,
     );
   });
 
@@ -2283,8 +1458,8 @@ describe('GcClient.listCities', () => {
     });
     const gc = new GcClient({ baseUrl: fake.baseUrl, cityName: 'test', defaultTimeoutMs: 5_000 });
     await assert.rejects(
-      () => gc.listCities(),
-      /invalid gc supervisor listCities payload.*total/i,
+      () => gc.listSupervisorCities(),
+      /invalid gc supervisor listSupervisorCities payload.*total/i,
     );
   });
 
@@ -2295,9 +1470,8 @@ describe('GcClient.listCities', () => {
       res.end(JSON.stringify({ items: null, total: 0 }));
     });
     const gc = new GcClient({ baseUrl: fake.baseUrl, cityName: 'test', defaultTimeoutMs: 5_000 });
-    const out = await gc.listCities();
-    assert.deepEqual(out.items, []);
-    assert.equal(out.total, 0);
+    const out = await gc.listSupervisorCities();
+    assert.deepEqual(out, []);
   });
 });
 
@@ -2305,8 +1479,8 @@ describe('GcClient.listCities', () => {
 // with a numeric timezone offset (e.g. `-04:00`) on some records, but the
 // generated SDK response validator uses Zod's offset-intolerant
 // `z.iso.datetime()` (accepts only a `Z` suffix). A single offset-bearing
-// datetime rejected the WHOLE listAgents/listBeads array -> /api/agents and
-// /api/beads 502 -> dashboard panels blank. GcClient normalizes offset
+// datetime rejected the WHOLE listAgents/listBeads array -> dashboard agents
+// and beads panels blank. GcClient normalizes offset
 // datetimes to UTC `Z` at the client edge before validation so valid
 // supervisor data is accepted instead of discarded.
 describe('GcClient RFC3339 offset datetime normalization', () => {
@@ -2433,18 +1607,6 @@ function validBead(id: string) {
     issue_type: 'task',
     priority: 0,
     created_at: '2026-01-01T00:00:00.000Z',
-  };
-}
-
-function validMail(id: string) {
-  return {
-    id,
-    from: 'stephanie',
-    to: 'agent',
-    subject: id,
-    body: 'body',
-    created_at: '2026-01-01T00:00:00.000Z',
-    read: false,
   };
 }
 

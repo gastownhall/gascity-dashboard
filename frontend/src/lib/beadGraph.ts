@@ -1,4 +1,4 @@
-import type { GcBead } from 'gas-city-dashboard-shared';
+import type { SupervisorBead } from '../supervisor/beadReads';
 
 // Pure dependency-graph + kanban-column builder for the Beads board
 // (gascity-dashboard-6frc). The board is "part kanban, part dependency
@@ -43,18 +43,18 @@ export interface BeadDepEdge {
   /** The dependency target bead id (always present). */
   id: string;
   /** Resolved bead in the fetched window, or null when it points outside. */
-  bead: GcBead | null;
+  bead: SupervisorBead | null;
   /** Edge provenance: `needs` (the supervisor's blocking set) or a
    *  `dependencies[].type` string. */
   kind: string;
 }
 
 export interface BeadNode {
-  bead: GcBead;
+  bead: SupervisorBead;
   /** Upstream beads this one depends on, each resolved-or-unresolved. */
   deps: BeadDepEdge[];
   /** Downstream beads that depend on this one (in-window only). */
-  blocks: GcBead[];
+  blocks: SupervisorBead[];
   /** Derived board column. */
   column: BoardColumnId;
   /** Open + every blocking need resolves to a closed in-window bead. */
@@ -72,7 +72,7 @@ export interface BeadGraph {
 
 /** Upstream dependency ids for a bead, paired with their edge kind, deduped
  *  (first occurrence wins; `needs` is read before structured dependencies). */
-function depEntries(bead: GcBead): ReadonlyArray<{ id: string; kind: string }> {
+function depEntries(bead: SupervisorBead): ReadonlyArray<{ id: string; kind: string }> {
   const seen = new Set<string>();
   const entries: { id: string; kind: string }[] = [];
   for (const id of bead.needs ?? []) {
@@ -93,12 +93,12 @@ function depEntries(bead: GcBead): ReadonlyArray<{ id: string; kind: string }> {
  *  readiness. Structured `dependencies` of arbitrary type are shown in the
  *  graph but do not gate readiness — only `needs` is documented as
  *  "needs before it can run". */
-function blockingNeedIds(bead: GcBead): readonly string[] {
+function blockingNeedIds(bead: SupervisorBead): readonly string[] {
   return (bead.needs ?? []).filter((id) => id.length > 0);
 }
 
 function columnFor(node: {
-  bead: GcBead;
+  bead: SupervisorBead;
   ready: boolean;
 }): BoardColumnId {
   switch (node.bead.status) {
@@ -121,11 +121,11 @@ function byPriorityThenId(a: BeadNode, b: BeadNode): number {
   return a.bead.id < b.bead.id ? -1 : a.bead.id > b.bead.id ? 1 : 0;
 }
 
-export function buildBeadGraph(beads: readonly GcBead[]): BeadGraph {
-  const byId = new Map<string, GcBead>();
+export function buildBeadGraph(beads: readonly SupervisorBead[]): BeadGraph {
+  const byId = new Map<string, SupervisorBead>();
   for (const b of beads) byId.set(b.id, b);
 
-  const blocksOf = new Map<string, GcBead[]>();
+  const blocksOf = new Map<string, SupervisorBead[]>();
   const nodes = new Map<string, BeadNode>();
 
   // First pass: resolve upstream edges and readiness; accumulate inverse edges.

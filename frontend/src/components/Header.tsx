@@ -2,10 +2,14 @@ import { useMemo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import { getActiveCity } from '../api/cityBase';
+import { NavAttentionIndicator } from '../attention/NavAttentionIndicator';
+import { useAttentionModel } from '../attention/context';
+import type { AttentionDomain } from '../attention/compose';
 import { useTheme } from '../contexts/ThemeContext';
 import { useViewingAs, OPERATOR_ALIAS } from '../contexts/ViewingAsContext';
 import { displayLabel } from '../hooks/aliasPriority';
 import { useCachedData } from '../hooks/useCachedData';
+import { supervisorApi } from '../supervisor/client';
 import { ALL_VIEWS } from '../views/registry';
 import { filterEnabledViews } from '../views/resolve';
 
@@ -32,6 +36,16 @@ const EXPLICIT_ROUTES: ReadonlyArray<NavRoute> = [
   { to: '/mail', label: 'Mail', order: 50 },
 ];
 
+const NAV_ATTENTION_DOMAINS: Readonly<Record<string, AttentionDomain>> = {
+  '/agents': 'agents',
+  '/beads': 'beads',
+  '/runs': 'runs',
+  '/mail': 'mail',
+  '/activity': 'activity',
+  '/health': 'health',
+  '/maintainer': 'maintainer',
+};
+
 // The header is page furniture, not chrome. A small wordmark, the
 // five route names typeset as a row, a textual theme toggle. The
 // route weight contrast IS the active-state affordance; no underline,
@@ -39,6 +53,7 @@ const EXPLICIT_ROUTES: ReadonlyArray<NavRoute> = [
 export function Header() {
   const { resolved, toggle } = useTheme();
   const { viewingAs } = useViewingAs();
+  const attention = useAttentionModel();
   const { data: config } = useCachedData('config', () => api.config());
   // City switcher source (gascity-dashboard-ucc). Lists every managed city;
   // selecting one navigates (full reload) to that city's `/city/:name/`
@@ -46,7 +61,7 @@ export function Header() {
   // navigation — not client-side — keeps the active-city base, router
   // basename, and every city-scoped fetch consistent without a per-fetch
   // city argument.
-  const { data: cities } = useCachedData('cities', () => api.listCities());
+  const { data: cities } = useCachedData('cities', () => supervisorApi().listCities());
   const activeCity = getActiveCity();
   const cityItems = cities?.items ?? [];
   const onSwitchCity = (next: string): void => {
@@ -116,24 +131,33 @@ export function Header() {
 
         <nav className="flex-1">
           <ul className="flex items-baseline gap-x-5 lg:gap-x-7 gap-y-1 flex-wrap">
-            {ROUTES.map((r) => (
-              <li key={r.to}>
-                <NavLink
-                  to={r.to}
-                  end={r.end ?? false}
-                  className={({ isActive }) =>
-                    [
-                      'text-title transition-colors duration-150 ease-out-quart focus-mark',
-                      isActive
-                        ? 'text-fg font-semibold'
-                        : 'text-fg-muted font-medium hover:text-fg',
-                    ].join(' ')
-                  }
-                >
-                  {r.label}
-                </NavLink>
-              </li>
-            ))}
+            {ROUTES.map((r) => {
+              const domain = NAV_ATTENTION_DOMAINS[r.to];
+              return (
+                <li key={r.to}>
+                  <NavLink
+                    to={r.to}
+                    end={r.end ?? false}
+                    className={({ isActive }) =>
+                      [
+                        'text-title transition-colors duration-150 ease-out-quart focus-mark',
+                        isActive
+                          ? 'text-fg font-semibold'
+                          : 'text-fg-muted font-medium hover:text-fg',
+                      ].join(' ')
+                    }
+                  >
+                    {r.label}
+                    {domain !== undefined && (
+                      <NavAttentionIndicator
+                        label={r.label}
+                        summary={attention.byDomain[domain]}
+                      />
+                    )}
+                  </NavLink>
+                </li>
+              );
+            })}
           </ul>
         </nav>
 

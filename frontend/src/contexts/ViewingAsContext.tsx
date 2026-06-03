@@ -14,7 +14,6 @@ import {
   OPERATOR_WIRE_ALIAS as SHARED_OPERATOR_WIRE_ALIAS,
   type ViewingAs,
 } from 'gas-city-dashboard-shared';
-import { api } from '../api/client';
 import { prioritizeAliases, type AliasBucket } from '../hooks/aliasPriority';
 import {
   readBrowserStorage,
@@ -22,6 +21,8 @@ import {
   writeBrowserStorage,
 } from '../lib/browserStorage';
 import { reportClientError } from '../lib/clientErrorReporting';
+import { listSupervisorMail } from '../supervisor/mailReads';
+import { listSupervisorSessions } from '../supervisor/sessionReads';
 
 // Identity-switching for mail:
 //
@@ -48,13 +49,13 @@ const STORAGE_KEY = 'gascity.dashboard.viewingAs';
 const COMPONENT = 'ViewingAsContext';
 const OPERATOR = OPERATOR_DISPLAY_ALIAS;
 // gc's wire identity for the operator (mail is addressed to/from `human`,
-// not `stephanie` — see backend exec.ts and routes/mail.ts). The agent
+// not `stephanie` — see supervisor mail reads/writes). The agent
 // panel hides this from the switchable list so it doesn't read as a second
 // inbox distinct from the operator's own.
 const OPERATOR_WIRE = SHARED_OPERATOR_WIRE_ALIAS;
 const ALIAS_RE = /^[a-z][a-z0-9_./-]{1,63}$/i;
 
-// Bounded retry schedule for /api/sessions (gascity-dashboard-5gg).
+// Bounded retry schedule for supervisor sessions (gascity-dashboard-5gg).
 // A transient 504 on first page load used to latch sessionsUnavailable
 // permanently because loadAliases() is one-shot. Schedule three retries
 // with growing backoff so a recovering supervisor flips the footnote
@@ -108,8 +109,8 @@ interface ViewingAsContextValue {
   /** True iff loadAliases() has been called and the fetch is in-flight. */
   aliasesLoading: boolean;
   /**
-   * True iff loadAliases() ran and the /api/sessions fetch failed (timeout
-   * or other upstream error). The mail-derived alias list is still
+   * True iff loadAliases() ran and the supervisor sessions fetch failed
+   * (timeout or other upstream error). The mail-derived alias list is still
    * populated; consumers use this flag to swap a generic "loading more"
    * footnote for a terminal "agent list unavailable" message rather than
    * stay ambiguous. Mail panel uses this for the gascity-dashboard-xba
@@ -172,16 +173,16 @@ export function ViewingAsProvider({ children }: { children: ReactNode }) {
     writeStored(OPERATOR);
   }, []);
 
-  // One attempt at /api/sessions. Returns a promise that resolves to
-  // `true` on success (state updated) or `false` on failure. Extracted
+  // One attempt at supervisor sessions. Returns a promise that resolves
+  // to `true` on success (state updated) or `false` on failure. Extracted
   // so the retry loop can call it without duplicating the parsing.
   const attemptSessionsFetch = useCallback(async (): Promise<boolean> => {
     try {
-      const sessions = await api.listSessions();
+      const sessions = await listSupervisorSessions();
       if (!mountedRef.current) return true; // unmounted; bail without state work
       const seen = new Set<string>();
       const out: string[] = [];
-      for (const s of sessions.items) {
+      for (const s of sessions.items ?? []) {
         if (typeof s.alias !== 'string') continue;
         if (!ALIAS_RE.test(s.alias)) continue;
         const key = s.alias.toLowerCase();
@@ -247,7 +248,7 @@ export function ViewingAsProvider({ children }: { children: ReactNode }) {
     setAliasesLoading(true);
 
     // Resolve each source independently rather than awaiting both: the
-    // mail corpus returns in ~0.5s while /api/sessions can take many
+    // mail corpus returns in ~0.5s while supervisor sessions can take many
     // seconds (or time out). Gating both behind Promise.allSettled held
     // the fast mail-derived aliases hostage to the slow one, leaving the
     // agent panel stuck on "loading" for the full sessions latency.
@@ -274,11 +275,7 @@ export function ViewingAsProvider({ children }: { children: ReactNode }) {
       })
       .finally(settleOne);
 
-    void api
-      // Backend ignores alias for box='all' (returns the full corpus for
-      // client-side aggregation). The operator alias is passed only to
-      // satisfy the typed wrapper.
-      .listMail('all', OPERATOR)
+    void listSupervisorMail('all', OPERATOR)
       .then((mail) => {
         if (!mountedRef.current) return;
         const seen = new Set<string>();
@@ -310,7 +307,7 @@ export function ViewingAsProvider({ children }: { children: ReactNode }) {
   // cycle), and the cleanup sets it false on real unmount. The async IIFE
   // checks this flag before touching state. Cleanup also clears any
   // pending sessions-retry timer so a late firing can't trigger a
-  // post-unmount /api/sessions call (gascity-dashboard-5gg).
+  // post-unmount supervisor sessions call (gascity-dashboard-5gg).
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -327,7 +324,7 @@ export function ViewingAsProvider({ children }: { children: ReactNode }) {
       prioritizeAliases({
         operator: OPERATOR,
         // Inject the current alias so the <select> always has a matching
-        // <option> even if a stored alias has aged out of /api/sessions
+        // <option> even if a stored alias has aged out of supervisor sessions
         // (code-reviewer HIGH-2: prevents blank-selection visual mismatch).
         sessionAliases: sessionAliases.includes(alias)
           ? sessionAliases

@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import type {
-  DashboardSnapshot,
+  DashboardMetric,
   RunLane,
   RunSummary,
+  SourceState,
 } from 'gas-city-dashboard-shared';
-import { api } from '../api/client';
+import { getActiveCity } from '../api/cityBase';
+import { AttentionSummaryPanel } from '../attention/AttentionSummaryPanel';
 import { PageHeader } from '../components/PageHeader';
 import { ConcernRegion, type ConcernRow } from '../components/ambient/ConcernRegion';
 import { PhaseCensus } from '../components/ambient/PhaseCensus';
@@ -12,6 +14,8 @@ import { StatusSentence } from '../components/ambient/StatusSentence';
 import { useCachedData } from '../hooks/useCachedData';
 import { useFaviconSignal } from '../hooks/useFaviconSignal';
 import { useStaleness, type StalenessResult } from '../hooks/useStaleness';
+import { supervisorApi } from '../supervisor/client';
+import { loadSupervisorRunSummarySource } from '../supervisor/runSummary';
 
 // gascity-dashboard-kb3 — the L0 ambient home at `/`. PRD §4 + §5.
 //
@@ -96,24 +100,25 @@ function countWaiting(lanes: readonly RunLane[]): number {
 }
 
 interface FreshSnapshot {
-  snapshot: DashboardSnapshot;
+  source: Exclude<SourceState<RunSummary>, { status: 'error' }>;
   summary: RunSummary;
 }
 
-function readFresh(data: DashboardSnapshot | undefined): FreshSnapshot | null {
+function readFresh(data: SourceState<RunSummary> | undefined): FreshSnapshot | null {
   if (data === undefined) return null;
-  const wf = data.sources.runs;
-  if (wf.status === 'error') return null;
-  return { snapshot: data, summary: wf.data };
+  if (data.status === 'error') return null;
+  return { source: data, summary: data.data };
 }
 
 interface BodyProps {
   fresh: FreshSnapshot;
+  cityName: string | null;
   cycleKey: string;
+  workInProgress: DashboardMetric;
 }
 
-function AmbientBody({ fresh, cycleKey }: BodyProps) {
-  const { summary, snapshot } = fresh;
+function AmbientBody({ fresh, cityName, cycleKey, workInProgress }: BodyProps) {
+  const { summary } = fresh;
   const staleness = useStaleness(summary.lanes);
   const top = useMemo(() => pickTopConcern(summary.lanes, staleness), [summary.lanes, staleness]);
   const rows = useMemo(
@@ -140,12 +145,11 @@ function AmbientBody({ fresh, cycleKey }: BodyProps) {
   // A 0 reads as "tracked, currently none", mirroring the adjacent "0 active".
   // Only a source ERROR omits the clause, to avoid a broken token. Neutral
   // type — the One Mark maroon stays reserved for the StatusSentence run-id.
-  const workInProgress = snapshot.headline.workInProgress;
   const inProgressClause =
     workInProgress.status === 'available' ? `, ${workInProgress.value} in progress` : '';
   const synopsis =
-    snapshot.config !== undefined
-      ? `${snapshot.config.cityName}, ${summary.totalActive} active${inProgressClause}`
+    cityName !== null
+      ? `${cityName}, ${summary.totalActive} active${inProgressClause}`
       : null;
 
   if (summary.census.status !== 'available') {
@@ -166,30 +170,38 @@ function AmbientBody({ fresh, cycleKey }: BodyProps) {
   return (
     <section>
       <PageHeader title="Home" synopsis={synopsis} />
-      <div className="mt-6 space-y-4">
-        <PhaseCensus
-          census={summary.census.data}
-          waitingCount={countWaiting(summary.lanes)}
-          failingCount={failing}
-        />
-        {top !== undefined && <StatusSentence topConcern={top} />}
-        <ConcernRegion rows={rows} />
+      <div className="mt-6 space-y-6">
+        <AttentionSummaryPanel />
+        <div className="space-y-4">
+          <PhaseCensus
+            census={summary.census.data}
+            waitingCount={countWaiting(summary.lanes)}
+            failingCount={failing}
+          />
+          {top !== undefined && <StatusSentence topConcern={top} />}
+          <ConcernRegion rows={rows} />
+        </div>
       </div>
     </section>
   );
 }
 
 export function AmbientHomePage() {
-  const { data, loading, error } = useCachedData('snapshot', () => api.snapshot());
+  const cityName = getActiveCity();
+  const { data, loading, error } = useCachedData(
+    `runs:summary:${cityName ?? 'no-city'}`,
+    loadSupervisorRunSummarySource,
+  );
+  const work = useCachedData(
+    `home:work:${cityName ?? 'no-city'}`,
+    fetchHomeWorkInProgress,
+  );
 
   const fresh = readFresh(data);
-  // cycleKey advances per snapshot (drives R8 hysteresis); now-ticks
-  // re-render the body but share the same generatedAt and so do not
-  // advance the favicon hysteresis. The 'pre-snapshot' sentinel is a
-  // non-ISO string a well-formed generatedAt cannot collide with,
-  // closing the gap Phase 4 L4 flagged where '' could match a
-  // pathological empty-string response.
-  const cycleKey = fresh?.snapshot.generatedAt ?? 'pre-snapshot';
+  // cycleKey advances per run-source generation (drives R8 hysteresis);
+  // now-ticks re-render the body but share the same fetchedAt and so do not
+  // advance the favicon hysteresis.
+  const cycleKey = fresh?.source.fetchedAt ?? 'pre-snapshot';
 
   if (data === undefined && loading) {
     return (
@@ -225,5 +237,29 @@ export function AmbientHomePage() {
       </section>
     );
   }
-  return <AmbientBody fresh={fresh} cycleKey={cycleKey} />;
+  return (
+    <AmbientBody
+      fresh={fresh}
+      cityName={cityName}
+      cycleKey={cycleKey}
+      workInProgress={work.data ?? { status: 'unavailable', source: 'work', error: 'loading' }}
+    />
+  );
+}
+
+async function fetchHomeWorkInProgress(): Promise<DashboardMetric> {
+  const cityName = getActiveCity();
+  if (cityName === null) {
+    return { status: 'unavailable', source: 'work', error: 'active city unavailable' };
+  }
+  try {
+    const status = await supervisorApi().cityStatus(cityName);
+    return { status: 'available', value: status.work.in_progress };
+  } catch (err) {
+    return {
+      status: 'unavailable',
+      source: 'work',
+      error: err instanceof Error ? err.message : 'work unavailable',
+    };
+  }
 }
