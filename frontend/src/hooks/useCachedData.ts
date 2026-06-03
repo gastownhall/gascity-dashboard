@@ -60,9 +60,21 @@ export function useCachedData<T>(
       try {
         const fresh = await fetch();
         const isLatestRun = runIdRef.current === runId;
-        const isInactiveKey = currentKeyRef.current !== cacheKey;
-        if (isLatestRun || isInactiveKey) setCached(cacheKey, fresh);
-        if (isLatestRun) setData(fresh);
+        const isActiveKey = currentKeyRef.current === cacheKey;
+        if (isLatestRun || !isActiveKey) setCached(cacheKey, fresh);
+        if (isLatestRun) {
+          setData(fresh);
+        } else if (isActiveKey) {
+          // First-paint rescue: a busy SSE stream can re-fire refresh()
+          // faster than a slow fetch (e.g. the beads board's per-type
+          // task query) completes, so every run is superseded before it
+          // lands and the latest-run guard never sets data — the panel
+          // stays empty forever. Seed from this superseded-but-current
+          // run only while data is still undefined; once any result has
+          // landed, latest-run-wins resumes and a stale slow fetch never
+          // clobbers fresher data.
+          setData((prev) => (prev === undefined ? fresh : prev));
+        }
       } catch (err) {
         if (runIdRef.current === runId) {
           setError(err instanceof Error ? err.message : 'failed to load');

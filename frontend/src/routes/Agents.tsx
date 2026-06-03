@@ -142,6 +142,10 @@ export const AGENT_CHIPS: ReadonlyArray<FilterChip<SupervisorAgent>> = [
   },
 ];
 
+// Chips the Agents view boots into: actively-running only. Exported so the
+// chips test can assert the default-active set stays in sync with AGENT_CHIPS.
+export const AGENT_DEFAULT_CHIPS: ReadonlyArray<string> = ['running'];
+
 const AGENT_SEARCH_FIELDS = (a: SupervisorAgent): ReadonlyArray<string | undefined> => [
   a.name,
   a.display_name,
@@ -241,6 +245,10 @@ export function AgentsPage() {
     projectOf: FLAT_GROUP,
     searchOf: AGENT_SEARCH_FIELDS,
     chips: AGENT_CHIPS,
+    // Default to the actively-running view (restores commit 00cad8f, lost
+    // in the useListFilters migration). Operator can toggle 'running' off
+    // to see all agents.
+    initialActiveChipIds: AGENT_DEFAULT_CHIPS,
     defaultCollapsed: false,
     activityOf: agentActivity,
     defaultSortMode: 'activity',

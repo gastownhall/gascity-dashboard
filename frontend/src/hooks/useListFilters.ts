@@ -63,6 +63,13 @@ interface UseListFiltersOptions<T> {
   /** Strings to consider for substring search. */
   searchOf: (row: T) => ReadonlyArray<string | undefined | null>;
   chips: ReadonlyArray<FilterChip<T>>;
+  /**
+   * Chip ids active on first mount and after every viewKey change. Chip
+   * state is ephemeral (never persisted), so this is the only way to give
+   * a view a default filter — e.g. Agents booting into "running" only.
+   * The operator can still toggle the seeded chips off.
+   */
+  initialActiveChipIds?: ReadonlyArray<string>;
   /** When true, groups start collapsed and the persisted Set is "user-expanded". */
   defaultCollapsed?: boolean;
   /** Activity timestamp (epoch ms) for a row. Required for sortMode='activity'. */
@@ -149,6 +156,7 @@ function reportStorageParseFailure(key: string, err: unknown): void {
 
 const EMPTY_PINNED: ReadonlyArray<string> = [];
 const EMPTY_NONCOLLAPSIBLE: ReadonlySet<string> = new Set();
+const EMPTY_INITIAL_CHIPS: ReadonlyArray<string> = [];
 
 export function useListFilters<T>({
   viewKey,
@@ -156,15 +164,19 @@ export function useListFilters<T>({
   projectOf,
   searchOf,
   chips,
+  initialActiveChipIds = EMPTY_INITIAL_CHIPS,
   defaultCollapsed = false,
   activityOf,
   defaultSortMode = 'alpha',
   pinnedProjects = EMPTY_PINNED,
   nonCollapsibleProjects = EMPTY_NONCOLLAPSIBLE,
 }: UseListFiltersOptions<T>): UseListFiltersResult<T> {
+  // Stable key so the viewKey-reset effect re-runs only when the seed set
+  // actually changes, not on every render (the array prop is unstable).
+  const initialChipKey = initialActiveChipIds.join(',');
   const [search, setSearch] = useState('');
   const [activeChipIds, setActiveChipIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
+    () => new Set(initialActiveChipIds),
   );
   // The Set is "user overrides": projects whose current collapse state
   // differs from defaultCollapsed. isCollapsed(p) = defaultCollapsed XOR overrides.has(p).
@@ -183,8 +195,10 @@ export function useListFilters<T>({
     setOverrides(loadOverrides(viewKey, defaultCollapsed));
     setSortModeState(loadSortMode(viewKey, defaultSortMode));
     setSearch('');
-    setActiveChipIds(new Set());
-  }, [viewKey, defaultCollapsed, defaultSortMode]);
+    setActiveChipIds(new Set(initialActiveChipIds));
+    // initialActiveChipIds is keyed by initialChipKey for dep stability.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewKey, defaultCollapsed, defaultSortMode, initialChipKey]);
 
   const toggleChip = useCallback((id: string) => {
     setActiveChipIds((cur) => {

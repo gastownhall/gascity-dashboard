@@ -176,6 +176,65 @@ describe('useListFilters', () => {
     expect(gcGroup?.rows.map((r) => r.id)).toEqual(['gc-1', 'gc-2']);
   });
 
+  it('seeds activeChipIds from initialActiveChipIds on mount', () => {
+    // Chip state is ephemeral, so initialActiveChipIds is the only way to
+    // give a view a default filter (Agents booting into "open" only).
+    const { result } = renderHook(() =>
+      useListFilters({
+        viewKey: 'beads',
+        rows,
+        projectOf,
+        searchOf,
+        chips,
+        initialActiveChipIds: ['open'],
+      }),
+    );
+
+    expect(result.current.activeChipIds.has('open')).toBe(true);
+    // 3 open rows across gc + codeprobe + agent-diagnostics.
+    expect(result.current.totalMatches).toBe(3);
+  });
+
+  it('lets the operator toggle a seeded default chip back off', () => {
+    const { result } = renderHook(() =>
+      useListFilters({
+        viewKey: 'beads',
+        rows,
+        projectOf,
+        searchOf,
+        chips,
+        initialActiveChipIds: ['open'],
+      }),
+    );
+
+    act(() => result.current.toggleChip('open'));
+    expect(result.current.activeChipIds.has('open')).toBe(false);
+    expect(result.current.totalMatches).toBe(5);
+  });
+
+  it('re-seeds the default chip set when viewKey changes', () => {
+    let viewKey = 'agents:a';
+    const { result, rerender } = renderHook(() =>
+      useListFilters({
+        viewKey,
+        rows,
+        projectOf,
+        searchOf,
+        chips,
+        initialActiveChipIds: ['open'],
+      }),
+    );
+
+    act(() => result.current.toggleChip('open'));
+    expect(result.current.activeChipIds.has('open')).toBe(false);
+
+    viewKey = 'agents:b';
+    rerender();
+
+    // viewKey reset restores the seed, not an empty set.
+    expect(result.current.activeChipIds.has('open')).toBe(true);
+  });
+
   it('resets ephemeral search and chip state when viewKey changes (Mail inbox <-> sent)', () => {
     let viewKey = 'mail:inbox';
     const { result, rerender } = renderHook(() =>

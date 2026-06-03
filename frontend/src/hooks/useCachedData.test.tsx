@@ -75,6 +75,45 @@ describe("useCachedData", () => {
     expect(getCached<string>(cacheKey)).toBe("fresh result");
   });
 
+  it("seeds data from a superseded run when no result has landed yet", async () => {
+    // A busy SSE stream re-fires refresh() faster than the slow fetch
+    // resolves, so every run is superseded before it completes. Without
+    // first-paint rescue the latest-run guard never sets data and the
+    // panel stays empty forever (the beads-board "Nothing on the queue"
+    // bug). The first completing run for the still-current key must seed
+    // data even though a newer run is already in flight.
+    const first = deferred<string>();
+    const second = deferred<string>();
+    const calls = [first, second];
+    let callIndex = 0;
+    const fetcher = vi.fn(() => calls[callIndex++]!.promise);
+    const cacheKey = "beads:board:";
+
+    const { result } = renderHook(() =>
+      useCachedData(cacheKey, fetcher),
+    );
+
+    // Mount fires run #1 (first). A refresh supersedes it with run #2
+    // (second) before run #1 resolves.
+    act(() => {
+      void result.current.refresh();
+    });
+
+    // Run #1 resolves AFTER being superseded — first-paint rescue seeds it.
+    await act(async () => {
+      first.resolve("first result");
+      await first.promise;
+    });
+    await waitFor(() => expect(result.current.data).toBe("first result"));
+
+    // Once the latest run lands it wins, replacing the rescued value.
+    await act(async () => {
+      second.resolve("second result");
+      await second.promise;
+    });
+    await waitFor(() => expect(result.current.data).toBe("second result"));
+  });
+
   it("reports the latest fetch failure through onError", async () => {
     const onError = vi.fn();
     const failure = new Error("network down");

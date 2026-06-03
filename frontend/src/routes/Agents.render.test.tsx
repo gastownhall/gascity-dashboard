@@ -342,11 +342,12 @@ describe('AgentsPage (post-ay6 regressions)', () => {
       </MemoryRouter>,
     );
 
-    // With no state chip active, the current Agents view shows the full
-    // supervisor roster, including configured-but-not-running agents.
-    // Both rows render their alias as a Link, but the title must
-    // differ — session-bound agents promise a real drilldown; orphan
-    // agents warn that the detail page will show no live session.
+    // The Agents view defaults to the 'running' chip, so the asleep
+    // control-dispatcher orphan is hidden until we toggle it off to reveal
+    // the full supervisor roster. Both rows then render their alias as a
+    // Link, but the title must differ — session-bound agents promise a
+    // real drilldown; orphan agents warn the detail page shows no session.
+    await showAllAgents();
     const mayorLink = await screen.findByRole('link', { name: /mayor/i });
     const orphanLink = await screen.findByRole('link', { name: /control-dispatcher/i });
 
@@ -379,6 +380,8 @@ describe('AgentsPage (post-ay6 regressions)', () => {
       </MemoryRouter>,
     );
 
+    // Toggle off the default 'running' chip so the asleep orphan shows.
+    await showAllAgents();
     const orphanLink = await screen.findByRole('link', { name: /control-dispatcher/i });
     const mayorLink = await screen.findByRole('link', { name: /mayor/i });
 
@@ -386,6 +389,14 @@ describe('AgentsPage (post-ay6 regressions)', () => {
     expect(mayorLink.closest('tr')?.getAttribute('data-attention-severity')).toBeNull();
   });
 });
+
+// The Agents view boots with the 'running' chip active. Tests that assert
+// on non-running agents (orphans/asleep) toggle it off to reveal the full
+// roster, mirroring the operator clicking the chip.
+async function showAllAgents(): Promise<void> {
+  const runningChip = await screen.findByRole('button', { name: /^running$/i });
+  fireEvent.click(runningChip);
+}
 
 function contributor(
   domain: 'agents',

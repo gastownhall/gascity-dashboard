@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentResponse } from '../generated/gc-supervisor-client/types.gen';
-import { AGENT_CHIPS, buildAgentSynopsis, stateTone } from './Agents';
+import { AGENT_CHIPS, AGENT_DEFAULT_CHIPS, buildAgentSynopsis, stateTone } from './Agents';
 
 // gascity-dashboard-ay6: the Agents view consumes the supervisor's
 // first-class agent roster (AgentResponse), not the session list. These tests
@@ -75,6 +75,18 @@ describe('AGENT_CHIPS', () => {
     expect(matchingIds).toContain('detached');
     // Bound the match set: only those two chips, no spurious third match.
     expect(matchingIds).toHaveLength(2);
+  });
+
+  it('defaults the Agents view to the actively-running chip', () => {
+    // The Agents view boots into "what's running right now" (restores
+    // commit 00cad8f, lost in the useListFilters migration). The default
+    // set must name the 'running' chip and only ids that AGENT_CHIPS
+    // actually defines, otherwise the seed silently filters to nothing.
+    expect(AGENT_DEFAULT_CHIPS).toEqual(['running']);
+    const chipIds = new Set(AGENT_CHIPS.map((chip) => chip.id));
+    for (const id of AGENT_DEFAULT_CHIPS) {
+      expect(chipIds.has(id), `default chip "${id}" must exist in AGENT_CHIPS`).toBe(true);
+    }
   });
 
   it('suspended agents match the suspended chip regardless of state', () => {
