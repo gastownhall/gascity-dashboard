@@ -17,7 +17,11 @@ import type {
   TypedEventStreamEnvelope,
 } from '../generated/gc-supervisor-client/types.gen';
 import { ATTENTION_DOMAINS, composeAttention } from './compose';
-import { createAttentionContributors, type AgentsAttentionFacts } from './registry';
+import {
+  createAttentionContributors,
+  NEEDS_STEPHANIE_LABEL,
+  type AgentsAttentionFacts,
+} from './registry';
 
 describe('createAttentionContributors', () => {
   it('registers an explicit contributor for every first-class attention domain', () => {
@@ -302,6 +306,81 @@ describe('createAttentionContributors', () => {
     expect(model.byDomain.mail.items.map((item) => item.href)).toContain(
       '/mail?message=M-stale-unread',
     );
+  });
+
+  it('surfaces each open mayor-decision bead as an attention item linked to the bead view', () => {
+    const model = composeAttention(createAttentionContributors({
+      beads: {
+        decisions: [
+          bead({
+            id: 'dec-nqy',
+            title: 'Decide: stale-CHANGES_REQUESTED merge-queue protocol',
+            assignee: 'stephanie',
+            labels: [NEEDS_STEPHANIE_LABEL],
+            updated_at: '2026-06-03T14:18:47.000Z',
+            metadata: { 'decision.decide': 'Auto-close or escalate stale CR PRs?' },
+          }),
+        ],
+      },
+    }));
+
+    expect(model.byDomain.beads.items).toEqual([
+      expect.objectContaining({
+        id: 'beads:dec-nqy:mayor-decision',
+        domain: 'beads',
+        severity: 'attention',
+        title: 'Decide: stale-CHANGES_REQUESTED merge-queue protocol',
+        summary: 'Auto-close or escalate stale CR PRs?',
+        href: '/beads?bead=dec-nqy',
+        updatedAt: '2026-06-03T14:18:47.000Z',
+      }),
+    ]);
+  });
+
+  it('renders a mayor-decision with no decision.decide metadata using the title alone', () => {
+    const model = composeAttention(createAttentionContributors({
+      beads: {
+        decisions: [
+          bead({ id: 'dec-rwr', title: 'Decide: P0 baseline-honesty-gate halt', labels: [NEEDS_STEPHANIE_LABEL] }),
+        ],
+      },
+    }));
+
+    const item = model.byDomain.beads.items[0];
+    expect(item?.id).toBe('beads:dec-rwr:mayor-decision');
+    expect(item?.summary).toBeUndefined();
+  });
+
+  it('does not double-surface a marker bead present in the general list', () => {
+    const model = composeAttention(createAttentionContributors({
+      beads: {
+        // Same bead in both the dedicated queue and the capped general list:
+        // priority 1 would otherwise also trip the generic high-priority branch.
+        decisions: [
+          bead({ id: 'dec-nqy', title: 'Decide: X', labels: [NEEDS_STEPHANIE_LABEL], priority: 1 }),
+        ],
+        items: [
+          bead({ id: 'dec-nqy', title: 'Decide: X', labels: [NEEDS_STEPHANIE_LABEL], priority: 1 }),
+        ],
+      },
+    }));
+
+    expect(model.byDomain.beads.items.map((item) => item.id)).toEqual([
+      'beads:dec-nqy:mayor-decision',
+    ]);
+  });
+
+  it('surfaces a decision-queue fetch failure without blanking generic bead alerts', () => {
+    const model = composeAttention(createAttentionContributors({
+      beads: {
+        decisionsError: 'decision queue unavailable: ECONNREFUSED',
+        items: [bead({ id: 'B-1', title: 'Fix broken formula', status: 'blocked' })],
+      },
+    }));
+
+    const ids = model.byDomain.beads.items.map((item) => item.id);
+    expect(ids).toContain('beads:decisions-unavailable');
+    expect(ids).toContain('beads:B-1:blocked');
   });
 
   it('derives maintainer attention from needs-you, awaiting-triage, and blocked slung facts', () => {

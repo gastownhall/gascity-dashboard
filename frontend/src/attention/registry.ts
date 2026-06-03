@@ -55,9 +55,20 @@ export interface AgentsAttentionFacts {
 
 export interface BeadsAttentionFacts {
   items?: readonly Bead[];
+  /**
+   * The mayor-decision queue: open beads carrying the `needs/stephanie`
+   * marker, fetched with the dedicated label+status filter
+   * (specs/architecture/mayor-decision-ledger.md §6). Kept separate from the
+   * general `items` list because that list is capped and can paginate the
+   * decision beads out; the filtered query is always complete. Rendered as
+   * their own attention identity, never re-triaged (ZFC).
+   */
+  decisions?: readonly Bead[];
   nowMs?: number;
   partial?: boolean;
   error?: string;
+  /** Failure of the dedicated decision-queue fetch, independent of `error`. */
+  decisionsError?: string;
 }
 
 export interface MailAttentionFacts {
@@ -98,6 +109,22 @@ const AGENT_IDLE_WATCH_MS = 4 * 60 * 60 * 1000;
 const BEAD_UNCLAIMED_WATCH_MS = 24 * 60 * 60 * 1000;
 const BEAD_STALE_ATTENTION_MS = 72 * 60 * 60 * 1000;
 const MAIL_UNREAD_STALE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The mayor-decision marker label (specs/architecture/mayor-decision-ledger.md
+ * §2). An open bead carrying it is a curated decision awaiting Stephanie's
+ * direction. Exported so the dedicated fetch filter (liveContributors) and the
+ * generic-loop skip below resolve the same marker — a rename touches one line.
+ */
+export const NEEDS_STEPHANIE_LABEL = 'needs/stephanie';
+
+/**
+ * Flat metadata key for the mayor's one-sentence decision question (the spec's
+ * `metadata.decision.decide`). Optional: absent on a minimally-authored
+ * decision bead, present once the mayor writes the full payload (spec §7). When
+ * present it becomes the row summary; when absent the title carries the ask.
+ */
+const DECISION_DECIDE_META_KEY = 'decision.decide';
 
 export function createAttentionContributors(
   facts: AttentionContributorFacts = {},
@@ -435,8 +462,23 @@ function deriveBeadsAttention(
       href: '/beads',
     }));
   }
+  if (facts.decisionsError !== undefined && facts.decisionsError.length > 0) {
+    items.push(domainAttention('beads', {
+      id: 'beads:decisions-unavailable',
+      title: 'Decision queue unavailable',
+      summary: facts.decisionsError,
+      href: '/beads',
+    }));
+  }
+  for (const decision of facts.decisions ?? []) {
+    items.push(mayorDecisionAttention(decision));
+  }
   const nowMs = facts.nowMs ?? Date.now();
   for (const bead of facts.items ?? []) {
+    // Marker beads surface via the dedicated decision queue above; skip them
+    // here so a priority-1 decision bead is not also surfaced as a generic
+    // high-priority/stale bead alert (double-surfacing).
+    if (isMayorDecision(bead)) continue;
     if (bead.status === 'blocked') {
       items.push(domainAttention('beads', {
         id: `beads:${bead.id}:blocked`,
@@ -500,6 +542,37 @@ function beadHref(beadId: string): string {
   const search = new URLSearchParams();
   search.set('bead', beadId);
   return `/beads?${search.toString()}`;
+}
+
+/**
+ * A bead carries the mayor-decision marker. Used to keep a marker bead that
+ * also appears in the general list from double-surfacing as a generic bead
+ * alert (the decision-queue fetch already restricts to open).
+ */
+function isMayorDecision(bead: Bead): boolean {
+  return (bead.labels ?? []).includes(NEEDS_STEPHANIE_LABEL);
+}
+
+/**
+ * Project one mayor-decision bead into its home-view attention identity
+ * (spec §6). Mechanical: title + bead-linked-view href, with the decision
+ * question as the summary when the mayor has written it. severity=attention
+ * via domainAttention — a curated human-authored ask, never a failure. The
+ * `:mayor-decision` id namespace keeps its identity distinct from generic
+ * bead alerts and self-clears when the bead closes (the queue stops returning
+ * it).
+ */
+function mayorDecisionAttention(bead: Bead): AttentionItem {
+  const decide = bead.metadata?.[DECISION_DECIDE_META_KEY];
+  return domainAttention('beads', {
+    id: `beads:${bead.id}:mayor-decision`,
+    title: bead.title,
+    href: beadHref(bead.id),
+    updatedAt: bead.updated_at ?? bead.created_at,
+    ...(decide !== undefined && decide.trim().length > 0
+      ? { summary: decide }
+      : {}),
+  });
 }
 
 function deriveMailAttention(

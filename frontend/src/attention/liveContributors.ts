@@ -15,6 +15,7 @@ import {
 import type { AttentionContributor } from './compose';
 import {
   createAttentionContributors,
+  NEEDS_STEPHANIE_LABEL,
   type ActivityAttentionFacts,
   type AgentsAttentionFacts,
   type AttentionContributorFacts,
@@ -134,16 +135,33 @@ async function fetchBeadsAttention(
   cityName: string | null,
 ): Promise<BeadsAttentionFacts> {
   if (cityName === null) return {};
-  try {
-    const list = await supervisorApi().listBeads(cityName, { limit: ATTENTION_LIST_LIMIT });
-    return {
-      items: list.items ?? [],
-      nowMs: Date.now(),
-      partial: list.partial === true,
-    };
-  } catch (err) {
-    return { error: formatApiError(err, 'bead list unavailable') };
+  // Two independent reads: the general bead list (capped) and the dedicated
+  // mayor-decision queue (label+status filtered, always complete). Settled
+  // separately so one failing does not blank the other — the decision queue
+  // and generic bead alerts are distinct signals.
+  const [list, decisions] = await Promise.allSettled([
+    supervisorApi().listBeads(cityName, { limit: ATTENTION_LIST_LIMIT }),
+    supervisorApi().listBeads(cityName, {
+      label: NEEDS_STEPHANIE_LABEL,
+      status: 'open',
+    }),
+  ]);
+  const facts: BeadsAttentionFacts = { nowMs: Date.now() };
+  if (list.status === 'fulfilled') {
+    facts.items = list.value.items ?? [];
+    facts.partial = list.value.partial === true;
+  } else {
+    facts.error = formatApiError(list.reason, 'bead list unavailable');
   }
+  if (decisions.status === 'fulfilled') {
+    facts.decisions = decisions.value.items ?? [];
+  } else {
+    facts.decisionsError = formatApiError(
+      decisions.reason,
+      'decision queue unavailable',
+    );
+  }
+  return facts;
 }
 
 async function fetchMailAttention(

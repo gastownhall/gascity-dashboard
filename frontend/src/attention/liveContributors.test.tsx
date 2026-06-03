@@ -109,16 +109,23 @@ describe('useLiveAttentionContributors', () => {
         request_id: 'req-1',
       },
     });
-    mockSupervisorApi.listBeads.mockResolvedValue({
-      total: 1,
-      items: [{
-        created_at: '2026-05-29T20:00:00.000Z',
-        id: 'B-1',
-        issue_type: 'task',
-        priority: null,
-        status: 'blocked',
-        title: 'Blocked bead',
-      }],
+    mockSupervisorApi.listBeads.mockImplementation((_city, query) => {
+      // The label-filtered call is the dedicated mayor-decision queue; the
+      // unfiltered call is the general bead list.
+      if (query?.label !== undefined) {
+        return Promise.resolve({ total: 0, items: [] });
+      }
+      return Promise.resolve({
+        total: 1,
+        items: [{
+          created_at: '2026-05-29T20:00:00.000Z',
+          id: 'B-1',
+          issue_type: 'task',
+          priority: null,
+          status: 'blocked',
+          title: 'Blocked bead',
+        }],
+      });
     });
     mockSupervisorApi.listMail.mockResolvedValue({
       total: 2,
@@ -266,6 +273,10 @@ describe('useLiveAttentionContributors', () => {
     expect(mockSupervisorApi.listSessions).toHaveBeenCalledWith('test-city');
     expect(mockSupervisorApi.sessionPending).toHaveBeenCalledWith('test-city', 'gc-2568');
     expect(mockSupervisorApi.listBeads).toHaveBeenCalledWith('test-city', { limit: 1000 });
+    expect(mockSupervisorApi.listBeads).toHaveBeenCalledWith('test-city', {
+      label: 'needs/stephanie',
+      status: 'open',
+    });
     expect(mockSupervisorApi.listEvents).toHaveBeenCalledWith('test-city', { limit: 100, since: '24h' });
     expect(mockSupervisorApi.listMail).toHaveBeenCalledWith('test-city', { limit: 100 });
     expect(mockSupervisorApi.cityHealth).toHaveBeenCalledWith('test-city');
