@@ -87,6 +87,20 @@ export class PendingSubscriptionManager {
   }
 
   /**
+   * True while at least one subscribed session's stream is dark — closed and
+   * awaiting reconnect (gascity-dashboard-26zl, R16). The aggregator's view is
+   * not live for that session, so the dashboard layer degrades provenance to
+   * stale rather than emit a false all-clear. Recovery is observed when the
+   * reconnected stream delivers its next frame (handlePending resets attempt).
+   */
+  get hasDarkSubscription(): boolean {
+    for (const sub of this.subs.values()) {
+      if (sub.cancelReconnect !== undefined) return true;
+    }
+    return false;
+  }
+
+  /**
    * Reconcile subscriptions to `activeSessionIds`: open new ones, tear down
    * sessions no longer active, and drop their pending from the store.
    */
@@ -139,6 +153,10 @@ export class PendingSubscriptionManager {
       if (this.subs.get(sessionId) === sub) this.open(sessionId, attempt + 1);
     }, attempt);
     sub.cancelReconnect = cancel;
+    // Push the dark transition so the dashboard stream restamps the last-known
+    // pending as stale instead of going heartbeat-silent (R16 fail-safe). The
+    // store content is unchanged — only the read-time provenance degrades.
+    this.onChange();
   }
 
   private teardown(sessionId: string): void {

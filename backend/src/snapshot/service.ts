@@ -312,10 +312,16 @@ export function createSnapshotService(
       lastRefreshDurationMs,
       sources: sourceStatuses(caches),
     }),
-    // 'fresh' provenance for now: the aggregator keeps last-known pending and
-    // reconciles every read. A liveness-aware provenance (degraded when the
-    // dashboard stream / subscriptions are dark) is Layer 3's job (26zl, R16).
-    pendingAlerts: () => pendingStore.alerts('fresh'),
+    // Liveness-aware provenance (gascity-dashboard-26zl, R16): the aggregator
+    // keeps last-known pending across a per-session reconnect, so a dark
+    // subscription would otherwise emit a 'fresh' all-clear over stale data —
+    // the premortem's #1 missed-alarm risk. Stamp 'stale' whenever any active
+    // subscription is in reconnect backoff so the home renders signal-
+    // unavailable; the dark transition is pushed (handleError fires onChange).
+    pendingAlerts: () =>
+      pendingStore.alerts(
+        pendingManager?.hasDarkSubscription === true ? 'stale' : 'fresh',
+      ),
     streamPending: (listener) => {
       pendingListeners.add(listener);
       pendingConsumers += 1;

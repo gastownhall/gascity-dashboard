@@ -80,6 +80,60 @@ describe('useHomePending', () => {
     expect(eventSources.length).toBe(0);
     expect(result.current.conn).toBe('closed');
   });
+
+  // gascity-dashboard-gztl (R6/R15/R16): the pending-scope provenance is the
+  // fail-safe the home renders signal-unavailable off. It must gate on the
+  // in-band item provenance, NOT just connection liveness — an open stream over
+  // a dark aggregator is the premortem's #1 missed-alarm risk.
+  describe('provenance (R15 fail-safe)', () => {
+    const staleAlert = (requestId: string): AlertItem => ({ ...alert(requestId), provenance: 'stale' });
+
+    it('is unavailable before any frame, even once the connection is open', () => {
+      const { result } = renderHook(() => useHomePending());
+      expect(result.current.provenance).toBe('unavailable');
+      act(() => eventSources[0]?.open());
+      expect(result.current.provenance).toBe('unavailable'); // open is not yet certified
+    });
+
+    it('certifies fresh once a frame of all-fresh items arrives', () => {
+      const { result } = renderHook(() => useHomePending());
+      act(() => eventSources[0]?.open());
+      act(() => eventSources[0]?.emitNamed('pending', JSON.stringify({ alerts: [alert('req-1')] })));
+      expect(result.current.provenance).toBe('fresh');
+    });
+
+    it('treats an empty fresh frame as a certified quiet state (fresh, not unknown)', () => {
+      const { result } = renderHook(() => useHomePending());
+      act(() => eventSources[0]?.open());
+      act(() => eventSources[0]?.emitNamed('pending', JSON.stringify({ alerts: [] })));
+      expect(result.current.alerts).toEqual([]);
+      expect(result.current.provenance).toBe('fresh');
+    });
+
+    it('stays unavailable on an OPEN stream whose frame carries a stale item (dark aggregator)', () => {
+      const { result } = renderHook(() => useHomePending());
+      act(() => eventSources[0]?.open());
+      act(() => eventSources[0]?.emitNamed('pending', JSON.stringify({ alerts: [alert('req-1')] })));
+      expect(result.current.provenance).toBe('fresh');
+
+      // The backend restamps the last-known pending 'stale' when its per-session
+      // subscription goes dark. Connection is still open — provenance must NOT
+      // read fresh, or the home shows a false all-clear over stale data.
+      act(() => eventSources[0]?.emitNamed('pending', JSON.stringify({ alerts: [staleAlert('req-1')] })));
+      expect(result.current.conn).toBe('open');
+      expect(result.current.provenance).toBe('unavailable');
+      expect(result.current.alerts.length).toBe(1); // row kept, marked unavailable — a dark source is not a resolve
+    });
+
+    it('drops back to unavailable when the stream errors', () => {
+      const { result } = renderHook(() => useHomePending());
+      act(() => eventSources[0]?.open());
+      act(() => eventSources[0]?.emitNamed('pending', JSON.stringify({ alerts: [alert('req-1')] })));
+      expect(result.current.provenance).toBe('fresh');
+      act(() => eventSources[0]?.error());
+      expect(result.current.provenance).toBe('unavailable');
+    });
+  });
 });
 
 class FakeEventSource {

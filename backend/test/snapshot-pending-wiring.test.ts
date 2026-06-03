@@ -79,6 +79,9 @@ class FakeSubscriber implements SessionStreamSubscriber {
   pending(sessionId: string, p: PendingInteraction): void {
     this.handlers.get(sessionId)!.onPending(p);
   }
+  error(sessionId: string, e: Error): void {
+    this.handlers.get(sessionId)!.onError(e);
+  }
 }
 
 function baseOptions(): CreateSnapshotServiceOptions {
@@ -136,6 +139,36 @@ describe('snapshot service — pending aggregator wiring', () => {
 
     stop();
     assert.deepEqual(service.pendingAlerts(), []); // store cleared on deactivate
+  });
+
+  test('a dark session stream degrades provenance to stale and pushes a frame (R16 fail-safe)', async () => {
+    // Premortem risk #1: a per-session subscription dropping into reconnect
+    // backoff must NOT silently keep emitting a 'fresh' all-clear. The dark
+    // transition has to (a) push a frame so the dashboard stream is not
+    // heartbeat-silent, and (b) restamp the last-known pending as stale so the
+    // home renders signal-unavailable, never a false all-clear.
+    const subscriber = new FakeSubscriber();
+    const service = createSnapshotService({
+      ...baseOptions(),
+      sessions: sessionsCacheOf([session('s1', 'active')]),
+      pendingSubscriber: subscriber,
+    });
+    let changes = 0;
+    const stop = service.streamPending(() => { changes += 1; });
+    await service.getSnapshot();
+    subscriber.pending('s1', { request_id: 'req-1', kind: 'tool_approval' });
+    assert.equal(service.pendingAlerts()[0]!.provenance, 'fresh'); // live
+
+    const before = changes;
+    subscriber.error('s1', new Error('stream dropped'));
+    assert.ok(changes > before); // pushed on the dark transition, not heartbeat-silent
+
+    const alerts = service.pendingAlerts();
+    assert.equal(alerts.length, 1); // a disconnect is not a resolve — kept
+    assert.equal(alerts[0]!.provenance, 'stale'); // never a false all-clear while dark
+
+    stop(); // cancels the pending reconnect timer
+    service.closePending();
   });
 
   test('the snapshot envelope still builds (alerts field present) alongside the aggregator', async () => {
