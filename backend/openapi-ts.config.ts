@@ -8,6 +8,12 @@ export default defineConfig({
   input: './backend/openapi/gc-supervisor.openapi.json',
   output: {
     path: outputPath,
+    // Emit explicit `.js` extensions on generated relative imports so the
+    // compiled ESM output resolves under Node's native ESM loader
+    // (`node backend/dist/server.js`), not only under a bundler/tsx. Without
+    // this, the production build crashes at startup with ERR_MODULE_NOT_FOUND
+    // on the extensionless `./client.gen` / `./sdk.gen` / `./zod.gen` imports.
+    importFileExtension: '.js',
   },
   plugins: [
     {

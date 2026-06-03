@@ -2,7 +2,7 @@
 
 import { type ClientOptions, type Config, createClient, createConfig } from '@hey-api/client-fetch';
 
-import type { ClientOptions as ClientOptions2 } from './types.gen';
+import type { ClientOptions as ClientOptions2 } from './types.gen.js';
 
 /**
  * The `createClientConfig()` function will be called on client initialization
