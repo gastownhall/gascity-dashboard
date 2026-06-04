@@ -116,21 +116,39 @@ async function runTheme(browser, theme) {
     // somewhere on the page. These were downgraded during the #63
     // integration and restored per gascity-dashboard-3ozw.
     await page.getByRole('heading', { name: /^local changes$/i }).waitFor({ timeout: 5_000 });
-    await page.locator('.formula-run-diff-view summary').filter({
-      hasText: 'shared/src/runs/enrich.ts',
-    }).waitFor({ timeout: 5_000 });
-    await page.locator('.formula-run-diff-view summary').filter({
-      hasText: 'docs/plan.md',
-    }).waitFor({ timeout: 5_000 });
-    await page.locator('.diff-code-insert').filter({
-      hasText: 'preserve failed attempt transcript links',
-    }).first().waitFor({ timeout: 5_000 });
-    await page.locator('.diff-code-delete').filter({
-      hasText: 'old session guard',
-    }).first().waitFor({ timeout: 5_000 });
-    await page.locator('.diff-code-insert').filter({
-      hasText: '# Plan',
-    }).first().waitFor({ timeout: 5_000 });
+    await page
+      .locator('.formula-run-diff-view summary')
+      .filter({
+        hasText: 'shared/src/runs/enrich.ts',
+      })
+      .waitFor({ timeout: 5_000 });
+    await page
+      .locator('.formula-run-diff-view summary')
+      .filter({
+        hasText: 'docs/plan.md',
+      })
+      .waitFor({ timeout: 5_000 });
+    await page
+      .locator('.diff-code-insert')
+      .filter({
+        hasText: 'preserve failed attempt transcript links',
+      })
+      .first()
+      .waitFor({ timeout: 5_000 });
+    await page
+      .locator('.diff-code-delete')
+      .filter({
+        hasText: 'old session guard',
+      })
+      .first()
+      .waitFor({ timeout: 5_000 });
+    await page
+      .locator('.diff-code-insert')
+      .filter({
+        hasText: '# Plan',
+      })
+      .first()
+      .waitFor({ timeout: 5_000 });
     // Related section (gascity-dashboard-j4x) — RK3 density gate. The
     // high-volume fixture (40 molecule members + 3 unresolved links) must
     // render exactly one aggregate maroon mark in the Related section, cap
@@ -220,13 +238,16 @@ async function runTheme(browser, theme) {
     // so the unresolved explanation stays reachable.
     const sessionTabAvailable = await page
       .getByRole('tab', { name: /session/i })
-      .evaluate((node) =>
-        node instanceof HTMLButtonElement &&
-        !node.disabled &&
-        node.getAttribute('aria-disabled') !== 'true',
+      .evaluate(
+        (node) =>
+          node instanceof HTMLButtonElement &&
+          !node.disabled &&
+          node.getAttribute('aria-disabled') !== 'true',
       );
     if (!sessionTabAvailable) {
-      result.errors.push('Session tab was unavailable for a selected node with unresolved session state');
+      result.errors.push(
+        'Session tab was unavailable for a selected node with unresolved session state',
+      );
     }
 
     await page.goto(`${CITY_BASE}/runs/gc-adopt-pr-partial`, {
@@ -339,7 +360,9 @@ async function installApiFixtureRoutes(context) {
   );
   await context.route(
     '**/api/city/*/maintainer/triage',
-    fulfillJson(JSON.stringify({ computed_at: null, repo: 'fixture/fixture', tiers: [], totals: {} })),
+    fulfillJson(
+      JSON.stringify({ computed_at: null, repo: 'fixture/fixture', tiers: [], totals: {} }),
+    ),
   );
 
   // The city switcher (Header) lists managed cities directly through the
@@ -385,11 +408,13 @@ async function installApiFixtureRoutes(context) {
 
   await context.route(
     '**/api/city/*/config',
-    fulfillJson(JSON.stringify({
-      cityName: 'racoon-city',
-      cityRoot: '/tmp/gascity',
-      useFixtures: false,
-    })),
+    fulfillJson(
+      JSON.stringify({
+        cityName: 'racoon-city',
+        cityRoot: '/tmp/gascity',
+        useFixtures: false,
+      }),
+    ),
   );
 
   await context.route('**/api/client-errors', async (route) => {
