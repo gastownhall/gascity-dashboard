@@ -212,12 +212,7 @@ test('gc supervisor generated output imports the official fetch runtime instead 
       'types.gen.ts',
       'zod.gen.ts',
     ],
-    [frontendGeneratedClientUrl.href]: [
-      'client.gen.ts',
-      'index.ts',
-      'sdk.gen.ts',
-      'types.gen.ts',
-    ],
+    [frontendGeneratedClientUrl.href]: ['client.gen.ts', 'index.ts', 'sdk.gen.ts', 'types.gen.ts'],
   };
   for (const rootUrl of [generatedClientUrl, frontendGeneratedClientUrl]) {
     const generatedFiles = await readTsFiles(rootUrl);
