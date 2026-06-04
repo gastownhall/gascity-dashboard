@@ -4,8 +4,6 @@ export type SupervisorResult<T> = {
   response?: Response;
 };
 
-const SUPERVISOR_SCHEMA_VALIDATION_MESSAGE = 'gc supervisor response failed validation';
-
 export class SupervisorApiError extends Error {
   override readonly name = 'SupervisorApiError';
 
@@ -60,60 +58,21 @@ function messageFromUnknown(
   value: unknown,
   defaultMessage = 'gc supervisor request failed',
 ): string {
-  if (isGeneratedSchemaValidationError(value)) return SUPERVISOR_SCHEMA_VALIDATION_MESSAGE;
   if (typeof value === 'string' && value.trim().length > 0) {
-    return sanitizeSupervisorMessage(value);
+    return value.trim();
   }
   if (value instanceof Error && value.message.trim().length > 0) {
-    return sanitizeSupervisorMessage(value.message);
+    return value.message.trim();
   }
   if (isRecord(value)) {
     for (const key of ['error', 'message', 'detail']) {
       const field = value[key];
       if (typeof field === 'string' && field.trim().length > 0) {
-        return sanitizeSupervisorMessage(field);
+        return field.trim();
       }
     }
   }
   return defaultMessage;
-}
-
-function sanitizeSupervisorMessage(message: string): string {
-  const trimmed = message.trim();
-  return isGeneratedSchemaValidationMessage(trimmed)
-    ? SUPERVISOR_SCHEMA_VALIDATION_MESSAGE
-    : trimmed;
-}
-
-function isGeneratedSchemaValidationError(value: unknown): boolean {
-  if (value instanceof Error) {
-    return value.name === 'ZodError' || isGeneratedSchemaValidationMessage(value.message);
-  }
-  return isZodIssueList(value);
-}
-
-function isGeneratedSchemaValidationMessage(message: string): boolean {
-  if (!message.startsWith('[') && !message.startsWith('{')) return false;
-  try {
-    return isZodIssueList(JSON.parse(message));
-  } catch {
-    return false;
-  }
-}
-
-function isZodIssueList(value: unknown): boolean {
-  const issues = Array.isArray(value)
-    ? value
-    : isRecord(value) && Array.isArray(value.issues)
-      ? value.issues
-      : null;
-  return (
-    issues !== null &&
-    issues.length > 0 &&
-    issues.every(
-      (issue) => isRecord(issue) && typeof issue.code === 'string' && Array.isArray(issue.path),
-    )
-  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

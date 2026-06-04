@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -36,8 +36,12 @@ async function generateHeyApiClient(toPath) {
   await allowRfc3339OffsetDateTimes(toPath);
 }
 
+// The backend client generates zod response validators; the frontend client
+// does not (see backend/openapi-ts.config.ts). Patch the generated date-time
+// validators to accept RFC3339 offset timestamps wherever a zod.gen.ts exists.
 async function allowRfc3339OffsetDateTimes(toPath) {
   const zodPath = path.join(toPath, 'zod.gen.ts');
+  if (!(await exists(zodPath))) return;
   const content = await readFile(zodPath, 'utf8');
   const patched = content.replaceAll('z.iso.datetime()', 'z.iso.datetime({ offset: true })');
   if (patched === content) {
@@ -46,6 +50,15 @@ async function allowRfc3339OffsetDateTimes(toPath) {
     );
   }
   await writeFile(zodPath, patched);
+}
+
+async function exists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 if (checkOnly) {

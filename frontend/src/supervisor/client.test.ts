@@ -1119,7 +1119,12 @@ describe('supervisor client wrapper', () => {
     });
   });
 
-  it('does not leak generated schema validation internals into supervisor error messages', async () => {
+  it('accepts supervisor responses whose shapes exceed the OpenAPI snapshot (r43k)', async () => {
+    // Regression for r43k: the dashboard must not re-validate and reject the
+    // supervisor's own valid output. Here `last_activity` is not an RFC3339
+    // datetime and the agent carries a field absent from the snapshot — both
+    // previously tripped strict client-side response validation and blanked
+    // the roster. The supervisor is the source of truth; we accept its frame.
     const fetchSpy = vi.fn(
       async () =>
         new Response(
@@ -1132,6 +1137,7 @@ describe('supervisor client wrapper', () => {
                 suspended: false,
                 state: 'idle',
                 provider: 'claude',
+                unmodeled_field: 'emitted by a newer supervisor',
                 session: {
                   name: 'mayor',
                   attached: true,
@@ -1153,11 +1159,70 @@ describe('supervisor client wrapper', () => {
       fetch: fetchSpy as typeof fetch,
     });
 
-    await expect(api.listAgents('test-city')).rejects.toMatchObject({
-      name: 'SupervisorApiError',
-      message: 'gc supervisor response failed validation',
+    const result = await api.listAgents('test-city');
+    expect(result.items?.[0]?.name).toBe('mayor');
+    expect(result.total).toBe(1);
+  });
+
+  it('accepts an events frame with an event type absent from the OpenAPI snapshot (r43k)', async () => {
+    // Regression for r43k: the live supervisor emits event types (e.g.
+    // `bead.deleted`, `session.reset_stalled`) added after the snapshot was
+    // captured. A closed discriminated-union validator rejected the entire
+    // frame, killing the Activity tab whenever such an event landed in the
+    // window. The dashboard must accept unknown event types.
+    const frame = {
+      items: [
+        {
+          seq: 1397867,
+          type: 'bead.updated',
+          ts: '2026-06-04T14:12:30.892324421-04:00',
+          actor: 'controller',
+          subject: 'gpk-wisp',
+          payload: {
+            bead: {
+              id: 'gpk-wisp',
+              title: 'order',
+              status: 'open',
+              issue_type: 'task',
+              created_at: '2026-06-04T18:12:31Z',
+            },
+          },
+        },
+        {
+          seq: 1397868,
+          type: 'bead.deleted',
+          ts: '2026-06-04T14:12:31.000000000-04:00',
+          actor: 'controller',
+          subject: 'gpk-wisp',
+          payload: {
+            bead: {
+              id: 'gpk-wisp',
+              title: 'order',
+              status: 'closed',
+              issue_type: 'task',
+              created_at: '2026-06-04T18:12:31Z',
+            },
+          },
+        },
+      ],
+      total: 2,
+    };
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(JSON.stringify(frame), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+
+    const api = createSupervisorApi({
+      baseUrl: 'http://gc-supervisor.test',
+      fetch: fetchSpy as typeof fetch,
     });
-    await expect(api.listAgents('test-city')).rejects.not.toThrow(/invalid_format|datetime|\[\{/);
+
+    const result = await api.listEvents('test-city');
+    expect(result.items?.length).toBe(2);
+    expect(result.items?.map((event) => event.type)).toContain('bead.deleted');
   });
 
   it('publishes mutation headers required by the supervisor', () => {

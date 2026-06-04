@@ -4,7 +4,6 @@ import type { Client, Options as Options2, TDataShape } from '@hey-api/client-fe
 
 import { client } from './client.gen.js';
 import type { CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateBeadData, CreateBeadErrors, CreateBeadResponses, CreateConvoyData, CreateConvoyErrors, CreateConvoyResponses, CreateProviderData, CreateProviderErrors, CreateProviderResponses, CreateRigData, CreateRigErrors, CreateRigResponses, CreateSessionData, CreateSessionErrors, CreateSessionResponses, DeleteV0CityByCityNameAgentByBaseData, DeleteV0CityByCityNameAgentByBaseErrors, DeleteV0CityByCityNameAgentByBaseResponses, DeleteV0CityByCityNameAgentByDirByBaseData, DeleteV0CityByCityNameAgentByDirByBaseErrors, DeleteV0CityByCityNameAgentByDirByBaseResponses, DeleteV0CityByCityNameBeadByIdData, DeleteV0CityByCityNameBeadByIdErrors, DeleteV0CityByCityNameBeadByIdResponses, DeleteV0CityByCityNameConvoyByIdData, DeleteV0CityByCityNameConvoyByIdErrors, DeleteV0CityByCityNameConvoyByIdResponses, DeleteV0CityByCityNameExtmsgAdaptersData, DeleteV0CityByCityNameExtmsgAdaptersErrors, DeleteV0CityByCityNameExtmsgAdaptersResponses, DeleteV0CityByCityNameExtmsgParticipantsData, DeleteV0CityByCityNameExtmsgParticipantsErrors, DeleteV0CityByCityNameExtmsgParticipantsResponses, DeleteV0CityByCityNameMailByIdData, DeleteV0CityByCityNameMailByIdErrors, DeleteV0CityByCityNameMailByIdResponses, DeleteV0CityByCityNamePatchesAgentByBaseData, DeleteV0CityByCityNamePatchesAgentByBaseErrors, DeleteV0CityByCityNamePatchesAgentByBaseResponses, DeleteV0CityByCityNamePatchesAgentByDirByBaseData, DeleteV0CityByCityNamePatchesAgentByDirByBaseErrors, DeleteV0CityByCityNamePatchesAgentByDirByBaseResponses, DeleteV0CityByCityNamePatchesProviderByNameData, DeleteV0CityByCityNamePatchesProviderByNameErrors, DeleteV0CityByCityNamePatchesProviderByNameResponses, DeleteV0CityByCityNamePatchesRigByNameData, DeleteV0CityByCityNamePatchesRigByNameErrors, DeleteV0CityByCityNamePatchesRigByNameResponses, DeleteV0CityByCityNameProviderByNameData, DeleteV0CityByCityNameProviderByNameErrors, DeleteV0CityByCityNameProviderByNameResponses, DeleteV0CityByCityNameRigByNameData, DeleteV0CityByCityNameRigByNameErrors, DeleteV0CityByCityNameRigByNameResponses, DeleteV0CityByCityNameWorkflowByWorkflowIdData, DeleteV0CityByCityNameWorkflowByWorkflowIdErrors, DeleteV0CityByCityNameWorkflowByWorkflowIdResponses, EmitEventData, EmitEventErrors, EmitEventResponses, EnsureExtmsgGroupData, EnsureExtmsgGroupErrors, EnsureExtmsgGroupResponses, GetHealthData, GetHealthErrors, GetHealthResponses, GetV0CitiesData, GetV0CitiesErrors, GetV0CitiesResponses, GetV0CityByCityNameAgentByBaseData, GetV0CityByCityNameAgentByBaseErrors, GetV0CityByCityNameAgentByBaseOutputData, GetV0CityByCityNameAgentByBaseOutputErrors, GetV0CityByCityNameAgentByBaseOutputResponses, GetV0CityByCityNameAgentByBasePrimeData, GetV0CityByCityNameAgentByBasePrimeErrors, GetV0CityByCityNameAgentByBasePrimeResponses, GetV0CityByCityNameAgentByBaseResponses, GetV0CityByCityNameAgentByDirByBaseData, GetV0CityByCityNameAgentByDirByBaseErrors, GetV0CityByCityNameAgentByDirByBaseOutputData, GetV0CityByCityNameAgentByDirByBaseOutputErrors, GetV0CityByCityNameAgentByDirByBaseOutputResponses, GetV0CityByCityNameAgentByDirByBasePrimeData, GetV0CityByCityNameAgentByDirByBasePrimeErrors, GetV0CityByCityNameAgentByDirByBasePrimeResponses, GetV0CityByCityNameAgentByDirByBaseResponses, GetV0CityByCityNameAgentsData, GetV0CityByCityNameAgentsErrors, GetV0CityByCityNameAgentsResponses, GetV0CityByCityNameBeadByIdData, GetV0CityByCityNameBeadByIdDepsData, GetV0CityByCityNameBeadByIdDepsErrors, GetV0CityByCityNameBeadByIdDepsResponses, GetV0CityByCityNameBeadByIdErrors, GetV0CityByCityNameBeadByIdResponses, GetV0CityByCityNameBeadsData, GetV0CityByCityNameBeadsErrors, GetV0CityByCityNameBeadsGraphByRootIdData, GetV0CityByCityNameBeadsGraphByRootIdErrors, GetV0CityByCityNameBeadsGraphByRootIdResponses, GetV0CityByCityNameBeadsReadyData, GetV0CityByCityNameBeadsReadyErrors, GetV0CityByCityNameBeadsReadyResponses, GetV0CityByCityNameBeadsResponses, GetV0CityByCityNameConfigData, GetV0CityByCityNameConfigErrors, GetV0CityByCityNameConfigExplainData, GetV0CityByCityNameConfigExplainErrors, GetV0CityByCityNameConfigExplainResponses, GetV0CityByCityNameConfigResponses, GetV0CityByCityNameConfigValidateData, GetV0CityByCityNameConfigValidateErrors, GetV0CityByCityNameConfigValidateResponses, GetV0CityByCityNameConvoyByIdCheckData, GetV0CityByCityNameConvoyByIdCheckErrors, GetV0CityByCityNameConvoyByIdCheckResponses, GetV0CityByCityNameConvoyByIdData, GetV0CityByCityNameConvoyByIdErrors, GetV0CityByCityNameConvoyByIdResponses, GetV0CityByCityNameConvoysData, GetV0CityByCityNameConvoysErrors, GetV0CityByCityNameConvoysResponses, GetV0CityByCityNameData, GetV0CityByCityNameErrors, GetV0CityByCityNameEventsData, GetV0CityByCityNameEventsErrors, GetV0CityByCityNameEventsResponses, GetV0CityByCityNameExtmsgAdaptersData, GetV0CityByCityNameExtmsgAdaptersErrors, GetV0CityByCityNameExtmsgAdaptersResponses, GetV0CityByCityNameExtmsgBindingsData, GetV0CityByCityNameExtmsgBindingsErrors, GetV0CityByCityNameExtmsgBindingsResponses, GetV0CityByCityNameExtmsgGroupsData, GetV0CityByCityNameExtmsgGroupsErrors, GetV0CityByCityNameExtmsgGroupsResponses, GetV0CityByCityNameExtmsgTranscriptData, GetV0CityByCityNameExtmsgTranscriptErrors, GetV0CityByCityNameExtmsgTranscriptResponses, GetV0CityByCityNameFormulaByNameData, GetV0CityByCityNameFormulaByNameErrors, GetV0CityByCityNameFormulaByNameResponses, GetV0CityByCityNameFormulasByNameData, GetV0CityByCityNameFormulasByNameErrors, GetV0CityByCityNameFormulasByNameResponses, GetV0CityByCityNameFormulasByNameRunsData, GetV0CityByCityNameFormulasByNameRunsErrors, GetV0CityByCityNameFormulasByNameRunsResponses, GetV0CityByCityNameFormulasData, GetV0CityByCityNameFormulasErrors, GetV0CityByCityNameFormulasFeedData, GetV0CityByCityNameFormulasFeedErrors, GetV0CityByCityNameFormulasFeedResponses, GetV0CityByCityNameFormulasResponses, GetV0CityByCityNameHealthData, GetV0CityByCityNameHealthErrors, GetV0CityByCityNameHealthResponses, GetV0CityByCityNameMailByIdData, GetV0CityByCityNameMailByIdErrors, GetV0CityByCityNameMailByIdResponses, GetV0CityByCityNameMailCountData, GetV0CityByCityNameMailCountErrors, GetV0CityByCityNameMailCountResponses, GetV0CityByCityNameMailData, GetV0CityByCityNameMailErrors, GetV0CityByCityNameMailResponses, GetV0CityByCityNameMailThreadByIdData, GetV0CityByCityNameMailThreadByIdErrors, GetV0CityByCityNameMailThreadByIdResponses, GetV0CityByCityNameOrderByNameData, GetV0CityByCityNameOrderByNameErrors, GetV0CityByCityNameOrderByNameResponses, GetV0CityByCityNameOrderHistoryByBeadIdData, GetV0CityByCityNameOrderHistoryByBeadIdErrors, GetV0CityByCityNameOrderHistoryByBeadIdResponses, GetV0CityByCityNameOrdersCheckData, GetV0CityByCityNameOrdersCheckErrors, GetV0CityByCityNameOrdersCheckResponses, GetV0CityByCityNameOrdersData, GetV0CityByCityNameOrdersErrors, GetV0CityByCityNameOrdersFeedData, GetV0CityByCityNameOrdersFeedErrors, GetV0CityByCityNameOrdersFeedResponses, GetV0CityByCityNameOrdersHistoryData, GetV0CityByCityNameOrdersHistoryErrors, GetV0CityByCityNameOrdersHistoryResponses, GetV0CityByCityNameOrdersResponses, GetV0CityByCityNamePacksData, GetV0CityByCityNamePacksErrors, GetV0CityByCityNamePacksResponses, GetV0CityByCityNamePatchesAgentByBaseData, GetV0CityByCityNamePatchesAgentByBaseErrors, GetV0CityByCityNamePatchesAgentByBaseResponses, GetV0CityByCityNamePatchesAgentByDirByBaseData, GetV0CityByCityNamePatchesAgentByDirByBaseErrors, GetV0CityByCityNamePatchesAgentByDirByBaseResponses, GetV0CityByCityNamePatchesAgentsData, GetV0CityByCityNamePatchesAgentsErrors, GetV0CityByCityNamePatchesAgentsResponses, GetV0CityByCityNamePatchesProviderByNameData, GetV0CityByCityNamePatchesProviderByNameErrors, GetV0CityByCityNamePatchesProviderByNameResponses, GetV0CityByCityNamePatchesProvidersData, GetV0CityByCityNamePatchesProvidersErrors, GetV0CityByCityNamePatchesProvidersResponses, GetV0CityByCityNamePatchesRigByNameData, GetV0CityByCityNamePatchesRigByNameErrors, GetV0CityByCityNamePatchesRigByNameResponses, GetV0CityByCityNamePatchesRigsData, GetV0CityByCityNamePatchesRigsErrors, GetV0CityByCityNamePatchesRigsResponses, GetV0CityByCityNameProviderByNameData, GetV0CityByCityNameProviderByNameErrors, GetV0CityByCityNameProviderByNameResponses, GetV0CityByCityNameProviderReadinessData, GetV0CityByCityNameProviderReadinessErrors, GetV0CityByCityNameProviderReadinessResponses, GetV0CityByCityNameProvidersData, GetV0CityByCityNameProvidersErrors, GetV0CityByCityNameProvidersPublicData, GetV0CityByCityNameProvidersPublicErrors, GetV0CityByCityNameProvidersPublicResponses, GetV0CityByCityNameProvidersResponses, GetV0CityByCityNameReadinessData, GetV0CityByCityNameReadinessErrors, GetV0CityByCityNameReadinessResponses, GetV0CityByCityNameResponses, GetV0CityByCityNameRigByNameData, GetV0CityByCityNameRigByNameErrors, GetV0CityByCityNameRigByNameResponses, GetV0CityByCityNameRigsData, GetV0CityByCityNameRigsErrors, GetV0CityByCityNameRigsResponses, GetV0CityByCityNameServiceByNameData, GetV0CityByCityNameServiceByNameErrors, GetV0CityByCityNameServiceByNameResponses, GetV0CityByCityNameServicesData, GetV0CityByCityNameServicesErrors, GetV0CityByCityNameServicesResponses, GetV0CityByCityNameSessionByIdAgentsByAgentIdData, GetV0CityByCityNameSessionByIdAgentsByAgentIdErrors, GetV0CityByCityNameSessionByIdAgentsByAgentIdResponses, GetV0CityByCityNameSessionByIdAgentsData, GetV0CityByCityNameSessionByIdAgentsErrors, GetV0CityByCityNameSessionByIdAgentsResponses, GetV0CityByCityNameSessionByIdData, GetV0CityByCityNameSessionByIdErrors, GetV0CityByCityNameSessionByIdPendingData, GetV0CityByCityNameSessionByIdPendingErrors, GetV0CityByCityNameSessionByIdPendingResponses, GetV0CityByCityNameSessionByIdResponses, GetV0CityByCityNameSessionByIdTranscriptData, GetV0CityByCityNameSessionByIdTranscriptErrors, GetV0CityByCityNameSessionByIdTranscriptResponses, GetV0CityByCityNameSessionsData, GetV0CityByCityNameSessionsErrors, GetV0CityByCityNameSessionsResponses, GetV0CityByCityNameStatusData, GetV0CityByCityNameStatusErrors, GetV0CityByCityNameStatusResponses, GetV0CityByCityNameWorkflowByWorkflowIdData, GetV0CityByCityNameWorkflowByWorkflowIdErrors, GetV0CityByCityNameWorkflowByWorkflowIdResponses, GetV0EventsData, GetV0EventsErrors, GetV0EventsResponses, GetV0ProviderReadinessData, GetV0ProviderReadinessErrors, GetV0ProviderReadinessResponses, GetV0ReadinessData, GetV0ReadinessErrors, GetV0ReadinessResponses, PatchV0CityByCityNameAgentByBaseData, PatchV0CityByCityNameAgentByBaseErrors, PatchV0CityByCityNameAgentByBaseResponses, PatchV0CityByCityNameAgentByDirByBaseData, PatchV0CityByCityNameAgentByDirByBaseErrors, PatchV0CityByCityNameAgentByDirByBaseResponses, PatchV0CityByCityNameBeadByIdData, PatchV0CityByCityNameBeadByIdErrors, PatchV0CityByCityNameBeadByIdResponses, PatchV0CityByCityNameData, PatchV0CityByCityNameErrors, PatchV0CityByCityNameProviderByNameData, PatchV0CityByCityNameProviderByNameErrors, PatchV0CityByCityNameProviderByNameResponses, PatchV0CityByCityNameResponses, PatchV0CityByCityNameRigByNameData, PatchV0CityByCityNameRigByNameErrors, PatchV0CityByCityNameRigByNameResponses, PatchV0CityByCityNameSessionByIdData, PatchV0CityByCityNameSessionByIdErrors, PatchV0CityByCityNameSessionByIdResponses, PostV0CityByCityNameAgentByBaseByActionData, PostV0CityByCityNameAgentByBaseByActionErrors, PostV0CityByCityNameAgentByBaseByActionResponses, PostV0CityByCityNameAgentByDirByBaseByActionData, PostV0CityByCityNameAgentByDirByBaseByActionErrors, PostV0CityByCityNameAgentByDirByBaseByActionResponses, PostV0CityByCityNameBeadByIdAssignData, PostV0CityByCityNameBeadByIdAssignErrors, PostV0CityByCityNameBeadByIdAssignResponses, PostV0CityByCityNameBeadByIdCloseData, PostV0CityByCityNameBeadByIdCloseErrors, PostV0CityByCityNameBeadByIdCloseResponses, PostV0CityByCityNameBeadByIdReopenData, PostV0CityByCityNameBeadByIdReopenErrors, PostV0CityByCityNameBeadByIdReopenResponses, PostV0CityByCityNameBeadByIdUpdateData, PostV0CityByCityNameBeadByIdUpdateErrors, PostV0CityByCityNameBeadByIdUpdateResponses, PostV0CityByCityNameConvoyByIdAddData, PostV0CityByCityNameConvoyByIdAddErrors, PostV0CityByCityNameConvoyByIdAddResponses, PostV0CityByCityNameConvoyByIdCloseData, PostV0CityByCityNameConvoyByIdCloseErrors, PostV0CityByCityNameConvoyByIdCloseResponses, PostV0CityByCityNameConvoyByIdRemoveData, PostV0CityByCityNameConvoyByIdRemoveErrors, PostV0CityByCityNameConvoyByIdRemoveResponses, PostV0CityByCityNameExtmsgBindData, PostV0CityByCityNameExtmsgBindErrors, PostV0CityByCityNameExtmsgBindResponses, PostV0CityByCityNameExtmsgInboundData, PostV0CityByCityNameExtmsgInboundErrors, PostV0CityByCityNameExtmsgInboundResponses, PostV0CityByCityNameExtmsgOutboundData, PostV0CityByCityNameExtmsgOutboundErrors, PostV0CityByCityNameExtmsgOutboundResponses, PostV0CityByCityNameExtmsgParticipantsData, PostV0CityByCityNameExtmsgParticipantsErrors, PostV0CityByCityNameExtmsgParticipantsResponses, PostV0CityByCityNameExtmsgTranscriptAckData, PostV0CityByCityNameExtmsgTranscriptAckErrors, PostV0CityByCityNameExtmsgTranscriptAckResponses, PostV0CityByCityNameExtmsgUnbindData, PostV0CityByCityNameExtmsgUnbindErrors, PostV0CityByCityNameExtmsgUnbindResponses, PostV0CityByCityNameFormulasByNamePreviewData, PostV0CityByCityNameFormulasByNamePreviewErrors, PostV0CityByCityNameFormulasByNamePreviewResponses, PostV0CityByCityNameMailByIdArchiveData, PostV0CityByCityNameMailByIdArchiveErrors, PostV0CityByCityNameMailByIdArchiveResponses, PostV0CityByCityNameMailByIdMarkUnreadData, PostV0CityByCityNameMailByIdMarkUnreadErrors, PostV0CityByCityNameMailByIdMarkUnreadResponses, PostV0CityByCityNameMailByIdReadData, PostV0CityByCityNameMailByIdReadErrors, PostV0CityByCityNameMailByIdReadResponses, PostV0CityByCityNameOrderByNameDisableData, PostV0CityByCityNameOrderByNameDisableErrors, PostV0CityByCityNameOrderByNameDisableResponses, PostV0CityByCityNameOrderByNameEnableData, PostV0CityByCityNameOrderByNameEnableErrors, PostV0CityByCityNameOrderByNameEnableResponses, PostV0CityByCityNameRigByNameByActionData, PostV0CityByCityNameRigByNameByActionErrors, PostV0CityByCityNameRigByNameByActionResponses, PostV0CityByCityNameServiceByNameRestartData, PostV0CityByCityNameServiceByNameRestartErrors, PostV0CityByCityNameServiceByNameRestartResponses, PostV0CityByCityNameSessionByIdCloseData, PostV0CityByCityNameSessionByIdCloseErrors, PostV0CityByCityNameSessionByIdCloseResponses, PostV0CityByCityNameSessionByIdKillData, PostV0CityByCityNameSessionByIdKillErrors, PostV0CityByCityNameSessionByIdKillResponses, PostV0CityByCityNameSessionByIdPermissionModeData, PostV0CityByCityNameSessionByIdPermissionModeErrors, PostV0CityByCityNameSessionByIdPermissionModeResponses, PostV0CityByCityNameSessionByIdRenameData, PostV0CityByCityNameSessionByIdRenameErrors, PostV0CityByCityNameSessionByIdRenameResponses, PostV0CityByCityNameSessionByIdStopData, PostV0CityByCityNameSessionByIdStopErrors, PostV0CityByCityNameSessionByIdStopResponses, PostV0CityByCityNameSessionByIdSuspendData, PostV0CityByCityNameSessionByIdSuspendErrors, PostV0CityByCityNameSessionByIdSuspendResponses, PostV0CityByCityNameSessionByIdWakeData, PostV0CityByCityNameSessionByIdWakeErrors, PostV0CityByCityNameSessionByIdWakeResponses, PostV0CityByCityNameSlingData, PostV0CityByCityNameSlingErrors, PostV0CityByCityNameSlingResponses, PostV0CityByCityNameUnregisterData, PostV0CityByCityNameUnregisterErrors, PostV0CityByCityNameUnregisterResponses, PostV0CityData, PostV0CityErrors, PostV0CityResponses, PutV0CityByCityNamePatchesAgentsData, PutV0CityByCityNamePatchesAgentsErrors, PutV0CityByCityNamePatchesAgentsResponses, PutV0CityByCityNamePatchesProvidersData, PutV0CityByCityNamePatchesProvidersErrors, PutV0CityByCityNamePatchesProvidersResponses, PutV0CityByCityNamePatchesRigsData, PutV0CityByCityNamePatchesRigsErrors, PutV0CityByCityNamePatchesRigsResponses, RegisterExtmsgAdapterData, RegisterExtmsgAdapterErrors, RegisterExtmsgAdapterResponses, ReplyMailData, ReplyMailErrors, ReplyMailResponses, RespondSessionData, RespondSessionErrors, RespondSessionResponses, RotateEventsData, RotateEventsErrors, RotateEventsResponses, SendMailData, SendMailErrors, SendMailResponses, SendSessionMessageData, SendSessionMessageErrors, SendSessionMessageResponses, StreamAgentOutputData, StreamAgentOutputErrors, StreamAgentOutputQualifiedData, StreamAgentOutputQualifiedErrors, StreamAgentOutputQualifiedResponse, StreamAgentOutputQualifiedResponses, StreamAgentOutputResponse, StreamAgentOutputResponses, StreamEventsData, StreamEventsErrors, StreamEventsResponse, StreamEventsResponses, StreamSessionData, StreamSessionErrors, StreamSessionResponse, StreamSessionResponses, StreamSupervisorEventsData, StreamSupervisorEventsErrors, StreamSupervisorEventsResponse, StreamSupervisorEventsResponses, SubmitSessionData, SubmitSessionErrors, SubmitSessionResponses } from './types.gen.js';
-import { zCreateAgentResponse, zCreateBeadResponse, zCreateConvoyResponse, zCreateProviderResponse, zCreateRigResponse, zCreateSessionResponse, zDeleteV0CityByCityNameAgentByBaseResponse, zDeleteV0CityByCityNameAgentByDirByBaseResponse, zDeleteV0CityByCityNameBeadByIdResponse, zDeleteV0CityByCityNameConvoyByIdResponse, zDeleteV0CityByCityNameExtmsgAdaptersResponse, zDeleteV0CityByCityNameExtmsgParticipantsResponse, zDeleteV0CityByCityNameMailByIdResponse, zDeleteV0CityByCityNamePatchesAgentByBaseResponse, zDeleteV0CityByCityNamePatchesAgentByDirByBaseResponse, zDeleteV0CityByCityNamePatchesProviderByNameResponse, zDeleteV0CityByCityNamePatchesRigByNameResponse, zDeleteV0CityByCityNameProviderByNameResponse, zDeleteV0CityByCityNameRigByNameResponse, zDeleteV0CityByCityNameWorkflowByWorkflowIdResponse, zEmitEventResponse, zEnsureExtmsgGroupResponse, zGetHealthResponse, zGetV0CitiesResponse, zGetV0CityByCityNameAgentByBaseOutputResponse, zGetV0CityByCityNameAgentByBasePrimeResponse, zGetV0CityByCityNameAgentByBaseResponse, zGetV0CityByCityNameAgentByDirByBaseOutputResponse, zGetV0CityByCityNameAgentByDirByBasePrimeResponse, zGetV0CityByCityNameAgentByDirByBaseResponse, zGetV0CityByCityNameAgentsResponse, zGetV0CityByCityNameBeadByIdDepsResponse, zGetV0CityByCityNameBeadByIdResponse, zGetV0CityByCityNameBeadsGraphByRootIdResponse, zGetV0CityByCityNameBeadsReadyResponse, zGetV0CityByCityNameBeadsResponse, zGetV0CityByCityNameConfigExplainResponse, zGetV0CityByCityNameConfigResponse, zGetV0CityByCityNameConfigValidateResponse, zGetV0CityByCityNameConvoyByIdCheckResponse, zGetV0CityByCityNameConvoyByIdResponse, zGetV0CityByCityNameConvoysResponse, zGetV0CityByCityNameEventsResponse, zGetV0CityByCityNameExtmsgAdaptersResponse, zGetV0CityByCityNameExtmsgBindingsResponse, zGetV0CityByCityNameExtmsgGroupsResponse, zGetV0CityByCityNameExtmsgTranscriptResponse, zGetV0CityByCityNameFormulaByNameResponse, zGetV0CityByCityNameFormulasByNameResponse, zGetV0CityByCityNameFormulasByNameRunsResponse, zGetV0CityByCityNameFormulasFeedResponse, zGetV0CityByCityNameFormulasResponse, zGetV0CityByCityNameHealthResponse, zGetV0CityByCityNameMailByIdResponse, zGetV0CityByCityNameMailCountResponse, zGetV0CityByCityNameMailResponse, zGetV0CityByCityNameMailThreadByIdResponse, zGetV0CityByCityNameOrderByNameResponse, zGetV0CityByCityNameOrderHistoryByBeadIdResponse, zGetV0CityByCityNameOrdersCheckResponse, zGetV0CityByCityNameOrdersFeedResponse, zGetV0CityByCityNameOrdersHistoryResponse, zGetV0CityByCityNameOrdersResponse, zGetV0CityByCityNamePacksResponse, zGetV0CityByCityNamePatchesAgentByBaseResponse, zGetV0CityByCityNamePatchesAgentByDirByBaseResponse, zGetV0CityByCityNamePatchesAgentsResponse, zGetV0CityByCityNamePatchesProviderByNameResponse, zGetV0CityByCityNamePatchesProvidersResponse, zGetV0CityByCityNamePatchesRigByNameResponse, zGetV0CityByCityNamePatchesRigsResponse, zGetV0CityByCityNameProviderByNameResponse, zGetV0CityByCityNameProviderReadinessResponse, zGetV0CityByCityNameProvidersPublicResponse, zGetV0CityByCityNameProvidersResponse, zGetV0CityByCityNameReadinessResponse, zGetV0CityByCityNameResponse, zGetV0CityByCityNameRigByNameResponse, zGetV0CityByCityNameRigsResponse, zGetV0CityByCityNameServiceByNameResponse, zGetV0CityByCityNameServicesResponse, zGetV0CityByCityNameSessionByIdAgentsByAgentIdResponse, zGetV0CityByCityNameSessionByIdAgentsResponse, zGetV0CityByCityNameSessionByIdPendingResponse, zGetV0CityByCityNameSessionByIdResponse, zGetV0CityByCityNameSessionByIdTranscriptResponse, zGetV0CityByCityNameSessionsResponse, zGetV0CityByCityNameStatusResponse, zGetV0CityByCityNameWorkflowByWorkflowIdResponse, zGetV0EventsResponse, zGetV0ProviderReadinessResponse, zGetV0ReadinessResponse, zPatchV0CityByCityNameAgentByBaseResponse, zPatchV0CityByCityNameAgentByDirByBaseResponse, zPatchV0CityByCityNameBeadByIdResponse, zPatchV0CityByCityNameProviderByNameResponse, zPatchV0CityByCityNameResponse, zPatchV0CityByCityNameRigByNameResponse, zPatchV0CityByCityNameSessionByIdResponse, zPostV0CityByCityNameAgentByBaseByActionResponse, zPostV0CityByCityNameAgentByDirByBaseByActionResponse, zPostV0CityByCityNameBeadByIdAssignResponse, zPostV0CityByCityNameBeadByIdCloseResponse, zPostV0CityByCityNameBeadByIdReopenResponse, zPostV0CityByCityNameBeadByIdUpdateResponse, zPostV0CityByCityNameConvoyByIdAddResponse, zPostV0CityByCityNameConvoyByIdCloseResponse, zPostV0CityByCityNameConvoyByIdRemoveResponse, zPostV0CityByCityNameExtmsgBindResponse, zPostV0CityByCityNameExtmsgInboundResponse, zPostV0CityByCityNameExtmsgOutboundResponse, zPostV0CityByCityNameExtmsgParticipantsResponse, zPostV0CityByCityNameExtmsgTranscriptAckResponse, zPostV0CityByCityNameExtmsgUnbindResponse, zPostV0CityByCityNameFormulasByNamePreviewResponse, zPostV0CityByCityNameMailByIdArchiveResponse, zPostV0CityByCityNameMailByIdMarkUnreadResponse, zPostV0CityByCityNameMailByIdReadResponse, zPostV0CityByCityNameOrderByNameDisableResponse, zPostV0CityByCityNameOrderByNameEnableResponse, zPostV0CityByCityNameRigByNameByActionResponse, zPostV0CityByCityNameServiceByNameRestartResponse, zPostV0CityByCityNameSessionByIdCloseResponse, zPostV0CityByCityNameSessionByIdKillResponse, zPostV0CityByCityNameSessionByIdPermissionModeResponse, zPostV0CityByCityNameSessionByIdRenameResponse, zPostV0CityByCityNameSessionByIdStopResponse, zPostV0CityByCityNameSessionByIdSuspendResponse, zPostV0CityByCityNameSessionByIdWakeResponse, zPostV0CityByCityNameSlingResponse, zPostV0CityByCityNameUnregisterResponse, zPostV0CityResponse, zPutV0CityByCityNamePatchesAgentsResponse, zPutV0CityByCityNamePatchesProvidersResponse, zPutV0CityByCityNamePatchesRigsResponse, zRegisterExtmsgAdapterResponse, zReplyMailResponse, zRespondSessionResponse, zRotateEventsResponse, zSendMailResponse, zSendSessionMessageResponse, zStreamAgentOutputQualifiedResponse, zStreamAgentOutputResponse, zStreamEventsResponse, zStreamSessionResponse, zStreamSupervisorEventsResponse, zSubmitSessionResponse } from './zod.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -23,26 +22,17 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * Get health
  */
-export const getHealth = <ThrowOnError extends boolean = false>(options?: Options<GetHealthData, ThrowOnError>) => (options?.client ?? client).get<GetHealthResponses, GetHealthErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetHealthResponse.parseAsync(data),
-    url: '/health',
-    ...options
-});
+export const getHealth = <ThrowOnError extends boolean = false>(options?: Options<GetHealthData, ThrowOnError>) => (options?.client ?? client).get<GetHealthResponses, GetHealthErrors, ThrowOnError>({ url: '/health', ...options });
 
 /**
  * Get v0 cities
  */
-export const getV0Cities = <ThrowOnError extends boolean = false>(options?: Options<GetV0CitiesData, ThrowOnError>) => (options?.client ?? client).get<GetV0CitiesResponses, GetV0CitiesErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CitiesResponse.parseAsync(data),
-    url: '/v0/cities',
-    ...options
-});
+export const getV0Cities = <ThrowOnError extends boolean = false>(options?: Options<GetV0CitiesData, ThrowOnError>) => (options?.client ?? client).get<GetV0CitiesResponses, GetV0CitiesErrors, ThrowOnError>({ url: '/v0/cities', ...options });
 
 /**
  * Post v0 city
  */
 export const postV0City = <ThrowOnError extends boolean = false>(options: Options<PostV0CityData, ThrowOnError>) => (options.client ?? client).post<PostV0CityResponses, PostV0CityErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityResponse.parseAsync(data),
     url: '/v0/city',
     ...options,
     headers: {
@@ -54,17 +44,12 @@ export const postV0City = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Get v0 city by city name
  */
-export const getV0CityByCityName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameResponses, GetV0CityByCityNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}',
-    ...options
-});
+export const getV0CityByCityName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameResponses, GetV0CityByCityNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}', ...options });
 
 /**
  * Patch v0 city by city name
  */
 export const patchV0CityByCityName = <ThrowOnError extends boolean = false>(options: Options<PatchV0CityByCityNameData, ThrowOnError>) => (options.client ?? client).patch<PatchV0CityByCityNameResponses, PatchV0CityByCityNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPatchV0CityByCityNameResponse.parseAsync(data),
     url: '/v0/city/{cityName}',
     ...options,
     headers: {
@@ -76,26 +61,17 @@ export const patchV0CityByCityName = <ThrowOnError extends boolean = false>(opti
 /**
  * Delete v0 city by city name agent by base
  */
-export const deleteV0CityByCityNameAgentByBase = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameAgentByBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameAgentByBaseResponses, DeleteV0CityByCityNameAgentByBaseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNameAgentByBaseResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{base}',
-    ...options
-});
+export const deleteV0CityByCityNameAgentByBase = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameAgentByBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameAgentByBaseResponses, DeleteV0CityByCityNameAgentByBaseErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{base}', ...options });
 
 /**
  * Get v0 city by city name agent by base
  */
-export const getV0CityByCityNameAgentByBase = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByBaseData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByBaseResponses, GetV0CityByCityNameAgentByBaseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameAgentByBaseResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{base}',
-    ...options
-});
+export const getV0CityByCityNameAgentByBase = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByBaseData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByBaseResponses, GetV0CityByCityNameAgentByBaseErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{base}', ...options });
 
 /**
  * Patch v0 city by city name agent by base
  */
 export const patchV0CityByCityNameAgentByBase = <ThrowOnError extends boolean = false>(options: Options<PatchV0CityByCityNameAgentByBaseData, ThrowOnError>) => (options.client ?? client).patch<PatchV0CityByCityNameAgentByBaseResponses, PatchV0CityByCityNameAgentByBaseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPatchV0CityByCityNameAgentByBaseResponse.parseAsync(data),
     url: '/v0/city/{cityName}/agent/{base}',
     ...options,
     headers: {
@@ -107,64 +83,39 @@ export const patchV0CityByCityNameAgentByBase = <ThrowOnError extends boolean = 
 /**
  * Get v0 city by city name agent by base output
  */
-export const getV0CityByCityNameAgentByBaseOutput = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByBaseOutputData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByBaseOutputResponses, GetV0CityByCityNameAgentByBaseOutputErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameAgentByBaseOutputResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{base}/output',
-    ...options
-});
+export const getV0CityByCityNameAgentByBaseOutput = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByBaseOutputData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByBaseOutputResponses, GetV0CityByCityNameAgentByBaseOutputErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{base}/output', ...options });
 
 /**
  * Stream agent output in real time
  *
  * Server-Sent Events stream of agent output (session log tail or tmux pane polling).
  */
-export const streamAgentOutput = <ThrowOnError extends boolean = false>(options: Options<StreamAgentOutputData, ThrowOnError, StreamAgentOutputResponse>) => (options.client ?? client).sse.get<StreamAgentOutputResponses, StreamAgentOutputErrors, ThrowOnError>({
-    responseValidator: async (data) => await zStreamAgentOutputResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{base}/output/stream',
-    ...options
-});
+export const streamAgentOutput = <ThrowOnError extends boolean = false>(options: Options<StreamAgentOutputData, ThrowOnError, StreamAgentOutputResponse>) => (options.client ?? client).sse.get<StreamAgentOutputResponses, StreamAgentOutputErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{base}/output/stream', ...options });
 
 /**
  * Get v0 city by city name agent by base prime
  */
-export const getV0CityByCityNameAgentByBasePrime = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByBasePrimeData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByBasePrimeResponses, GetV0CityByCityNameAgentByBasePrimeErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameAgentByBasePrimeResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{base}/prime',
-    ...options
-});
+export const getV0CityByCityNameAgentByBasePrime = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByBasePrimeData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByBasePrimeResponses, GetV0CityByCityNameAgentByBasePrimeErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{base}/prime', ...options });
 
 /**
  * Post v0 city by city name agent by base by action
  */
-export const postV0CityByCityNameAgentByBaseByAction = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameAgentByBaseByActionData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameAgentByBaseByActionResponses, PostV0CityByCityNameAgentByBaseByActionErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameAgentByBaseByActionResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{base}/{action}',
-    ...options
-});
+export const postV0CityByCityNameAgentByBaseByAction = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameAgentByBaseByActionData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameAgentByBaseByActionResponses, PostV0CityByCityNameAgentByBaseByActionErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{base}/{action}', ...options });
 
 /**
  * Delete v0 city by city name agent by dir by base
  */
-export const deleteV0CityByCityNameAgentByDirByBase = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameAgentByDirByBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameAgentByDirByBaseResponses, DeleteV0CityByCityNameAgentByDirByBaseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNameAgentByDirByBaseResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{dir}/{base}',
-    ...options
-});
+export const deleteV0CityByCityNameAgentByDirByBase = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameAgentByDirByBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameAgentByDirByBaseResponses, DeleteV0CityByCityNameAgentByDirByBaseErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{dir}/{base}', ...options });
 
 /**
  * Get v0 city by city name agent by dir by base
  */
-export const getV0CityByCityNameAgentByDirByBase = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByDirByBaseData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByDirByBaseResponses, GetV0CityByCityNameAgentByDirByBaseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameAgentByDirByBaseResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{dir}/{base}',
-    ...options
-});
+export const getV0CityByCityNameAgentByDirByBase = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByDirByBaseData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByDirByBaseResponses, GetV0CityByCityNameAgentByDirByBaseErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{dir}/{base}', ...options });
 
 /**
  * Patch v0 city by city name agent by dir by base
  */
 export const patchV0CityByCityNameAgentByDirByBase = <ThrowOnError extends boolean = false>(options: Options<PatchV0CityByCityNameAgentByDirByBaseData, ThrowOnError>) => (options.client ?? client).patch<PatchV0CityByCityNameAgentByDirByBaseResponses, PatchV0CityByCityNameAgentByDirByBaseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPatchV0CityByCityNameAgentByDirByBaseResponse.parseAsync(data),
     url: '/v0/city/{cityName}/agent/{dir}/{base}',
     ...options,
     headers: {
@@ -176,49 +127,29 @@ export const patchV0CityByCityNameAgentByDirByBase = <ThrowOnError extends boole
 /**
  * Get v0 city by city name agent by dir by base output
  */
-export const getV0CityByCityNameAgentByDirByBaseOutput = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByDirByBaseOutputData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByDirByBaseOutputResponses, GetV0CityByCityNameAgentByDirByBaseOutputErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameAgentByDirByBaseOutputResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{dir}/{base}/output',
-    ...options
-});
+export const getV0CityByCityNameAgentByDirByBaseOutput = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByDirByBaseOutputData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByDirByBaseOutputResponses, GetV0CityByCityNameAgentByDirByBaseOutputErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{dir}/{base}/output', ...options });
 
 /**
  * Stream agent output in real time (qualified name)
  *
  * Server-Sent Events stream of agent output for qualified (rig-prefixed) agent names.
  */
-export const streamAgentOutputQualified = <ThrowOnError extends boolean = false>(options: Options<StreamAgentOutputQualifiedData, ThrowOnError, StreamAgentOutputQualifiedResponse>) => (options.client ?? client).sse.get<StreamAgentOutputQualifiedResponses, StreamAgentOutputQualifiedErrors, ThrowOnError>({
-    responseValidator: async (data) => await zStreamAgentOutputQualifiedResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{dir}/{base}/output/stream',
-    ...options
-});
+export const streamAgentOutputQualified = <ThrowOnError extends boolean = false>(options: Options<StreamAgentOutputQualifiedData, ThrowOnError, StreamAgentOutputQualifiedResponse>) => (options.client ?? client).sse.get<StreamAgentOutputQualifiedResponses, StreamAgentOutputQualifiedErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{dir}/{base}/output/stream', ...options });
 
 /**
  * Get v0 city by city name agent by dir by base prime
  */
-export const getV0CityByCityNameAgentByDirByBasePrime = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByDirByBasePrimeData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByDirByBasePrimeResponses, GetV0CityByCityNameAgentByDirByBasePrimeErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameAgentByDirByBasePrimeResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{dir}/{base}/prime',
-    ...options
-});
+export const getV0CityByCityNameAgentByDirByBasePrime = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentByDirByBasePrimeData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentByDirByBasePrimeResponses, GetV0CityByCityNameAgentByDirByBasePrimeErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{dir}/{base}/prime', ...options });
 
 /**
  * Post v0 city by city name agent by dir by base by action
  */
-export const postV0CityByCityNameAgentByDirByBaseByAction = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameAgentByDirByBaseByActionData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameAgentByDirByBaseByActionResponses, PostV0CityByCityNameAgentByDirByBaseByActionErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameAgentByDirByBaseByActionResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agent/{dir}/{base}/{action}',
-    ...options
-});
+export const postV0CityByCityNameAgentByDirByBaseByAction = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameAgentByDirByBaseByActionData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameAgentByDirByBaseByActionResponses, PostV0CityByCityNameAgentByDirByBaseByActionErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agent/{dir}/{base}/{action}', ...options });
 
 /**
  * Get v0 city by city name agents
  */
-export const getV0CityByCityNameAgents = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentsResponses, GetV0CityByCityNameAgentsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameAgentsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/agents',
-    ...options
-});
+export const getV0CityByCityNameAgents = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameAgentsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameAgentsResponses, GetV0CityByCityNameAgentsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/agents', ...options });
 
 /**
  * Create an agent
@@ -226,7 +157,6 @@ export const getV0CityByCityNameAgents = <ThrowOnError extends boolean = false>(
  * Creates an agent and waits until it is visible to immediate follow-up operations. If the agent is durably created but visibility confirmation is canceled or times out, the retryable 503/504 response includes a Retry-After header.
  */
 export const createAgent = <ThrowOnError extends boolean = false>(options: Options<CreateAgentData, ThrowOnError>) => (options.client ?? client).post<CreateAgentResponses, CreateAgentErrors, ThrowOnError>({
-    responseValidator: async (data) => await zCreateAgentResponse.parseAsync(data),
     url: '/v0/city/{cityName}/agents',
     ...options,
     headers: {
@@ -238,26 +168,17 @@ export const createAgent = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Delete v0 city by city name bead by ID
  */
-export const deleteV0CityByCityNameBeadById = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameBeadByIdData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameBeadByIdResponses, DeleteV0CityByCityNameBeadByIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNameBeadByIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/bead/{id}',
-    ...options
-});
+export const deleteV0CityByCityNameBeadById = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameBeadByIdData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameBeadByIdResponses, DeleteV0CityByCityNameBeadByIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/bead/{id}', ...options });
 
 /**
  * Get v0 city by city name bead by ID
  */
-export const getV0CityByCityNameBeadById = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameBeadByIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameBeadByIdResponses, GetV0CityByCityNameBeadByIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameBeadByIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/bead/{id}',
-    ...options
-});
+export const getV0CityByCityNameBeadById = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameBeadByIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameBeadByIdResponses, GetV0CityByCityNameBeadByIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/bead/{id}', ...options });
 
 /**
  * Patch v0 city by city name bead by ID
  */
 export const patchV0CityByCityNameBeadById = <ThrowOnError extends boolean = false>(options: Options<PatchV0CityByCityNameBeadByIdData, ThrowOnError>) => (options.client ?? client).patch<PatchV0CityByCityNameBeadByIdResponses, PatchV0CityByCityNameBeadByIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPatchV0CityByCityNameBeadByIdResponse.parseAsync(data),
     url: '/v0/city/{cityName}/bead/{id}',
     ...options,
     headers: {
@@ -270,7 +191,6 @@ export const patchV0CityByCityNameBeadById = <ThrowOnError extends boolean = fal
  * Post v0 city by city name bead by ID assign
  */
 export const postV0CityByCityNameBeadByIdAssign = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameBeadByIdAssignData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameBeadByIdAssignResponses, PostV0CityByCityNameBeadByIdAssignErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameBeadByIdAssignResponse.parseAsync(data),
     url: '/v0/city/{cityName}/bead/{id}/assign',
     ...options,
     headers: {
@@ -283,7 +203,6 @@ export const postV0CityByCityNameBeadByIdAssign = <ThrowOnError extends boolean 
  * Post v0 city by city name bead by ID close
  */
 export const postV0CityByCityNameBeadByIdClose = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameBeadByIdCloseData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameBeadByIdCloseResponses, PostV0CityByCityNameBeadByIdCloseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameBeadByIdCloseResponse.parseAsync(data),
     url: '/v0/city/{cityName}/bead/{id}/close',
     ...options,
     headers: {
@@ -295,26 +214,17 @@ export const postV0CityByCityNameBeadByIdClose = <ThrowOnError extends boolean =
 /**
  * Get v0 city by city name bead by ID deps
  */
-export const getV0CityByCityNameBeadByIdDeps = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameBeadByIdDepsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameBeadByIdDepsResponses, GetV0CityByCityNameBeadByIdDepsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameBeadByIdDepsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/bead/{id}/deps',
-    ...options
-});
+export const getV0CityByCityNameBeadByIdDeps = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameBeadByIdDepsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameBeadByIdDepsResponses, GetV0CityByCityNameBeadByIdDepsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/bead/{id}/deps', ...options });
 
 /**
  * Post v0 city by city name bead by ID reopen
  */
-export const postV0CityByCityNameBeadByIdReopen = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameBeadByIdReopenData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameBeadByIdReopenResponses, PostV0CityByCityNameBeadByIdReopenErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameBeadByIdReopenResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/bead/{id}/reopen',
-    ...options
-});
+export const postV0CityByCityNameBeadByIdReopen = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameBeadByIdReopenData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameBeadByIdReopenResponses, PostV0CityByCityNameBeadByIdReopenErrors, ThrowOnError>({ url: '/v0/city/{cityName}/bead/{id}/reopen', ...options });
 
 /**
  * Post v0 city by city name bead by ID update
  */
 export const postV0CityByCityNameBeadByIdUpdate = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameBeadByIdUpdateData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameBeadByIdUpdateResponses, PostV0CityByCityNameBeadByIdUpdateErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameBeadByIdUpdateResponse.parseAsync(data),
     url: '/v0/city/{cityName}/bead/{id}/update',
     ...options,
     headers: {
@@ -326,17 +236,12 @@ export const postV0CityByCityNameBeadByIdUpdate = <ThrowOnError extends boolean 
 /**
  * Get v0 city by city name beads
  */
-export const getV0CityByCityNameBeads = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameBeadsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameBeadsResponses, GetV0CityByCityNameBeadsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameBeadsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/beads',
-    ...options
-});
+export const getV0CityByCityNameBeads = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameBeadsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameBeadsResponses, GetV0CityByCityNameBeadsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/beads', ...options });
 
 /**
  * Create a bead
  */
 export const createBead = <ThrowOnError extends boolean = false>(options: Options<CreateBeadData, ThrowOnError>) => (options.client ?? client).post<CreateBeadResponses, CreateBeadErrors, ThrowOnError>({
-    responseValidator: async (data) => await zCreateBeadResponse.parseAsync(data),
     url: '/v0/city/{cityName}/beads',
     ...options,
     headers: {
@@ -348,71 +253,42 @@ export const createBead = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Get v0 city by city name beads graph by root ID
  */
-export const getV0CityByCityNameBeadsGraphByRootId = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameBeadsGraphByRootIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameBeadsGraphByRootIdResponses, GetV0CityByCityNameBeadsGraphByRootIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameBeadsGraphByRootIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/beads/graph/{rootID}',
-    ...options
-});
+export const getV0CityByCityNameBeadsGraphByRootId = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameBeadsGraphByRootIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameBeadsGraphByRootIdResponses, GetV0CityByCityNameBeadsGraphByRootIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/beads/graph/{rootID}', ...options });
 
 /**
  * Get v0 city by city name beads ready
  */
-export const getV0CityByCityNameBeadsReady = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameBeadsReadyData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameBeadsReadyResponses, GetV0CityByCityNameBeadsReadyErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameBeadsReadyResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/beads/ready',
-    ...options
-});
+export const getV0CityByCityNameBeadsReady = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameBeadsReadyData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameBeadsReadyResponses, GetV0CityByCityNameBeadsReadyErrors, ThrowOnError>({ url: '/v0/city/{cityName}/beads/ready', ...options });
 
 /**
  * Get v0 city by city name config
  */
-export const getV0CityByCityNameConfig = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConfigData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConfigResponses, GetV0CityByCityNameConfigErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameConfigResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/config',
-    ...options
-});
+export const getV0CityByCityNameConfig = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConfigData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConfigResponses, GetV0CityByCityNameConfigErrors, ThrowOnError>({ url: '/v0/city/{cityName}/config', ...options });
 
 /**
  * Get v0 city by city name config explain
  */
-export const getV0CityByCityNameConfigExplain = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConfigExplainData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConfigExplainResponses, GetV0CityByCityNameConfigExplainErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameConfigExplainResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/config/explain',
-    ...options
-});
+export const getV0CityByCityNameConfigExplain = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConfigExplainData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConfigExplainResponses, GetV0CityByCityNameConfigExplainErrors, ThrowOnError>({ url: '/v0/city/{cityName}/config/explain', ...options });
 
 /**
  * Get v0 city by city name config validate
  */
-export const getV0CityByCityNameConfigValidate = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConfigValidateData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConfigValidateResponses, GetV0CityByCityNameConfigValidateErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameConfigValidateResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/config/validate',
-    ...options
-});
+export const getV0CityByCityNameConfigValidate = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConfigValidateData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConfigValidateResponses, GetV0CityByCityNameConfigValidateErrors, ThrowOnError>({ url: '/v0/city/{cityName}/config/validate', ...options });
 
 /**
  * Delete v0 city by city name convoy by ID
  */
-export const deleteV0CityByCityNameConvoyById = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameConvoyByIdData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameConvoyByIdResponses, DeleteV0CityByCityNameConvoyByIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNameConvoyByIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/convoy/{id}',
-    ...options
-});
+export const deleteV0CityByCityNameConvoyById = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameConvoyByIdData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameConvoyByIdResponses, DeleteV0CityByCityNameConvoyByIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/convoy/{id}', ...options });
 
 /**
  * Get v0 city by city name convoy by ID
  */
-export const getV0CityByCityNameConvoyById = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConvoyByIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConvoyByIdResponses, GetV0CityByCityNameConvoyByIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameConvoyByIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/convoy/{id}',
-    ...options
-});
+export const getV0CityByCityNameConvoyById = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConvoyByIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConvoyByIdResponses, GetV0CityByCityNameConvoyByIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/convoy/{id}', ...options });
 
 /**
  * Post v0 city by city name convoy by ID add
  */
 export const postV0CityByCityNameConvoyByIdAdd = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameConvoyByIdAddData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameConvoyByIdAddResponses, PostV0CityByCityNameConvoyByIdAddErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameConvoyByIdAddResponse.parseAsync(data),
     url: '/v0/city/{cityName}/convoy/{id}/add',
     ...options,
     headers: {
@@ -424,26 +300,17 @@ export const postV0CityByCityNameConvoyByIdAdd = <ThrowOnError extends boolean =
 /**
  * Get v0 city by city name convoy by ID check
  */
-export const getV0CityByCityNameConvoyByIdCheck = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConvoyByIdCheckData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConvoyByIdCheckResponses, GetV0CityByCityNameConvoyByIdCheckErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameConvoyByIdCheckResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/convoy/{id}/check',
-    ...options
-});
+export const getV0CityByCityNameConvoyByIdCheck = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConvoyByIdCheckData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConvoyByIdCheckResponses, GetV0CityByCityNameConvoyByIdCheckErrors, ThrowOnError>({ url: '/v0/city/{cityName}/convoy/{id}/check', ...options });
 
 /**
  * Post v0 city by city name convoy by ID close
  */
-export const postV0CityByCityNameConvoyByIdClose = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameConvoyByIdCloseData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameConvoyByIdCloseResponses, PostV0CityByCityNameConvoyByIdCloseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameConvoyByIdCloseResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/convoy/{id}/close',
-    ...options
-});
+export const postV0CityByCityNameConvoyByIdClose = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameConvoyByIdCloseData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameConvoyByIdCloseResponses, PostV0CityByCityNameConvoyByIdCloseErrors, ThrowOnError>({ url: '/v0/city/{cityName}/convoy/{id}/close', ...options });
 
 /**
  * Post v0 city by city name convoy by ID remove
  */
 export const postV0CityByCityNameConvoyByIdRemove = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameConvoyByIdRemoveData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameConvoyByIdRemoveResponses, PostV0CityByCityNameConvoyByIdRemoveErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameConvoyByIdRemoveResponse.parseAsync(data),
     url: '/v0/city/{cityName}/convoy/{id}/remove',
     ...options,
     headers: {
@@ -455,17 +322,12 @@ export const postV0CityByCityNameConvoyByIdRemove = <ThrowOnError extends boolea
 /**
  * Get v0 city by city name convoys
  */
-export const getV0CityByCityNameConvoys = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConvoysData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConvoysResponses, GetV0CityByCityNameConvoysErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameConvoysResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/convoys',
-    ...options
-});
+export const getV0CityByCityNameConvoys = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameConvoysData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameConvoysResponses, GetV0CityByCityNameConvoysErrors, ThrowOnError>({ url: '/v0/city/{cityName}/convoys', ...options });
 
 /**
  * Create a convoy
  */
 export const createConvoy = <ThrowOnError extends boolean = false>(options: Options<CreateConvoyData, ThrowOnError>) => (options.client ?? client).post<CreateConvoyResponses, CreateConvoyErrors, ThrowOnError>({
-    responseValidator: async (data) => await zCreateConvoyResponse.parseAsync(data),
     url: '/v0/city/{cityName}/convoys',
     ...options,
     headers: {
@@ -477,17 +339,12 @@ export const createConvoy = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Get v0 city by city name events
  */
-export const getV0CityByCityNameEvents = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameEventsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameEventsResponses, GetV0CityByCityNameEventsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameEventsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/events',
-    ...options
-});
+export const getV0CityByCityNameEvents = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameEventsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameEventsResponses, GetV0CityByCityNameEventsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/events', ...options });
 
 /**
  * Emit an event
  */
 export const emitEvent = <ThrowOnError extends boolean = false>(options: Options<EmitEventData, ThrowOnError>) => (options.client ?? client).post<EmitEventResponses, EmitEventErrors, ThrowOnError>({
-    responseValidator: async (data) => await zEmitEventResponse.parseAsync(data),
     url: '/v0/city/{cityName}/events',
     ...options,
     headers: {
@@ -499,28 +356,19 @@ export const emitEvent = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Force rotate the city event log
  */
-export const rotateEvents = <ThrowOnError extends boolean = false>(options: Options<RotateEventsData, ThrowOnError>) => (options.client ?? client).post<RotateEventsResponses, RotateEventsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zRotateEventsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/events/rotate',
-    ...options
-});
+export const rotateEvents = <ThrowOnError extends boolean = false>(options: Options<RotateEventsData, ThrowOnError>) => (options.client ?? client).post<RotateEventsResponses, RotateEventsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/events/rotate', ...options });
 
 /**
  * Stream city events in real time
  *
  * Server-Sent Events stream of city events with optional workflow projections. Supports reconnection via Last-Event-ID header or after_seq query param; omitting both starts at the current city event head.
  */
-export const streamEvents = <ThrowOnError extends boolean = false>(options: Options<StreamEventsData, ThrowOnError, StreamEventsResponse>) => (options.client ?? client).sse.get<StreamEventsResponses, StreamEventsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zStreamEventsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/events/stream',
-    ...options
-});
+export const streamEvents = <ThrowOnError extends boolean = false>(options: Options<StreamEventsData, ThrowOnError, StreamEventsResponse>) => (options.client ?? client).sse.get<StreamEventsResponses, StreamEventsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/events/stream', ...options });
 
 /**
  * Delete v0 city by city name extmsg adapters
  */
 export const deleteV0CityByCityNameExtmsgAdapters = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameExtmsgAdaptersData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameExtmsgAdaptersResponses, DeleteV0CityByCityNameExtmsgAdaptersErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNameExtmsgAdaptersResponse.parseAsync(data),
     url: '/v0/city/{cityName}/extmsg/adapters',
     ...options,
     headers: {
@@ -532,17 +380,12 @@ export const deleteV0CityByCityNameExtmsgAdapters = <ThrowOnError extends boolea
 /**
  * Get v0 city by city name extmsg adapters
  */
-export const getV0CityByCityNameExtmsgAdapters = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameExtmsgAdaptersData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameExtmsgAdaptersResponses, GetV0CityByCityNameExtmsgAdaptersErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameExtmsgAdaptersResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/extmsg/adapters',
-    ...options
-});
+export const getV0CityByCityNameExtmsgAdapters = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameExtmsgAdaptersData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameExtmsgAdaptersResponses, GetV0CityByCityNameExtmsgAdaptersErrors, ThrowOnError>({ url: '/v0/city/{cityName}/extmsg/adapters', ...options });
 
 /**
  * Register an external messaging adapter
  */
 export const registerExtmsgAdapter = <ThrowOnError extends boolean = false>(options: Options<RegisterExtmsgAdapterData, ThrowOnError>) => (options.client ?? client).post<RegisterExtmsgAdapterResponses, RegisterExtmsgAdapterErrors, ThrowOnError>({
-    responseValidator: async (data) => await zRegisterExtmsgAdapterResponse.parseAsync(data),
     url: '/v0/city/{cityName}/extmsg/adapters',
     ...options,
     headers: {
@@ -555,7 +398,6 @@ export const registerExtmsgAdapter = <ThrowOnError extends boolean = false>(opti
  * Post v0 city by city name extmsg bind
  */
 export const postV0CityByCityNameExtmsgBind = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameExtmsgBindData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameExtmsgBindResponses, PostV0CityByCityNameExtmsgBindErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameExtmsgBindResponse.parseAsync(data),
     url: '/v0/city/{cityName}/extmsg/bind',
     ...options,
     headers: {
@@ -567,26 +409,17 @@ export const postV0CityByCityNameExtmsgBind = <ThrowOnError extends boolean = fa
 /**
  * Get v0 city by city name extmsg bindings
  */
-export const getV0CityByCityNameExtmsgBindings = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameExtmsgBindingsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameExtmsgBindingsResponses, GetV0CityByCityNameExtmsgBindingsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameExtmsgBindingsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/extmsg/bindings',
-    ...options
-});
+export const getV0CityByCityNameExtmsgBindings = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameExtmsgBindingsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameExtmsgBindingsResponses, GetV0CityByCityNameExtmsgBindingsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/extmsg/bindings', ...options });
 
 /**
  * Get v0 city by city name extmsg groups
  */
-export const getV0CityByCityNameExtmsgGroups = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameExtmsgGroupsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameExtmsgGroupsResponses, GetV0CityByCityNameExtmsgGroupsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameExtmsgGroupsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/extmsg/groups',
-    ...options
-});
+export const getV0CityByCityNameExtmsgGroups = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameExtmsgGroupsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameExtmsgGroupsResponses, GetV0CityByCityNameExtmsgGroupsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/extmsg/groups', ...options });
 
 /**
  * Ensure an external messaging group exists
  */
 export const ensureExtmsgGroup = <ThrowOnError extends boolean = false>(options: Options<EnsureExtmsgGroupData, ThrowOnError>) => (options.client ?? client).post<EnsureExtmsgGroupResponses, EnsureExtmsgGroupErrors, ThrowOnError>({
-    responseValidator: async (data) => await zEnsureExtmsgGroupResponse.parseAsync(data),
     url: '/v0/city/{cityName}/extmsg/groups',
     ...options,
     headers: {
@@ -599,7 +432,6 @@ export const ensureExtmsgGroup = <ThrowOnError extends boolean = false>(options:
  * Post v0 city by city name extmsg inbound
  */
 export const postV0CityByCityNameExtmsgInbound = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameExtmsgInboundData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameExtmsgInboundResponses, PostV0CityByCityNameExtmsgInboundErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameExtmsgInboundResponse.parseAsync(data),
     url: '/v0/city/{cityName}/extmsg/inbound',
     ...options,
     headers: {
@@ -612,7 +444,6 @@ export const postV0CityByCityNameExtmsgInbound = <ThrowOnError extends boolean =
  * Post v0 city by city name extmsg outbound
  */
 export const postV0CityByCityNameExtmsgOutbound = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameExtmsgOutboundData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameExtmsgOutboundResponses, PostV0CityByCityNameExtmsgOutboundErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameExtmsgOutboundResponse.parseAsync(data),
     url: '/v0/city/{cityName}/extmsg/outbound',
     ...options,
     headers: {
@@ -625,7 +456,6 @@ export const postV0CityByCityNameExtmsgOutbound = <ThrowOnError extends boolean 
  * Delete v0 city by city name extmsg participants
  */
 export const deleteV0CityByCityNameExtmsgParticipants = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameExtmsgParticipantsData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameExtmsgParticipantsResponses, DeleteV0CityByCityNameExtmsgParticipantsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNameExtmsgParticipantsResponse.parseAsync(data),
     url: '/v0/city/{cityName}/extmsg/participants',
     ...options,
     headers: {
@@ -638,7 +468,6 @@ export const deleteV0CityByCityNameExtmsgParticipants = <ThrowOnError extends bo
  * Post v0 city by city name extmsg participants
  */
 export const postV0CityByCityNameExtmsgParticipants = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameExtmsgParticipantsData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameExtmsgParticipantsResponses, PostV0CityByCityNameExtmsgParticipantsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameExtmsgParticipantsResponse.parseAsync(data),
     url: '/v0/city/{cityName}/extmsg/participants',
     ...options,
     headers: {
@@ -650,17 +479,12 @@ export const postV0CityByCityNameExtmsgParticipants = <ThrowOnError extends bool
 /**
  * Get v0 city by city name extmsg transcript
  */
-export const getV0CityByCityNameExtmsgTranscript = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameExtmsgTranscriptData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameExtmsgTranscriptResponses, GetV0CityByCityNameExtmsgTranscriptErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameExtmsgTranscriptResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/extmsg/transcript',
-    ...options
-});
+export const getV0CityByCityNameExtmsgTranscript = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameExtmsgTranscriptData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameExtmsgTranscriptResponses, GetV0CityByCityNameExtmsgTranscriptErrors, ThrowOnError>({ url: '/v0/city/{cityName}/extmsg/transcript', ...options });
 
 /**
  * Post v0 city by city name extmsg transcript ack
  */
 export const postV0CityByCityNameExtmsgTranscriptAck = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameExtmsgTranscriptAckData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameExtmsgTranscriptAckResponses, PostV0CityByCityNameExtmsgTranscriptAckErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameExtmsgTranscriptAckResponse.parseAsync(data),
     url: '/v0/city/{cityName}/extmsg/transcript/ack',
     ...options,
     headers: {
@@ -673,7 +497,6 @@ export const postV0CityByCityNameExtmsgTranscriptAck = <ThrowOnError extends boo
  * Post v0 city by city name extmsg unbind
  */
 export const postV0CityByCityNameExtmsgUnbind = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameExtmsgUnbindData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameExtmsgUnbindResponses, PostV0CityByCityNameExtmsgUnbindErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameExtmsgUnbindResponse.parseAsync(data),
     url: '/v0/city/{cityName}/extmsg/unbind',
     ...options,
     headers: {
@@ -685,44 +508,27 @@ export const postV0CityByCityNameExtmsgUnbind = <ThrowOnError extends boolean = 
 /**
  * Get v0 city by city name formula by name
  */
-export const getV0CityByCityNameFormulaByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameFormulaByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameFormulaByNameResponses, GetV0CityByCityNameFormulaByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameFormulaByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/formula/{name}',
-    ...options
-});
+export const getV0CityByCityNameFormulaByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameFormulaByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameFormulaByNameResponses, GetV0CityByCityNameFormulaByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/formula/{name}', ...options });
 
 /**
  * Get v0 city by city name formulas
  */
-export const getV0CityByCityNameFormulas = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameFormulasData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameFormulasResponses, GetV0CityByCityNameFormulasErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameFormulasResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/formulas',
-    ...options
-});
+export const getV0CityByCityNameFormulas = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameFormulasData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameFormulasResponses, GetV0CityByCityNameFormulasErrors, ThrowOnError>({ url: '/v0/city/{cityName}/formulas', ...options });
 
 /**
  * Get v0 city by city name formulas feed
  */
-export const getV0CityByCityNameFormulasFeed = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameFormulasFeedData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameFormulasFeedResponses, GetV0CityByCityNameFormulasFeedErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameFormulasFeedResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/formulas/feed',
-    ...options
-});
+export const getV0CityByCityNameFormulasFeed = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameFormulasFeedData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameFormulasFeedResponses, GetV0CityByCityNameFormulasFeedErrors, ThrowOnError>({ url: '/v0/city/{cityName}/formulas/feed', ...options });
 
 /**
  * Get v0 city by city name formulas by name
  */
-export const getV0CityByCityNameFormulasByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameFormulasByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameFormulasByNameResponses, GetV0CityByCityNameFormulasByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameFormulasByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/formulas/{name}',
-    ...options
-});
+export const getV0CityByCityNameFormulasByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameFormulasByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameFormulasByNameResponses, GetV0CityByCityNameFormulasByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/formulas/{name}', ...options });
 
 /**
  * Post v0 city by city name formulas by name preview
  */
 export const postV0CityByCityNameFormulasByNamePreview = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameFormulasByNamePreviewData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameFormulasByNamePreviewResponses, PostV0CityByCityNameFormulasByNamePreviewErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameFormulasByNamePreviewResponse.parseAsync(data),
     url: '/v0/city/{cityName}/formulas/{name}/preview',
     ...options,
     headers: {
@@ -734,35 +540,22 @@ export const postV0CityByCityNameFormulasByNamePreview = <ThrowOnError extends b
 /**
  * Get v0 city by city name formulas by name runs
  */
-export const getV0CityByCityNameFormulasByNameRuns = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameFormulasByNameRunsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameFormulasByNameRunsResponses, GetV0CityByCityNameFormulasByNameRunsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameFormulasByNameRunsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/formulas/{name}/runs',
-    ...options
-});
+export const getV0CityByCityNameFormulasByNameRuns = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameFormulasByNameRunsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameFormulasByNameRunsResponses, GetV0CityByCityNameFormulasByNameRunsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/formulas/{name}/runs', ...options });
 
 /**
  * Get v0 city by city name health
  */
-export const getV0CityByCityNameHealth = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameHealthData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameHealthResponses, GetV0CityByCityNameHealthErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameHealthResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/health',
-    ...options
-});
+export const getV0CityByCityNameHealth = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameHealthData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameHealthResponses, GetV0CityByCityNameHealthErrors, ThrowOnError>({ url: '/v0/city/{cityName}/health', ...options });
 
 /**
  * Get v0 city by city name mail
  */
-export const getV0CityByCityNameMail = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameMailData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameMailResponses, GetV0CityByCityNameMailErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameMailResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/mail',
-    ...options
-});
+export const getV0CityByCityNameMail = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameMailData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameMailResponses, GetV0CityByCityNameMailErrors, ThrowOnError>({ url: '/v0/city/{cityName}/mail', ...options });
 
 /**
  * Send a mail message
  */
 export const sendMail = <ThrowOnError extends boolean = false>(options: Options<SendMailData, ThrowOnError>) => (options.client ?? client).post<SendMailResponses, SendMailErrors, ThrowOnError>({
-    responseValidator: async (data) => await zSendMailResponse.parseAsync(data),
     url: '/v0/city/{cityName}/mail',
     ...options,
     headers: {
@@ -774,71 +567,42 @@ export const sendMail = <ThrowOnError extends boolean = false>(options: Options<
 /**
  * Get v0 city by city name mail count
  */
-export const getV0CityByCityNameMailCount = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameMailCountData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameMailCountResponses, GetV0CityByCityNameMailCountErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameMailCountResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/mail/count',
-    ...options
-});
+export const getV0CityByCityNameMailCount = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameMailCountData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameMailCountResponses, GetV0CityByCityNameMailCountErrors, ThrowOnError>({ url: '/v0/city/{cityName}/mail/count', ...options });
 
 /**
  * Get v0 city by city name mail thread by ID
  */
-export const getV0CityByCityNameMailThreadById = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameMailThreadByIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameMailThreadByIdResponses, GetV0CityByCityNameMailThreadByIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameMailThreadByIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/mail/thread/{id}',
-    ...options
-});
+export const getV0CityByCityNameMailThreadById = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameMailThreadByIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameMailThreadByIdResponses, GetV0CityByCityNameMailThreadByIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/mail/thread/{id}', ...options });
 
 /**
  * Delete v0 city by city name mail by ID
  */
-export const deleteV0CityByCityNameMailById = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameMailByIdData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameMailByIdResponses, DeleteV0CityByCityNameMailByIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNameMailByIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/mail/{id}',
-    ...options
-});
+export const deleteV0CityByCityNameMailById = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameMailByIdData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameMailByIdResponses, DeleteV0CityByCityNameMailByIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/mail/{id}', ...options });
 
 /**
  * Get v0 city by city name mail by ID
  */
-export const getV0CityByCityNameMailById = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameMailByIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameMailByIdResponses, GetV0CityByCityNameMailByIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameMailByIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/mail/{id}',
-    ...options
-});
+export const getV0CityByCityNameMailById = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameMailByIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameMailByIdResponses, GetV0CityByCityNameMailByIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/mail/{id}', ...options });
 
 /**
  * Post v0 city by city name mail by ID archive
  */
-export const postV0CityByCityNameMailByIdArchive = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameMailByIdArchiveData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameMailByIdArchiveResponses, PostV0CityByCityNameMailByIdArchiveErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameMailByIdArchiveResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/mail/{id}/archive',
-    ...options
-});
+export const postV0CityByCityNameMailByIdArchive = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameMailByIdArchiveData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameMailByIdArchiveResponses, PostV0CityByCityNameMailByIdArchiveErrors, ThrowOnError>({ url: '/v0/city/{cityName}/mail/{id}/archive', ...options });
 
 /**
  * Post v0 city by city name mail by ID mark unread
  */
-export const postV0CityByCityNameMailByIdMarkUnread = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameMailByIdMarkUnreadData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameMailByIdMarkUnreadResponses, PostV0CityByCityNameMailByIdMarkUnreadErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameMailByIdMarkUnreadResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/mail/{id}/mark-unread',
-    ...options
-});
+export const postV0CityByCityNameMailByIdMarkUnread = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameMailByIdMarkUnreadData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameMailByIdMarkUnreadResponses, PostV0CityByCityNameMailByIdMarkUnreadErrors, ThrowOnError>({ url: '/v0/city/{cityName}/mail/{id}/mark-unread', ...options });
 
 /**
  * Post v0 city by city name mail by ID read
  */
-export const postV0CityByCityNameMailByIdRead = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameMailByIdReadData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameMailByIdReadResponses, PostV0CityByCityNameMailByIdReadErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameMailByIdReadResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/mail/{id}/read',
-    ...options
-});
+export const postV0CityByCityNameMailByIdRead = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameMailByIdReadData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameMailByIdReadResponses, PostV0CityByCityNameMailByIdReadErrors, ThrowOnError>({ url: '/v0/city/{cityName}/mail/{id}/read', ...options });
 
 /**
  * Reply to a mail message
  */
 export const replyMail = <ThrowOnError extends boolean = false>(options: Options<ReplyMailData, ThrowOnError>) => (options.client ?? client).post<ReplyMailResponses, ReplyMailErrors, ThrowOnError>({
-    responseValidator: async (data) => await zReplyMailResponse.parseAsync(data),
     url: '/v0/city/{cityName}/mail/{id}/reply',
     ...options,
     headers: {
@@ -850,134 +614,77 @@ export const replyMail = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Get v0 city by city name order history by bead ID
  */
-export const getV0CityByCityNameOrderHistoryByBeadId = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrderHistoryByBeadIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrderHistoryByBeadIdResponses, GetV0CityByCityNameOrderHistoryByBeadIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameOrderHistoryByBeadIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/order/history/{bead_id}',
-    ...options
-});
+export const getV0CityByCityNameOrderHistoryByBeadId = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrderHistoryByBeadIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrderHistoryByBeadIdResponses, GetV0CityByCityNameOrderHistoryByBeadIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/order/history/{bead_id}', ...options });
 
 /**
  * Get v0 city by city name order by name
  */
-export const getV0CityByCityNameOrderByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrderByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrderByNameResponses, GetV0CityByCityNameOrderByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameOrderByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/order/{name}',
-    ...options
-});
+export const getV0CityByCityNameOrderByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrderByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrderByNameResponses, GetV0CityByCityNameOrderByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/order/{name}', ...options });
 
 /**
  * Post v0 city by city name order by name disable
  */
-export const postV0CityByCityNameOrderByNameDisable = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameOrderByNameDisableData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameOrderByNameDisableResponses, PostV0CityByCityNameOrderByNameDisableErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameOrderByNameDisableResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/order/{name}/disable',
-    ...options
-});
+export const postV0CityByCityNameOrderByNameDisable = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameOrderByNameDisableData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameOrderByNameDisableResponses, PostV0CityByCityNameOrderByNameDisableErrors, ThrowOnError>({ url: '/v0/city/{cityName}/order/{name}/disable', ...options });
 
 /**
  * Post v0 city by city name order by name enable
  */
-export const postV0CityByCityNameOrderByNameEnable = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameOrderByNameEnableData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameOrderByNameEnableResponses, PostV0CityByCityNameOrderByNameEnableErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameOrderByNameEnableResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/order/{name}/enable',
-    ...options
-});
+export const postV0CityByCityNameOrderByNameEnable = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameOrderByNameEnableData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameOrderByNameEnableResponses, PostV0CityByCityNameOrderByNameEnableErrors, ThrowOnError>({ url: '/v0/city/{cityName}/order/{name}/enable', ...options });
 
 /**
  * Get v0 city by city name orders
  */
-export const getV0CityByCityNameOrders = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrdersData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrdersResponses, GetV0CityByCityNameOrdersErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameOrdersResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/orders',
-    ...options
-});
+export const getV0CityByCityNameOrders = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrdersData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrdersResponses, GetV0CityByCityNameOrdersErrors, ThrowOnError>({ url: '/v0/city/{cityName}/orders', ...options });
 
 /**
  * Get v0 city by city name orders check
  */
-export const getV0CityByCityNameOrdersCheck = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrdersCheckData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrdersCheckResponses, GetV0CityByCityNameOrdersCheckErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameOrdersCheckResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/orders/check',
-    ...options
-});
+export const getV0CityByCityNameOrdersCheck = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrdersCheckData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrdersCheckResponses, GetV0CityByCityNameOrdersCheckErrors, ThrowOnError>({ url: '/v0/city/{cityName}/orders/check', ...options });
 
 /**
  * Get v0 city by city name orders feed
  */
-export const getV0CityByCityNameOrdersFeed = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrdersFeedData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrdersFeedResponses, GetV0CityByCityNameOrdersFeedErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameOrdersFeedResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/orders/feed',
-    ...options
-});
+export const getV0CityByCityNameOrdersFeed = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrdersFeedData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrdersFeedResponses, GetV0CityByCityNameOrdersFeedErrors, ThrowOnError>({ url: '/v0/city/{cityName}/orders/feed', ...options });
 
 /**
  * Get v0 city by city name orders history
  */
-export const getV0CityByCityNameOrdersHistory = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrdersHistoryData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrdersHistoryResponses, GetV0CityByCityNameOrdersHistoryErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameOrdersHistoryResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/orders/history',
-    ...options
-});
+export const getV0CityByCityNameOrdersHistory = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameOrdersHistoryData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameOrdersHistoryResponses, GetV0CityByCityNameOrdersHistoryErrors, ThrowOnError>({ url: '/v0/city/{cityName}/orders/history', ...options });
 
 /**
  * Get v0 city by city name packs
  */
-export const getV0CityByCityNamePacks = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePacksData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePacksResponses, GetV0CityByCityNamePacksErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNamePacksResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/packs',
-    ...options
-});
+export const getV0CityByCityNamePacks = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePacksData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePacksResponses, GetV0CityByCityNamePacksErrors, ThrowOnError>({ url: '/v0/city/{cityName}/packs', ...options });
 
 /**
  * Delete v0 city by city name patches agent by base
  */
-export const deleteV0CityByCityNamePatchesAgentByBase = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNamePatchesAgentByBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNamePatchesAgentByBaseResponses, DeleteV0CityByCityNamePatchesAgentByBaseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNamePatchesAgentByBaseResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/agent/{base}',
-    ...options
-});
+export const deleteV0CityByCityNamePatchesAgentByBase = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNamePatchesAgentByBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNamePatchesAgentByBaseResponses, DeleteV0CityByCityNamePatchesAgentByBaseErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/agent/{base}', ...options });
 
 /**
  * Get v0 city by city name patches agent by base
  */
-export const getV0CityByCityNamePatchesAgentByBase = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesAgentByBaseData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesAgentByBaseResponses, GetV0CityByCityNamePatchesAgentByBaseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNamePatchesAgentByBaseResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/agent/{base}',
-    ...options
-});
+export const getV0CityByCityNamePatchesAgentByBase = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesAgentByBaseData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesAgentByBaseResponses, GetV0CityByCityNamePatchesAgentByBaseErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/agent/{base}', ...options });
 
 /**
  * Delete v0 city by city name patches agent by dir by base
  */
-export const deleteV0CityByCityNamePatchesAgentByDirByBase = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNamePatchesAgentByDirByBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNamePatchesAgentByDirByBaseResponses, DeleteV0CityByCityNamePatchesAgentByDirByBaseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNamePatchesAgentByDirByBaseResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/agent/{dir}/{base}',
-    ...options
-});
+export const deleteV0CityByCityNamePatchesAgentByDirByBase = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNamePatchesAgentByDirByBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNamePatchesAgentByDirByBaseResponses, DeleteV0CityByCityNamePatchesAgentByDirByBaseErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/agent/{dir}/{base}', ...options });
 
 /**
  * Get v0 city by city name patches agent by dir by base
  */
-export const getV0CityByCityNamePatchesAgentByDirByBase = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesAgentByDirByBaseData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesAgentByDirByBaseResponses, GetV0CityByCityNamePatchesAgentByDirByBaseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNamePatchesAgentByDirByBaseResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/agent/{dir}/{base}',
-    ...options
-});
+export const getV0CityByCityNamePatchesAgentByDirByBase = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesAgentByDirByBaseData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesAgentByDirByBaseResponses, GetV0CityByCityNamePatchesAgentByDirByBaseErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/agent/{dir}/{base}', ...options });
 
 /**
  * Get v0 city by city name patches agents
  */
-export const getV0CityByCityNamePatchesAgents = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesAgentsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesAgentsResponses, GetV0CityByCityNamePatchesAgentsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNamePatchesAgentsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/agents',
-    ...options
-});
+export const getV0CityByCityNamePatchesAgents = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesAgentsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesAgentsResponses, GetV0CityByCityNamePatchesAgentsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/agents', ...options });
 
 /**
  * Put v0 city by city name patches agents
  */
 export const putV0CityByCityNamePatchesAgents = <ThrowOnError extends boolean = false>(options: Options<PutV0CityByCityNamePatchesAgentsData, ThrowOnError>) => (options.client ?? client).put<PutV0CityByCityNamePatchesAgentsResponses, PutV0CityByCityNamePatchesAgentsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPutV0CityByCityNamePatchesAgentsResponse.parseAsync(data),
     url: '/v0/city/{cityName}/patches/agents',
     ...options,
     headers: {
@@ -989,35 +696,22 @@ export const putV0CityByCityNamePatchesAgents = <ThrowOnError extends boolean = 
 /**
  * Delete v0 city by city name patches provider by name
  */
-export const deleteV0CityByCityNamePatchesProviderByName = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNamePatchesProviderByNameData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNamePatchesProviderByNameResponses, DeleteV0CityByCityNamePatchesProviderByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNamePatchesProviderByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/provider/{name}',
-    ...options
-});
+export const deleteV0CityByCityNamePatchesProviderByName = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNamePatchesProviderByNameData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNamePatchesProviderByNameResponses, DeleteV0CityByCityNamePatchesProviderByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/provider/{name}', ...options });
 
 /**
  * Get v0 city by city name patches provider by name
  */
-export const getV0CityByCityNamePatchesProviderByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesProviderByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesProviderByNameResponses, GetV0CityByCityNamePatchesProviderByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNamePatchesProviderByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/provider/{name}',
-    ...options
-});
+export const getV0CityByCityNamePatchesProviderByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesProviderByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesProviderByNameResponses, GetV0CityByCityNamePatchesProviderByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/provider/{name}', ...options });
 
 /**
  * Get v0 city by city name patches providers
  */
-export const getV0CityByCityNamePatchesProviders = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesProvidersData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesProvidersResponses, GetV0CityByCityNamePatchesProvidersErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNamePatchesProvidersResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/providers',
-    ...options
-});
+export const getV0CityByCityNamePatchesProviders = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesProvidersData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesProvidersResponses, GetV0CityByCityNamePatchesProvidersErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/providers', ...options });
 
 /**
  * Put v0 city by city name patches providers
  */
 export const putV0CityByCityNamePatchesProviders = <ThrowOnError extends boolean = false>(options: Options<PutV0CityByCityNamePatchesProvidersData, ThrowOnError>) => (options.client ?? client).put<PutV0CityByCityNamePatchesProvidersResponses, PutV0CityByCityNamePatchesProvidersErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPutV0CityByCityNamePatchesProvidersResponse.parseAsync(data),
     url: '/v0/city/{cityName}/patches/providers',
     ...options,
     headers: {
@@ -1029,35 +723,22 @@ export const putV0CityByCityNamePatchesProviders = <ThrowOnError extends boolean
 /**
  * Delete v0 city by city name patches rig by name
  */
-export const deleteV0CityByCityNamePatchesRigByName = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNamePatchesRigByNameData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNamePatchesRigByNameResponses, DeleteV0CityByCityNamePatchesRigByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNamePatchesRigByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/rig/{name}',
-    ...options
-});
+export const deleteV0CityByCityNamePatchesRigByName = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNamePatchesRigByNameData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNamePatchesRigByNameResponses, DeleteV0CityByCityNamePatchesRigByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/rig/{name}', ...options });
 
 /**
  * Get v0 city by city name patches rig by name
  */
-export const getV0CityByCityNamePatchesRigByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesRigByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesRigByNameResponses, GetV0CityByCityNamePatchesRigByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNamePatchesRigByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/rig/{name}',
-    ...options
-});
+export const getV0CityByCityNamePatchesRigByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesRigByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesRigByNameResponses, GetV0CityByCityNamePatchesRigByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/rig/{name}', ...options });
 
 /**
  * Get v0 city by city name patches rigs
  */
-export const getV0CityByCityNamePatchesRigs = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesRigsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesRigsResponses, GetV0CityByCityNamePatchesRigsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNamePatchesRigsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/patches/rigs',
-    ...options
-});
+export const getV0CityByCityNamePatchesRigs = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNamePatchesRigsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNamePatchesRigsResponses, GetV0CityByCityNamePatchesRigsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/patches/rigs', ...options });
 
 /**
  * Put v0 city by city name patches rigs
  */
 export const putV0CityByCityNamePatchesRigs = <ThrowOnError extends boolean = false>(options: Options<PutV0CityByCityNamePatchesRigsData, ThrowOnError>) => (options.client ?? client).put<PutV0CityByCityNamePatchesRigsResponses, PutV0CityByCityNamePatchesRigsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPutV0CityByCityNamePatchesRigsResponse.parseAsync(data),
     url: '/v0/city/{cityName}/patches/rigs',
     ...options,
     headers: {
@@ -1069,35 +750,22 @@ export const putV0CityByCityNamePatchesRigs = <ThrowOnError extends boolean = fa
 /**
  * Get v0 city by city name provider readiness
  */
-export const getV0CityByCityNameProviderReadiness = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameProviderReadinessData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameProviderReadinessResponses, GetV0CityByCityNameProviderReadinessErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameProviderReadinessResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/provider-readiness',
-    ...options
-});
+export const getV0CityByCityNameProviderReadiness = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameProviderReadinessData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameProviderReadinessResponses, GetV0CityByCityNameProviderReadinessErrors, ThrowOnError>({ url: '/v0/city/{cityName}/provider-readiness', ...options });
 
 /**
  * Delete v0 city by city name provider by name
  */
-export const deleteV0CityByCityNameProviderByName = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameProviderByNameData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameProviderByNameResponses, DeleteV0CityByCityNameProviderByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNameProviderByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/provider/{name}',
-    ...options
-});
+export const deleteV0CityByCityNameProviderByName = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameProviderByNameData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameProviderByNameResponses, DeleteV0CityByCityNameProviderByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/provider/{name}', ...options });
 
 /**
  * Get v0 city by city name provider by name
  */
-export const getV0CityByCityNameProviderByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameProviderByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameProviderByNameResponses, GetV0CityByCityNameProviderByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameProviderByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/provider/{name}',
-    ...options
-});
+export const getV0CityByCityNameProviderByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameProviderByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameProviderByNameResponses, GetV0CityByCityNameProviderByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/provider/{name}', ...options });
 
 /**
  * Patch v0 city by city name provider by name
  */
 export const patchV0CityByCityNameProviderByName = <ThrowOnError extends boolean = false>(options: Options<PatchV0CityByCityNameProviderByNameData, ThrowOnError>) => (options.client ?? client).patch<PatchV0CityByCityNameProviderByNameResponses, PatchV0CityByCityNameProviderByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPatchV0CityByCityNameProviderByNameResponse.parseAsync(data),
     url: '/v0/city/{cityName}/provider/{name}',
     ...options,
     headers: {
@@ -1109,17 +777,12 @@ export const patchV0CityByCityNameProviderByName = <ThrowOnError extends boolean
 /**
  * Get v0 city by city name providers
  */
-export const getV0CityByCityNameProviders = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameProvidersData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameProvidersResponses, GetV0CityByCityNameProvidersErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameProvidersResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/providers',
-    ...options
-});
+export const getV0CityByCityNameProviders = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameProvidersData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameProvidersResponses, GetV0CityByCityNameProvidersErrors, ThrowOnError>({ url: '/v0/city/{cityName}/providers', ...options });
 
 /**
  * Create a provider
  */
 export const createProvider = <ThrowOnError extends boolean = false>(options: Options<CreateProviderData, ThrowOnError>) => (options.client ?? client).post<CreateProviderResponses, CreateProviderErrors, ThrowOnError>({
-    responseValidator: async (data) => await zCreateProviderResponse.parseAsync(data),
     url: '/v0/city/{cityName}/providers',
     ...options,
     headers: {
@@ -1131,44 +794,27 @@ export const createProvider = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Get v0 city by city name providers public
  */
-export const getV0CityByCityNameProvidersPublic = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameProvidersPublicData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameProvidersPublicResponses, GetV0CityByCityNameProvidersPublicErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameProvidersPublicResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/providers/public',
-    ...options
-});
+export const getV0CityByCityNameProvidersPublic = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameProvidersPublicData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameProvidersPublicResponses, GetV0CityByCityNameProvidersPublicErrors, ThrowOnError>({ url: '/v0/city/{cityName}/providers/public', ...options });
 
 /**
  * Get v0 city by city name readiness
  */
-export const getV0CityByCityNameReadiness = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameReadinessData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameReadinessResponses, GetV0CityByCityNameReadinessErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameReadinessResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/readiness',
-    ...options
-});
+export const getV0CityByCityNameReadiness = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameReadinessData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameReadinessResponses, GetV0CityByCityNameReadinessErrors, ThrowOnError>({ url: '/v0/city/{cityName}/readiness', ...options });
 
 /**
  * Delete v0 city by city name rig by name
  */
-export const deleteV0CityByCityNameRigByName = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameRigByNameData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameRigByNameResponses, DeleteV0CityByCityNameRigByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNameRigByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/rig/{name}',
-    ...options
-});
+export const deleteV0CityByCityNameRigByName = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameRigByNameData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameRigByNameResponses, DeleteV0CityByCityNameRigByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/rig/{name}', ...options });
 
 /**
  * Get v0 city by city name rig by name
  */
-export const getV0CityByCityNameRigByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameRigByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameRigByNameResponses, GetV0CityByCityNameRigByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameRigByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/rig/{name}',
-    ...options
-});
+export const getV0CityByCityNameRigByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameRigByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameRigByNameResponses, GetV0CityByCityNameRigByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/rig/{name}', ...options });
 
 /**
  * Patch v0 city by city name rig by name
  */
 export const patchV0CityByCityNameRigByName = <ThrowOnError extends boolean = false>(options: Options<PatchV0CityByCityNameRigByNameData, ThrowOnError>) => (options.client ?? client).patch<PatchV0CityByCityNameRigByNameResponses, PatchV0CityByCityNameRigByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPatchV0CityByCityNameRigByNameResponse.parseAsync(data),
     url: '/v0/city/{cityName}/rig/{name}',
     ...options,
     headers: {
@@ -1180,26 +826,17 @@ export const patchV0CityByCityNameRigByName = <ThrowOnError extends boolean = fa
 /**
  * Post v0 city by city name rig by name by action
  */
-export const postV0CityByCityNameRigByNameByAction = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameRigByNameByActionData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameRigByNameByActionResponses, PostV0CityByCityNameRigByNameByActionErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameRigByNameByActionResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/rig/{name}/{action}',
-    ...options
-});
+export const postV0CityByCityNameRigByNameByAction = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameRigByNameByActionData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameRigByNameByActionResponses, PostV0CityByCityNameRigByNameByActionErrors, ThrowOnError>({ url: '/v0/city/{cityName}/rig/{name}/{action}', ...options });
 
 /**
  * Get v0 city by city name rigs
  */
-export const getV0CityByCityNameRigs = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameRigsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameRigsResponses, GetV0CityByCityNameRigsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameRigsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/rigs',
-    ...options
-});
+export const getV0CityByCityNameRigs = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameRigsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameRigsResponses, GetV0CityByCityNameRigsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/rigs', ...options });
 
 /**
  * Create a rig
  */
 export const createRig = <ThrowOnError extends boolean = false>(options: Options<CreateRigData, ThrowOnError>) => (options.client ?? client).post<CreateRigResponses, CreateRigErrors, ThrowOnError>({
-    responseValidator: async (data) => await zCreateRigResponse.parseAsync(data),
     url: '/v0/city/{cityName}/rigs',
     ...options,
     headers: {
@@ -1211,44 +848,27 @@ export const createRig = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Get v0 city by city name service by name
  */
-export const getV0CityByCityNameServiceByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameServiceByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameServiceByNameResponses, GetV0CityByCityNameServiceByNameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameServiceByNameResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/service/{name}',
-    ...options
-});
+export const getV0CityByCityNameServiceByName = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameServiceByNameData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameServiceByNameResponses, GetV0CityByCityNameServiceByNameErrors, ThrowOnError>({ url: '/v0/city/{cityName}/service/{name}', ...options });
 
 /**
  * Post v0 city by city name service by name restart
  */
-export const postV0CityByCityNameServiceByNameRestart = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameServiceByNameRestartData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameServiceByNameRestartResponses, PostV0CityByCityNameServiceByNameRestartErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameServiceByNameRestartResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/service/{name}/restart',
-    ...options
-});
+export const postV0CityByCityNameServiceByNameRestart = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameServiceByNameRestartData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameServiceByNameRestartResponses, PostV0CityByCityNameServiceByNameRestartErrors, ThrowOnError>({ url: '/v0/city/{cityName}/service/{name}/restart', ...options });
 
 /**
  * Get v0 city by city name services
  */
-export const getV0CityByCityNameServices = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameServicesData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameServicesResponses, GetV0CityByCityNameServicesErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameServicesResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/services',
-    ...options
-});
+export const getV0CityByCityNameServices = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameServicesData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameServicesResponses, GetV0CityByCityNameServicesErrors, ThrowOnError>({ url: '/v0/city/{cityName}/services', ...options });
 
 /**
  * Get v0 city by city name session by ID
  */
-export const getV0CityByCityNameSessionById = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionByIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionByIdResponses, GetV0CityByCityNameSessionByIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameSessionByIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}',
-    ...options
-});
+export const getV0CityByCityNameSessionById = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionByIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionByIdResponses, GetV0CityByCityNameSessionByIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}', ...options });
 
 /**
  * Patch v0 city by city name session by ID
  */
 export const patchV0CityByCityNameSessionById = <ThrowOnError extends boolean = false>(options: Options<PatchV0CityByCityNameSessionByIdData, ThrowOnError>) => (options.client ?? client).patch<PatchV0CityByCityNameSessionByIdResponses, PatchV0CityByCityNameSessionByIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPatchV0CityByCityNameSessionByIdResponse.parseAsync(data),
     url: '/v0/city/{cityName}/session/{id}',
     ...options,
     headers: {
@@ -1260,44 +880,27 @@ export const patchV0CityByCityNameSessionById = <ThrowOnError extends boolean = 
 /**
  * Get v0 city by city name session by ID agents
  */
-export const getV0CityByCityNameSessionByIdAgents = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionByIdAgentsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionByIdAgentsResponses, GetV0CityByCityNameSessionByIdAgentsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameSessionByIdAgentsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}/agents',
-    ...options
-});
+export const getV0CityByCityNameSessionByIdAgents = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionByIdAgentsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionByIdAgentsResponses, GetV0CityByCityNameSessionByIdAgentsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}/agents', ...options });
 
 /**
  * Get v0 city by city name session by ID agents by agent ID
  */
-export const getV0CityByCityNameSessionByIdAgentsByAgentId = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionByIdAgentsByAgentIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionByIdAgentsByAgentIdResponses, GetV0CityByCityNameSessionByIdAgentsByAgentIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameSessionByIdAgentsByAgentIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}/agents/{agentId}',
-    ...options
-});
+export const getV0CityByCityNameSessionByIdAgentsByAgentId = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionByIdAgentsByAgentIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionByIdAgentsByAgentIdResponses, GetV0CityByCityNameSessionByIdAgentsByAgentIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}/agents/{agentId}', ...options });
 
 /**
  * Post v0 city by city name session by ID close
  */
-export const postV0CityByCityNameSessionByIdClose = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdCloseData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdCloseResponses, PostV0CityByCityNameSessionByIdCloseErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameSessionByIdCloseResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}/close',
-    ...options
-});
+export const postV0CityByCityNameSessionByIdClose = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdCloseData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdCloseResponses, PostV0CityByCityNameSessionByIdCloseErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}/close', ...options });
 
 /**
  * Post v0 city by city name session by ID kill
  */
-export const postV0CityByCityNameSessionByIdKill = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdKillData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdKillResponses, PostV0CityByCityNameSessionByIdKillErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameSessionByIdKillResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}/kill',
-    ...options
-});
+export const postV0CityByCityNameSessionByIdKill = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdKillData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdKillResponses, PostV0CityByCityNameSessionByIdKillErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}/kill', ...options });
 
 /**
  * Send a message to a session
  */
 export const sendSessionMessage = <ThrowOnError extends boolean = false>(options: Options<SendSessionMessageData, ThrowOnError>) => (options.client ?? client).post<SendSessionMessageResponses, SendSessionMessageErrors, ThrowOnError>({
-    responseValidator: async (data) => await zSendSessionMessageResponse.parseAsync(data),
     url: '/v0/city/{cityName}/session/{id}/messages',
     ...options,
     headers: {
@@ -1309,17 +912,12 @@ export const sendSessionMessage = <ThrowOnError extends boolean = false>(options
 /**
  * Get v0 city by city name session by ID pending
  */
-export const getV0CityByCityNameSessionByIdPending = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionByIdPendingData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionByIdPendingResponses, GetV0CityByCityNameSessionByIdPendingErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameSessionByIdPendingResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}/pending',
-    ...options
-});
+export const getV0CityByCityNameSessionByIdPending = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionByIdPendingData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionByIdPendingResponses, GetV0CityByCityNameSessionByIdPendingErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}/pending', ...options });
 
 /**
  * Post v0 city by city name session by ID permission mode
  */
 export const postV0CityByCityNameSessionByIdPermissionMode = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdPermissionModeData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdPermissionModeResponses, PostV0CityByCityNameSessionByIdPermissionModeErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameSessionByIdPermissionModeResponse.parseAsync(data),
     url: '/v0/city/{cityName}/session/{id}/permission-mode',
     ...options,
     headers: {
@@ -1332,7 +930,6 @@ export const postV0CityByCityNameSessionByIdPermissionMode = <ThrowOnError exten
  * Post v0 city by city name session by ID rename
  */
 export const postV0CityByCityNameSessionByIdRename = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdRenameData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdRenameResponses, PostV0CityByCityNameSessionByIdRenameErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameSessionByIdRenameResponse.parseAsync(data),
     url: '/v0/city/{cityName}/session/{id}/rename',
     ...options,
     headers: {
@@ -1345,7 +942,6 @@ export const postV0CityByCityNameSessionByIdRename = <ThrowOnError extends boole
  * Respond to a pending interaction
  */
 export const respondSession = <ThrowOnError extends boolean = false>(options: Options<RespondSessionData, ThrowOnError>) => (options.client ?? client).post<RespondSessionResponses, RespondSessionErrors, ThrowOnError>({
-    responseValidator: async (data) => await zRespondSessionResponse.parseAsync(data),
     url: '/v0/city/{cityName}/session/{id}/respond',
     ...options,
     headers: {
@@ -1357,28 +953,19 @@ export const respondSession = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Post v0 city by city name session by ID stop
  */
-export const postV0CityByCityNameSessionByIdStop = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdStopData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdStopResponses, PostV0CityByCityNameSessionByIdStopErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameSessionByIdStopResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}/stop',
-    ...options
-});
+export const postV0CityByCityNameSessionByIdStop = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdStopData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdStopResponses, PostV0CityByCityNameSessionByIdStopErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}/stop', ...options });
 
 /**
  * Stream session output in real time
  *
  * Server-Sent Events stream of session transcript updates. Streams turns (conversation format) or raw messages (JSONL format) based on the format query parameter. Emits activity and pending events for tool approval prompts.
  */
-export const streamSession = <ThrowOnError extends boolean = false>(options: Options<StreamSessionData, ThrowOnError, StreamSessionResponse>) => (options.client ?? client).sse.get<StreamSessionResponses, StreamSessionErrors, ThrowOnError>({
-    responseValidator: async (data) => await zStreamSessionResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}/stream',
-    ...options
-});
+export const streamSession = <ThrowOnError extends boolean = false>(options: Options<StreamSessionData, ThrowOnError, StreamSessionResponse>) => (options.client ?? client).sse.get<StreamSessionResponses, StreamSessionErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}/stream', ...options });
 
 /**
  * Submit a message to a session
  */
 export const submitSession = <ThrowOnError extends boolean = false>(options: Options<SubmitSessionData, ThrowOnError>) => (options.client ?? client).post<SubmitSessionResponses, SubmitSessionErrors, ThrowOnError>({
-    responseValidator: async (data) => await zSubmitSessionResponse.parseAsync(data),
     url: '/v0/city/{cityName}/session/{id}/submit',
     ...options,
     headers: {
@@ -1390,44 +977,27 @@ export const submitSession = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Post v0 city by city name session by ID suspend
  */
-export const postV0CityByCityNameSessionByIdSuspend = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdSuspendData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdSuspendResponses, PostV0CityByCityNameSessionByIdSuspendErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameSessionByIdSuspendResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}/suspend',
-    ...options
-});
+export const postV0CityByCityNameSessionByIdSuspend = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdSuspendData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdSuspendResponses, PostV0CityByCityNameSessionByIdSuspendErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}/suspend', ...options });
 
 /**
  * Get v0 city by city name session by ID transcript
  */
-export const getV0CityByCityNameSessionByIdTranscript = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionByIdTranscriptData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionByIdTranscriptResponses, GetV0CityByCityNameSessionByIdTranscriptErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameSessionByIdTranscriptResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}/transcript',
-    ...options
-});
+export const getV0CityByCityNameSessionByIdTranscript = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionByIdTranscriptData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionByIdTranscriptResponses, GetV0CityByCityNameSessionByIdTranscriptErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}/transcript', ...options });
 
 /**
  * Post v0 city by city name session by ID wake
  */
-export const postV0CityByCityNameSessionByIdWake = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdWakeData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdWakeResponses, PostV0CityByCityNameSessionByIdWakeErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameSessionByIdWakeResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/session/{id}/wake',
-    ...options
-});
+export const postV0CityByCityNameSessionByIdWake = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSessionByIdWakeData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSessionByIdWakeResponses, PostV0CityByCityNameSessionByIdWakeErrors, ThrowOnError>({ url: '/v0/city/{cityName}/session/{id}/wake', ...options });
 
 /**
  * Get v0 city by city name sessions
  */
-export const getV0CityByCityNameSessions = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionsResponses, GetV0CityByCityNameSessionsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameSessionsResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/sessions',
-    ...options
-});
+export const getV0CityByCityNameSessions = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameSessionsData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameSessionsResponses, GetV0CityByCityNameSessionsErrors, ThrowOnError>({ url: '/v0/city/{cityName}/sessions', ...options });
 
 /**
  * Create a session
  */
 export const createSession = <ThrowOnError extends boolean = false>(options: Options<CreateSessionData, ThrowOnError>) => (options.client ?? client).post<CreateSessionResponses, CreateSessionErrors, ThrowOnError>({
-    responseValidator: async (data) => await zCreateSessionResponse.parseAsync(data),
     url: '/v0/city/{cityName}/sessions',
     ...options,
     headers: {
@@ -1440,7 +1010,6 @@ export const createSession = <ThrowOnError extends boolean = false>(options: Opt
  * Post v0 city by city name sling
  */
 export const postV0CityByCityNameSling = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameSlingData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameSlingResponses, PostV0CityByCityNameSlingErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameSlingResponse.parseAsync(data),
     url: '/v0/city/{cityName}/sling',
     ...options,
     headers: {
@@ -1452,73 +1021,41 @@ export const postV0CityByCityNameSling = <ThrowOnError extends boolean = false>(
 /**
  * Get v0 city by city name status
  */
-export const getV0CityByCityNameStatus = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameStatusData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameStatusResponses, GetV0CityByCityNameStatusErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameStatusResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/status',
-    ...options
-});
+export const getV0CityByCityNameStatus = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameStatusData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameStatusResponses, GetV0CityByCityNameStatusErrors, ThrowOnError>({ url: '/v0/city/{cityName}/status', ...options });
 
 /**
  * Post v0 city by city name unregister
  */
-export const postV0CityByCityNameUnregister = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameUnregisterData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameUnregisterResponses, PostV0CityByCityNameUnregisterErrors, ThrowOnError>({
-    responseValidator: async (data) => await zPostV0CityByCityNameUnregisterResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/unregister',
-    ...options
-});
+export const postV0CityByCityNameUnregister = <ThrowOnError extends boolean = false>(options: Options<PostV0CityByCityNameUnregisterData, ThrowOnError>) => (options.client ?? client).post<PostV0CityByCityNameUnregisterResponses, PostV0CityByCityNameUnregisterErrors, ThrowOnError>({ url: '/v0/city/{cityName}/unregister', ...options });
 
 /**
  * Delete v0 city by city name workflow by workflow ID
  */
-export const deleteV0CityByCityNameWorkflowByWorkflowId = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameWorkflowByWorkflowIdData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameWorkflowByWorkflowIdResponses, DeleteV0CityByCityNameWorkflowByWorkflowIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zDeleteV0CityByCityNameWorkflowByWorkflowIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/workflow/{workflow_id}',
-    ...options
-});
+export const deleteV0CityByCityNameWorkflowByWorkflowId = <ThrowOnError extends boolean = false>(options: Options<DeleteV0CityByCityNameWorkflowByWorkflowIdData, ThrowOnError>) => (options.client ?? client).delete<DeleteV0CityByCityNameWorkflowByWorkflowIdResponses, DeleteV0CityByCityNameWorkflowByWorkflowIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/workflow/{workflow_id}', ...options });
 
 /**
  * Get v0 city by city name workflow by workflow ID
  */
-export const getV0CityByCityNameWorkflowByWorkflowId = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameWorkflowByWorkflowIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameWorkflowByWorkflowIdResponses, GetV0CityByCityNameWorkflowByWorkflowIdErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0CityByCityNameWorkflowByWorkflowIdResponse.parseAsync(data),
-    url: '/v0/city/{cityName}/workflow/{workflow_id}',
-    ...options
-});
+export const getV0CityByCityNameWorkflowByWorkflowId = <ThrowOnError extends boolean = false>(options: Options<GetV0CityByCityNameWorkflowByWorkflowIdData, ThrowOnError>) => (options.client ?? client).get<GetV0CityByCityNameWorkflowByWorkflowIdResponses, GetV0CityByCityNameWorkflowByWorkflowIdErrors, ThrowOnError>({ url: '/v0/city/{cityName}/workflow/{workflow_id}', ...options });
 
 /**
  * Get v0 events
  */
-export const getV0Events = <ThrowOnError extends boolean = false>(options?: Options<GetV0EventsData, ThrowOnError>) => (options?.client ?? client).get<GetV0EventsResponses, GetV0EventsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0EventsResponse.parseAsync(data),
-    url: '/v0/events',
-    ...options
-});
+export const getV0Events = <ThrowOnError extends boolean = false>(options?: Options<GetV0EventsData, ThrowOnError>) => (options?.client ?? client).get<GetV0EventsResponses, GetV0EventsErrors, ThrowOnError>({ url: '/v0/events', ...options });
 
 /**
  * Stream tagged events from all running cities.
  *
  * Server-Sent Events stream of supervisor-tagged events. Supports reconnection via Last-Event-ID header or after_cursor query param; omitting both starts at the current supervisor event head.
  */
-export const streamSupervisorEvents = <ThrowOnError extends boolean = false>(options?: Options<StreamSupervisorEventsData, ThrowOnError, StreamSupervisorEventsResponse>) => (options?.client ?? client).sse.get<StreamSupervisorEventsResponses, StreamSupervisorEventsErrors, ThrowOnError>({
-    responseValidator: async (data) => await zStreamSupervisorEventsResponse.parseAsync(data),
-    url: '/v0/events/stream',
-    ...options
-});
+export const streamSupervisorEvents = <ThrowOnError extends boolean = false>(options?: Options<StreamSupervisorEventsData, ThrowOnError, StreamSupervisorEventsResponse>) => (options?.client ?? client).sse.get<StreamSupervisorEventsResponses, StreamSupervisorEventsErrors, ThrowOnError>({ url: '/v0/events/stream', ...options });
 
 /**
  * Get v0 provider readiness
  */
-export const getV0ProviderReadiness = <ThrowOnError extends boolean = false>(options?: Options<GetV0ProviderReadinessData, ThrowOnError>) => (options?.client ?? client).get<GetV0ProviderReadinessResponses, GetV0ProviderReadinessErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0ProviderReadinessResponse.parseAsync(data),
-    url: '/v0/provider-readiness',
-    ...options
-});
+export const getV0ProviderReadiness = <ThrowOnError extends boolean = false>(options?: Options<GetV0ProviderReadinessData, ThrowOnError>) => (options?.client ?? client).get<GetV0ProviderReadinessResponses, GetV0ProviderReadinessErrors, ThrowOnError>({ url: '/v0/provider-readiness', ...options });
 
 /**
  * Get v0 readiness
  */
-export const getV0Readiness = <ThrowOnError extends boolean = false>(options?: Options<GetV0ReadinessData, ThrowOnError>) => (options?.client ?? client).get<GetV0ReadinessResponses, GetV0ReadinessErrors, ThrowOnError>({
-    responseValidator: async (data) => await zGetV0ReadinessResponse.parseAsync(data),
-    url: '/v0/readiness',
-    ...options
-});
+export const getV0Readiness = <ThrowOnError extends boolean = false>(options?: Options<GetV0ReadinessData, ThrowOnError>) => (options?.client ?? client).get<GetV0ReadinessResponses, GetV0ReadinessErrors, ThrowOnError>({ url: '/v0/readiness', ...options });

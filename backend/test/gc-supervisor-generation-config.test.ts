@@ -138,19 +138,30 @@ test('published fetch runtime executes generated response validators for HTTP ca
   }
 });
 
-test('gc supervisor generation enables generated Zod response validators', async () => {
+test('gc supervisor generation validates backend responses but not frontend (r43k)', async () => {
   const config = await readFile(heyApiConfigUrl, 'utf8');
-  const sdk = await readFile(new URL('sdk.gen.ts', generatedClientUrl), 'utf8');
-  const generatedFiles = await readTsFiles(generatedClientUrl);
-  const zodFile = generatedFiles.find(({ path }) => path === 'zod.gen.ts');
+  const backendSdk = await readFile(new URL('sdk.gen.ts', generatedClientUrl), 'utf8');
+  const frontendSdk = await readFile(new URL('sdk.gen.ts', frontendGeneratedClientUrl), 'utf8');
+  const backendFiles = await readTsFiles(generatedClientUrl);
+  const frontendFiles = await readTsFiles(frontendGeneratedClientUrl);
+  const backendZod = backendFiles.find(({ path }) => path === 'zod.gen.ts');
+  const frontendZod = frontendFiles.find(({ path }) => path === 'zod.gen.ts');
 
+  // The config branches validation on the output tree: zod for the backend's
+  // narrow cities/status reads, none for the browser's broad direct reads.
   assert.match(config, /name:\s*'@hey-api\/sdk'/);
-  assert.match(config, /validator:\s*\{\s*request:\s*false,\s*response:\s*'zod'/s);
+  assert.match(config, /response:\s*isFrontendClient\s*\?\s*false\s*:\s*'zod'/);
   assert.match(config, /name:\s*'zod'/);
-  assert.ok(zodFile, 'zod.gen.ts should be generated from the supervisor OpenAPI schema');
-  assert.match(zodFile.source, /from 'zod'/);
-  assert.match(sdk, /responseValidator:/);
-  assert.doesNotMatch(config, /validator:\s*false/);
+
+  // Backend: zod schemas + a response validator in every operation.
+  assert.ok(backendZod, 'backend zod.gen.ts should be generated from the supervisor schema');
+  assert.match(backendZod.source, /from 'zod'/);
+  assert.match(backendSdk, /responseValidator:/);
+
+  // Frontend: no zod schemas, no response validation (r43k — the browser
+  // trusts the supervisor and must not reject valid-but-evolved responses).
+  assert.equal(frontendZod, undefined, 'frontend must not generate a zod.gen.ts');
+  assert.doesNotMatch(frontendSdk, /responseValidator:/);
 });
 
 test('gc supervisor generated client post-processing is limited to RFC3339 offset datetimes', async () => {
@@ -192,19 +203,29 @@ test('gc supervisor generated client is covered by typecheck and lint gates', as
 });
 
 test('gc supervisor generated output imports the official fetch runtime instead of bundling patched runtime files', async () => {
+  // Backend carries zod.gen.ts (response validation); frontend does not (r43k).
+  const expectedPaths = {
+    [generatedClientUrl.href]: [
+      'client.gen.ts',
+      'index.ts',
+      'sdk.gen.ts',
+      'types.gen.ts',
+      'zod.gen.ts',
+    ],
+    [frontendGeneratedClientUrl.href]: [
+      'client.gen.ts',
+      'index.ts',
+      'sdk.gen.ts',
+      'types.gen.ts',
+    ],
+  };
   for (const rootUrl of [generatedClientUrl, frontendGeneratedClientUrl]) {
     const generatedFiles = await readTsFiles(rootUrl);
     const generatedPaths = generatedFiles.map(({ path }) => path).sort();
     const client = generatedFiles.find(({ path }) => path === 'client.gen.ts');
     const sdk = generatedFiles.find(({ path }) => path === 'sdk.gen.ts');
 
-    assert.deepEqual(generatedPaths, [
-      'client.gen.ts',
-      'index.ts',
-      'sdk.gen.ts',
-      'types.gen.ts',
-      'zod.gen.ts',
-    ]);
+    assert.deepEqual(generatedPaths, expectedPaths[rootUrl.href]);
     assert.match(client?.source ?? '', /from '@hey-api\/client-fetch'/);
     assert.match(sdk?.source ?? '', /from '@hey-api\/client-fetch'/);
     assert.equal(

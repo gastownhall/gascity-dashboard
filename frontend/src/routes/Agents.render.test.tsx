@@ -34,6 +34,7 @@ const fetchUrls = () => fetchCalls.map((call) => call.url);
 
 interface StubFetchOptions {
   agentsPayload?: unknown;
+  agentsStatus?: number;
 }
 
 // Minimal fetch stub that mimics the surface the AgentsPage hits: dashboard
@@ -84,6 +85,7 @@ function stubFetch(options: StubFetchOptions = {}) {
             ],
             total: 2,
           },
+          options.agentsStatus === undefined ? undefined : { status: options.agentsStatus },
         );
       }
       if (url === '/gc-supervisor/v0/city/test-city/sessions' && method === 'GET') {
@@ -285,26 +287,14 @@ describe('AgentsPage (post-ay6 regressions)', () => {
     expect(sleepingLink.textContent).toBe('gascity-packs · polecat-2');
   });
 
-  it('renders generated supervisor validation failures as operator-safe copy', async () => {
+  it('renders a genuine supervisor agents failure as operator-safe unavailable copy', async () => {
     vi.unstubAllGlobals();
     stubFetch({
+      agentsStatus: 503,
       agentsPayload: {
-        items: [
-          {
-            name: 'mayor',
-            available: true,
-            running: true,
-            suspended: false,
-            state: 'idle',
-            provider: 'claude',
-            session: {
-              name: 'mayor',
-              attached: true,
-              last_activity: 'not-a-date',
-            },
-          },
-        ],
-        total: 1,
+        title: 'Service Unavailable',
+        status: 503,
+        detail: 'supervisor unavailable',
       },
     });
 
@@ -316,12 +306,9 @@ describe('AgentsPage (post-ay6 regressions)', () => {
       </MemoryRouter>,
     );
 
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      'gc supervisor response failed validation',
-    );
-    expect(container.textContent).not.toContain('invalid_format');
-    expect(container.textContent).not.toContain('datetime');
-    expect(container.textContent).not.toContain('[{"origin"');
+    // Fail-safe invariant (R6/R15/R16): a genuine fetch failure must surface an
+    // explicit unavailable state, never a false all-clear empty roster.
+    expect(await screen.findByRole('alert')).toBeTruthy();
     expect(container.textContent).toContain('Agent roster unavailable.');
     expect(container.textContent).not.toContain('No agents configured.');
   });
