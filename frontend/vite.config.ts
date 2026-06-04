@@ -6,7 +6,10 @@ import react from '@vitejs/plugin-react';
 // needs to know about cross-origin — everything is same-origin both in
 // dev and prod, which keeps the Host-allowlist + Origin check + CSP
 // simple.
-export const BACKEND_TARGET = 'http://127.0.0.1:8081';
+// DEV_BACKEND_TARGET lets an isolated worktree stack proxy to its own
+// backend port (pair with `vite --port <n>`), so the snap harness can
+// drive it via SNAP_BASE without touching the primary :5174/:8081 pair.
+export const BACKEND_TARGET = process.env.DEV_BACKEND_TARGET ?? 'http://127.0.0.1:8081';
 
 interface ProxyRequest {
   hasHeader(name: string): boolean;
