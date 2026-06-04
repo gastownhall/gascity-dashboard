@@ -15,7 +15,7 @@ import type {
   Message,
   MonitorFeedItemResponse,
   TypedEventStreamEnvelope,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import type { AgentPendingInteraction } from '../supervisor/agentPending';
 import { supervisorEventDetail, supervisorEventSignal } from '../supervisor/eventSignals';
 import { maintainerResourceId } from '../views/modules/maintainer/attentionKeys';

@@ -4,7 +4,7 @@ import type { DashboardSession } from 'gas-city-dashboard-shared';
 import type {
   AgentResponse,
   SessionTranscriptGetResponse,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import {
   LiveSessionPeek,
   isAgentStreamable,

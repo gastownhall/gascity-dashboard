@@ -1,5 +1,5 @@
 import type { DashboardSession } from 'gas-city-dashboard-shared';
-import type { AgentResponse } from '../generated/gc-supervisor-client/types.gen';
+import type { AgentResponse } from 'gas-city-dashboard-shared/gc-supervisor';
 import { formatRelative } from '../hooks/time';
 import {
   useSessionStream,

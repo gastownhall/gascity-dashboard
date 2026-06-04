@@ -17,7 +17,7 @@ import { activeCityOrThrow } from '../api/cityBase';
 import type {
   FormulaDetailResponse,
   WorkflowSnapshotResponse,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { SupervisorApiError, supervisorApi, type SupervisorApi } from './client';
 import { normalizeSessions } from './sessionReads';
 

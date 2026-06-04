@@ -1,6 +1,6 @@
 import { AnsiUp } from 'ansi_up';
 import { useMemo, type ReactNode } from 'react';
-import type { OutputTurn } from '../generated/gc-supervisor-client/types.gen';
+import type { OutputTurn } from 'gas-city-dashboard-shared/gc-supervisor';
 import { formatClockTime, formatRelative, formatShortDate } from '../hooks/time';
 import { PROMPT_INJECTION_NOTICE } from '../lib/constants';
 import { stripTerminalControls } from '../lib/stripTerminalControls';

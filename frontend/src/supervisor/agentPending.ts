@@ -4,7 +4,7 @@ import type {
   RespondSessionResponse,
   SessionRespondInputBody,
   SessionResponse,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { activeCityOrThrow } from '../api/cityBase';
 import { supervisorApi } from './client';
 

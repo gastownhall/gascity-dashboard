@@ -3,7 +3,7 @@ import type {
   AgentPrimeBody,
   AgentResponse,
   ListBodyAgentResponse,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { supervisorApi } from './client';
 
 export type SupervisorAgent = AgentResponse;

@@ -19,11 +19,7 @@ import {
   type LaneProgressMark,
 } from 'gas-city-dashboard-shared';
 import { activeCityOrThrow } from '../api/cityBase';
-import type {
-  Bead,
-  FormulaFeedBody,
-  ListBodyBead,
-} from '../generated/gc-supervisor-client/types.gen';
+import type { Bead, FormulaFeedBody, ListBodyBead } from 'gas-city-dashboard-shared/gc-supervisor';
 import { supervisorApiForRequestBudget } from './client';
 import { normalizeSessions } from './sessionReads';
 

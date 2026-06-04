@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setActiveCity } from '../api/cityBase';
-import type { Bead } from '../generated/gc-supervisor-client/types.gen';
+import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
 import {
   GC_MUTATION_HEADERS,
   resetSupervisorApiForTests,

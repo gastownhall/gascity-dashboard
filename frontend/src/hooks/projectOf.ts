@@ -1,6 +1,6 @@
 import type { DashboardSession } from 'gas-city-dashboard-shared';
 import { getActiveCity } from '../api/cityBase';
-import type { AgentResponse } from '../generated/gc-supervisor-client/types.gen';
+import type { AgentResponse } from 'gas-city-dashboard-shared/gc-supervisor';
 import type { SupervisorBead } from '../supervisor/beadReads';
 import type { SupervisorMailItem } from '../supervisor/mailReads';
 

@@ -5,7 +5,7 @@ import { setActiveCity } from '../api/cityBase';
 import { invalidate } from '../api/cache';
 import { AttentionProvider } from '../attention/context';
 import { createAttentionContributors } from '../attention/registry';
-import type { TypedEventStreamEnvelope } from '../generated/gc-supervisor-client/types.gen';
+import type { TypedEventStreamEnvelope } from 'gas-city-dashboard-shared/gc-supervisor';
 import { ActivityPage } from './Activity';
 
 interface FetchCall {

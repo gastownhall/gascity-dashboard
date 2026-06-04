@@ -6,7 +6,7 @@ import type {
   BeadCreateInputBody,
   SlingInputBody,
   SlingResponse,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 
 export interface CreateAndSlingSupervisorBeadInput {
   title: string;

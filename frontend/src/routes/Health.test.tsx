@@ -5,7 +5,7 @@ import { HealthPage } from './Health';
 import { invalidate } from '../api/cache';
 import { AttentionProvider } from '../attention/context';
 import { createAttentionContributors, type HealthAttentionFacts } from '../attention/registry';
-import type { HealthOutputBody, StatusBody } from '../generated/gc-supervisor-client/types.gen';
+import type { HealthOutputBody, StatusBody } from 'gas-city-dashboard-shared/gc-supervisor';
 import type { DoltNomsTrend, LocalToolVersions, SystemHealth } from 'gas-city-dashboard-shared';
 import { supervisorApiForRequestBudget } from '../supervisor/client';
 

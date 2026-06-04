@@ -1,4 +1,4 @@
-import type { TypedEventStreamEnvelope } from '../generated/gc-supervisor-client/types.gen';
+import type { TypedEventStreamEnvelope } from 'gas-city-dashboard-shared/gc-supervisor';
 
 export type SupervisorEventSignal = 'attention' | 'watch' | 'event';
 

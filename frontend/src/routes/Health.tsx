@@ -17,7 +17,7 @@ import type {
   StatusBody,
   StatusStoreHealth,
   StatusWorkCounts,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { useCachedData } from '../hooks/useCachedData';
 import { useVisibleRefresh } from '../hooks/useVisibleRefresh';
 import { formatHumanSize } from '../lib/format';

@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { sampleDoltNomsSize, STORE_HEALTH_SOURCE } from '../src/routes/dolt.js';
-import type { StatusBody } from '../src/generated/gc-supervisor-client/types.gen.js';
+import type { StatusBody } from 'gas-city-dashboard-shared/gc-supervisor';
 
 // gascity-dashboard-x82: the dolt-noms sampler reads the supervisor's
 // already-exposed store_health.size_bytes (GET /v0/city/{name}/status)

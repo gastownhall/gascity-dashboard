@@ -30,7 +30,7 @@ import {
   replyMail as postSupervisorMailReply,
   respondSession as postSupervisorSessionRespond,
   sendMail as postSupervisorMail,
-} from '../generated/gc-supervisor-client/sdk.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import type {
   Bead,
   BeadCloseBody,
@@ -69,7 +69,7 @@ import type {
   SlingResponse,
   SupervisorCitiesOutputBody,
   WorkflowSnapshotResponse,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { SupervisorApiError, unwrapSupervisorResult, type SupervisorResult } from './errors';
 import {
   SUPERVISOR_PROXY_BASE_URL,

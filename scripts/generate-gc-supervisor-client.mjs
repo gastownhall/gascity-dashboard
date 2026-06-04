@@ -6,16 +6,10 @@ import path from 'node:path';
 const checkOnly = process.argv.includes('--check');
 const heyApiConfigPath = path.resolve('backend/openapi-ts.config.ts');
 const heyApiCliPath = path.resolve('node_modules/@hey-api/openapi-ts/bin/run.js');
-const supervisorClientOutputs = [
-  {
-    label: 'backend',
-    path: path.resolve('backend/src/generated/gc-supervisor-client'),
-  },
-  {
-    label: 'frontend',
-    path: path.resolve('frontend/src/generated/gc-supervisor-client'),
-  },
-];
+// One generated supervisor client, owned by `shared`, re-exported through the
+// `gas-city-dashboard-shared/gc-supervisor` subpath so backend, frontend, and
+// the TUI all consume the same wire types from a single source.
+const supervisorClientOutputPath = path.resolve('shared/src/generated/gc-supervisor-client');
 
 async function generateHeyApiClient(toPath) {
   await rm(toPath, { recursive: true, force: true });
@@ -34,11 +28,14 @@ async function generateHeyApiClient(toPath) {
     throw new Error(`@hey-api/openapi-ts failed with exit code ${result.status ?? 'unknown'}`);
   }
   await allowRfc3339OffsetDateTimes(toPath);
+  await reexportZodSchemas(toPath);
 }
 
-// The backend client generates zod response validators; the frontend client
-// does not (see backend/openapi-ts.config.ts). Patch the generated date-time
-// validators to accept RFC3339 offset timestamps wherever a zod.gen.ts exists.
+// The single shared SDK does not run a response validator (see
+// backend/openapi-ts.config.ts) — the browser must not reject valid-but-evolved
+// supervisor responses (r43k). The zod response schemas are still generated so
+// the backend can validate its narrow cities/status reads at the edge. Patch
+// the generated date-time validators to accept RFC3339 offset timestamps.
 async function allowRfc3339OffsetDateTimes(toPath) {
   const zodPath = path.join(toPath, 'zod.gen.ts');
   if (!(await exists(zodPath))) return;
@@ -52,6 +49,21 @@ async function allowRfc3339OffsetDateTimes(toPath) {
   await writeFile(zodPath, patched);
 }
 
+// The generated barrel re-exports only the SDK and types. Re-export the zod
+// response schemas too so the backend can import them through the
+// `gas-city-dashboard-shared/gc-supervisor` subpath and validate its narrow
+// cities/status reads explicitly (the shared SDK carries no validator). Frontend
+// bundles tree-shake the unused schemas.
+async function reexportZodSchemas(toPath) {
+  const indexPath = path.join(toPath, 'index.ts');
+  const zodPath = path.join(toPath, 'zod.gen.ts');
+  if (!(await exists(indexPath)) || !(await exists(zodPath))) return;
+  const content = await readFile(indexPath, 'utf8');
+  const reexport = "export * from './zod.gen.js';";
+  if (content.includes(reexport)) return;
+  await writeFile(indexPath, `${content.trimEnd()}\n${reexport}\n`);
+}
+
 async function exists(filePath) {
   try {
     await access(filePath);
@@ -62,22 +74,18 @@ async function exists(filePath) {
 }
 
 if (checkOnly) {
-  for (const output of supervisorClientOutputs) {
-    const tmpDir = await mkdtemp(path.join(os.tmpdir(), `gc-supervisor-openapi-${output.label}-`));
-    const tmpHeyApiPath = path.join(tmpDir, 'gc-supervisor-client');
-    try {
-      await generateHeyApiClient(tmpHeyApiPath);
-      await assertDirectoryMatches(tmpHeyApiPath, output.path);
-    } finally {
-      await rm(tmpDir, { recursive: true, force: true });
-    }
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'gc-supervisor-openapi-'));
+  const tmpHeyApiPath = path.join(tmpDir, 'gc-supervisor-client');
+  try {
+    await generateHeyApiClient(tmpHeyApiPath);
+    await assertDirectoryMatches(tmpHeyApiPath, supervisorClientOutputPath);
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
   }
-  console.log('generated gc supervisor clients are up to date');
+  console.log('generated gc supervisor client is up to date');
 } else {
-  for (const output of supervisorClientOutputs) {
-    await generateHeyApiClient(output.path);
-    console.log(`generated ${path.relative(process.cwd(), output.path)}`);
-  }
+  await generateHeyApiClient(supervisorClientOutputPath);
+  console.log(`generated ${path.relative(process.cwd(), supervisorClientOutputPath)}`);
 }
 
 async function assertDirectoryMatches(expectedPath, actualPath) {

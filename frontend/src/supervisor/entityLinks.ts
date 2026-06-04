@@ -1,7 +1,7 @@
 import type { EntityLinkView, DashboardBead, DashboardSession } from 'gas-city-dashboard-shared';
 import { buildLinkView, buildRelationIndex, parseRef } from 'gas-city-dashboard-shared';
 import { activeCityOrThrow } from '../api/cityBase';
-import type { Bead, ListBodyBead } from '../generated/gc-supervisor-client/types.gen';
+import type { Bead, ListBodyBead } from 'gas-city-dashboard-shared/gc-supervisor';
 import { supervisorApi } from './client';
 import { normalizeSessions, type SupervisorSessionList } from './sessionReads';
 

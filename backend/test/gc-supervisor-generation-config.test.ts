@@ -12,12 +12,12 @@ const backendTsconfigUrl = new URL('../tsconfig.json', import.meta.url);
 const backendTestTsconfigUrl = new URL('../tsconfig.test.json', import.meta.url);
 const frontendPackageUrl = new URL('../../frontend/package.json', import.meta.url);
 const frontendTsconfigUrl = new URL('../../frontend/tsconfig.json', import.meta.url);
+const sharedPackageUrl = new URL('../../shared/package.json', import.meta.url);
 const gcClientUrl = new URL('../src/gc-client.ts', import.meta.url);
 const deletedGcSupervisorDecodersUrl = new URL('../src/gc-supervisor-decoders.ts', import.meta.url);
 const generatorUrl = new URL('../../scripts/generate-gc-supervisor-client.mjs', import.meta.url);
-const generatedClientUrl = new URL('../src/generated/gc-supervisor-client/', import.meta.url);
-const frontendGeneratedClientUrl = new URL(
-  '../../frontend/src/generated/gc-supervisor-client/',
+const generatedClientUrl = new URL(
+  '../../shared/src/generated/gc-supervisor-client/',
   import.meta.url,
 );
 const sharedIndexUrl = new URL('../../shared/src/index.ts', import.meta.url);
@@ -32,6 +32,10 @@ const sharedFormulaRunsUrl = new URL('../../shared/src/formula-runs.ts', import.
 const runtimeCompatUrl = new URL('../src/types/hey-api-client-fetch-compat.d.ts', import.meta.url);
 const frontendRuntimeCompatUrl = new URL(
   '../../frontend/src/types/hey-api-client-fetch-compat.d.ts',
+  import.meta.url,
+);
+const sharedRuntimeCompatUrl = new URL(
+  '../../shared/src/types/hey-api-client-fetch-compat.d.ts',
   import.meta.url,
 );
 const legacyGeneratedTypesUrl = new URL('../src/generated/gc-supervisor.ts', import.meta.url);
@@ -79,6 +83,9 @@ test('gc supervisor hey-api generator config is committed', async () => {
   const frontendPackage = JSON.parse(await readFile(frontendPackageUrl, 'utf8')) as {
     dependencies?: Record<string, string>;
   };
+  const sharedPackage = JSON.parse(await readFile(sharedPackageUrl, 'utf8')) as {
+    dependencies?: Record<string, string>;
+  };
 
   assert.match(config, /defineConfig/);
   assert.match(config, /backend\/openapi\/gc-supervisor\.openapi\.json/);
@@ -86,6 +93,11 @@ test('gc supervisor hey-api generator config is committed', async () => {
   assert.match(config, /bundle:\s*false/);
   assert.match(config, /@hey-api\/typescript/);
   assert.match(config, /@hey-api\/sdk/);
+  // The generated client lives in `shared`, so `shared` owns the fetch
+  // runtime and zod validators it imports; backend and frontend still
+  // declare the runtime because each constructs its own supervisor client.
+  assert.ok(sharedPackage.dependencies?.['@hey-api/client-fetch']);
+  assert.ok(sharedPackage.dependencies?.zod);
   assert.ok(backendPackage.dependencies?.['@hey-api/client-fetch']);
   assert.ok(frontendPackage.dependencies?.['@hey-api/client-fetch']);
   assert.ok(frontendPackage.dependencies?.zod);
@@ -96,16 +108,20 @@ test('gc supervisor fetch runtime compatibility is ambient-only and not a runtim
   const frontendTsconfig = await readFile(frontendTsconfigUrl, 'utf8');
   const compat = await readFile(runtimeCompatUrl, 'utf8');
   const frontendCompat = await readFile(frontendRuntimeCompatUrl, 'utf8');
+  const sharedCompat = await readFile(sharedRuntimeCompatUrl, 'utf8');
 
   assert.doesNotMatch(backendTsconfig, /"@hey-api\/client-fetch"/);
   assert.doesNotMatch(frontendTsconfig, /"@hey-api\/client-fetch"/);
   assert.match(backendTsconfig, /"include": \["src"\]/);
   assert.match(compat, /declare module '@hey-api\/client-fetch'/);
   assert.match(frontendCompat, /declare module '@hey-api\/client-fetch'/);
+  assert.match(sharedCompat, /declare module '@hey-api\/client-fetch'/);
   assert.match(compat, /responseValidator\?: \(data: unknown\) => Promise<unknown>/);
   assert.match(frontendCompat, /responseValidator\?: \(data: unknown\) => Promise<unknown>/);
+  assert.match(sharedCompat, /responseValidator\?: \(data: unknown\) => Promise<unknown>/);
   assert.match(compat, /sse:\s*\{/);
   assert.match(frontendCompat, /sse:\s*\{/);
+  assert.match(sharedCompat, /sse:\s*\{/);
 });
 
 test('published fetch runtime executes generated response validators for HTTP calls', async () => {
@@ -138,30 +154,29 @@ test('published fetch runtime executes generated response validators for HTTP ca
   }
 });
 
-test('gc supervisor generation validates backend responses but not frontend (r43k)', async () => {
+test('gc supervisor shared SDK skips response validation; backend validates its narrow reads explicitly (r43k)', async () => {
   const config = await readFile(heyApiConfigUrl, 'utf8');
-  const backendSdk = await readFile(new URL('sdk.gen.ts', generatedClientUrl), 'utf8');
-  const frontendSdk = await readFile(new URL('sdk.gen.ts', frontendGeneratedClientUrl), 'utf8');
-  const backendFiles = await readTsFiles(generatedClientUrl);
-  const frontendFiles = await readTsFiles(frontendGeneratedClientUrl);
-  const backendZod = backendFiles.find(({ path }) => path === 'zod.gen.ts');
-  const frontendZod = frontendFiles.find(({ path }) => path === 'zod.gen.ts');
+  const sdk = await readFile(new URL('sdk.gen.ts', generatedClientUrl), 'utf8');
+  const files = await readTsFiles(generatedClientUrl);
+  const zod = files.find(({ path }) => path === 'zod.gen.ts');
+  const gcClient = await readFile(gcClientUrl, 'utf8');
 
-  // The config branches validation on the output tree: zod for the backend's
-  // narrow cities/status reads, none for the browser's broad direct reads.
+  // One shared SDK is imported by both the browser and the backend, so it must
+  // NOT bake a response validator into every operation: the browser reads the
+  // full, open-ended supervisor surface directly and must not reject
+  // valid-but-evolved responses (r43k). The shared SDK skips validation.
   assert.match(config, /name:\s*'@hey-api\/sdk'/);
-  assert.match(config, /response:\s*isFrontendClient\s*\?\s*false\s*:\s*'zod'/);
+  assert.match(config, /response:\s*false/);
+  assert.doesNotMatch(sdk, /responseValidator:/);
+
+  // zod response schemas are still generated so the backend can validate its
+  // narrow, stable cities/status reads at the edge — done explicitly in
+  // GcClient, not via the shared SDK that the browser also imports.
   assert.match(config, /name:\s*'zod'/);
-
-  // Backend: zod schemas + a response validator in every operation.
-  assert.ok(backendZod, 'backend zod.gen.ts should be generated from the supervisor schema');
-  assert.match(backendZod.source, /from 'zod'/);
-  assert.match(backendSdk, /responseValidator:/);
-
-  // Frontend: no zod schemas, no response validation (r43k — the browser
-  // trusts the supervisor and must not reject valid-but-evolved responses).
-  assert.equal(frontendZod, undefined, 'frontend must not generate a zod.gen.ts');
-  assert.doesNotMatch(frontendSdk, /responseValidator:/);
+  assert.ok(zod, 'shared zod.gen.ts should be generated from the supervisor schema');
+  assert.match(zod.source, /from 'zod'/);
+  assert.match(gcClient, /zGetV0CitiesResponse/);
+  assert.match(gcClient, /zGetV0CityByCityNameStatusResponse/);
 });
 
 test('gc supervisor generated client post-processing is limited to RFC3339 offset datetimes', async () => {
@@ -172,14 +187,12 @@ test('gc supervisor generated client post-processing is limited to RFC3339 offse
   assert.doesNotMatch(generator, /source\.replace/);
   assert.match(generator, /allowRfc3339OffsetDateTimes/);
   assert.match(generator, /z\.iso\.datetime\(\{ offset: true \}\)/);
-  for (const rootUrl of [generatedClientUrl, frontendGeneratedClientUrl]) {
-    for (const { path, source } of await readTsFiles(rootUrl)) {
-      assert.doesNotMatch(
-        source,
-        /@ts-nocheck/,
-        `${path} should be generator output without ts-nocheck`,
-      );
-    }
+  for (const { path, source } of await readTsFiles(generatedClientUrl)) {
+    assert.doesNotMatch(
+      source,
+      /@ts-nocheck/,
+      `${path} should be generator output without ts-nocheck`,
+    );
   }
 });
 
@@ -197,55 +210,53 @@ test('gc supervisor generated client is covered by typecheck and lint gates', as
   assert.doesNotMatch(frontendTsconfig, /src\/generated\/gc-supervisor-client/);
   assert.doesNotMatch(eslintConfig, /backend\/src\/generated/);
   assert.doesNotMatch(eslintConfig, /frontend\/src\/generated/);
+  // The generated client now lives in `shared/src` and stays under the lint
+  // gate — it must not be carved out of eslint coverage.
+  assert.doesNotMatch(eslintConfig, /shared\/src\/generated/);
   assert.match(rootPackage.scripts?.typecheck ?? '', /typecheck:src/);
   assert.match(rootPackage.scripts?.typecheck ?? '', /typecheck:test/);
   assert.match(rootPackage.scripts?.lint ?? '', /--max-warnings=0/);
 });
 
 test('gc supervisor generated output imports the official fetch runtime instead of bundling patched runtime files', async () => {
-  // Backend carries zod.gen.ts (response validation); frontend does not (r43k).
-  const expectedPaths = {
-    [generatedClientUrl.href]: [
-      'client.gen.ts',
-      'index.ts',
-      'sdk.gen.ts',
-      'types.gen.ts',
-      'zod.gen.ts',
-    ],
-    [frontendGeneratedClientUrl.href]: ['client.gen.ts', 'index.ts', 'sdk.gen.ts', 'types.gen.ts'],
-  };
-  for (const rootUrl of [generatedClientUrl, frontendGeneratedClientUrl]) {
-    const generatedFiles = await readTsFiles(rootUrl);
-    const generatedPaths = generatedFiles.map(({ path }) => path).sort();
-    const client = generatedFiles.find(({ path }) => path === 'client.gen.ts');
-    const sdk = generatedFiles.find(({ path }) => path === 'sdk.gen.ts');
+  const generatedFiles = await readTsFiles(generatedClientUrl);
+  const generatedPaths = generatedFiles.map(({ path }) => path).sort();
+  const client = generatedFiles.find(({ path }) => path === 'client.gen.ts');
+  const sdk = generatedFiles.find(({ path }) => path === 'sdk.gen.ts');
 
-    assert.deepEqual(generatedPaths, expectedPaths[rootUrl.href]);
-    assert.match(client?.source ?? '', /from '@hey-api\/client-fetch'/);
-    assert.match(sdk?.source ?? '', /from '@hey-api\/client-fetch'/);
-    assert.equal(
-      generatedPaths.some((path) => path.startsWith('client/')),
-      false,
-    );
-    assert.equal(
-      generatedPaths.some((path) => path.startsWith('core/')),
-      false,
-    );
-  }
+  assert.deepEqual(generatedPaths, [
+    'client.gen.ts',
+    'index.ts',
+    'sdk.gen.ts',
+    'types.gen.ts',
+    'zod.gen.ts',
+  ]);
+  assert.match(client?.source ?? '', /from '@hey-api\/client-fetch'/);
+  assert.match(sdk?.source ?? '', /from '@hey-api\/client-fetch'/);
+  assert.equal(
+    generatedPaths.some((path) => path.startsWith('client/')),
+    false,
+  );
+  assert.equal(
+    generatedPaths.some((path) => path.startsWith('core/')),
+    false,
+  );
 });
 
-test('gc supervisor generator checks backend and frontend generated clients', async () => {
+test('gc supervisor generator emits a single shared client and no backend/frontend copies', async () => {
   const generator = await readFile(generatorUrl, 'utf8');
 
-  assert.match(generator, /backend\/src\/generated\/gc-supervisor-client/);
-  assert.match(generator, /frontend\/src\/generated\/gc-supervisor-client/);
-  assert.match(generator, /for \(const output of supervisorClientOutputs\)/);
+  assert.match(generator, /shared\/src\/generated\/gc-supervisor-client/);
+  assert.match(generator, /supervisorClientOutputPath/);
+  assert.doesNotMatch(generator, /backend\/src\/generated\/gc-supervisor-client/);
+  assert.doesNotMatch(generator, /frontend\/src\/generated\/gc-supervisor-client/);
 });
 
 test('GcClient uses the generated hey-api SDK instead of the legacy openapi-fetch paths client', async () => {
   const source = await readFile(gcClientUrl, 'utf8');
 
-  assert.match(source, /generated\/gc-supervisor-client\/sdk\.gen/);
+  assert.match(source, /from 'gas-city-dashboard-shared\/gc-supervisor'/);
+  assert.doesNotMatch(source, /generated\/gc-supervisor-client\/sdk\.gen/);
   assert.match(source, /from '@hey-api\/client-fetch'/);
   assert.doesNotMatch(source, /generated\/gc-supervisor-client\/client\//);
   assert.doesNotMatch(source, /\bstream[A-Z][A-Za-z]+\b/);

@@ -3,11 +3,13 @@ import {
   type Client as GeneratedSupervisorClient,
 } from '@hey-api/client-fetch';
 import { z } from 'zod';
-import type { StatusBody } from './generated/gc-supervisor-client/types.gen.js';
+import type { StatusBody } from 'gas-city-dashboard-shared/gc-supervisor';
 import {
   getV0Cities,
   getV0CityByCityNameStatus,
-} from './generated/gc-supervisor-client/sdk.gen.js';
+  zGetV0CitiesResponse,
+  zGetV0CityByCityNameStatusResponse,
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { REQUEST_ID_HEADER, currentRequestId, recordCounter, recordTimer } from './logging.js';
 
 const DEFAULT_TIMEOUT_MS = (() => {
@@ -32,6 +34,14 @@ type ZodIssueLike = {
 
 type ZodErrorLike = {
   issues: readonly ZodIssueLike[];
+};
+
+// Minimal structural view of a generated zod response schema. The shared SDK
+// carries no response validator (the browser must not reject valid-but-evolved
+// supervisor frames — r43k), so the backend validates its own narrow reads at
+// the edge by running the schema explicitly here.
+type SupervisorResponseSchema = {
+  safeParse: (data: unknown) => { success: true } | { success: false; error: ZodErrorLike };
 };
 
 interface GcClientOptions {
@@ -81,6 +91,7 @@ export class GcClient {
           ...supervisorRequestHeaders(),
         }),
       signal,
+      zGetV0CityByCityNameStatusResponse,
     );
   }
 
@@ -95,6 +106,7 @@ export class GcClient {
           ...supervisorRequestHeaders(),
         }),
       signal,
+      zGetV0CitiesResponse,
     );
     return (body.items ?? []).map((city) => ({
       name: city.name,
@@ -108,6 +120,7 @@ export class GcClient {
     payloadName: string,
     fetcher: (signal: AbortSignal) => Promise<SupervisorFetchResult<RawValue>>,
     signal?: AbortSignal,
+    responseSchema?: SupervisorResponseSchema,
   ): Promise<RawValue> {
     if (signal?.aborted) {
       throw abortError();
@@ -116,7 +129,7 @@ export class GcClient {
     if (existing !== undefined) {
       return await this.withCallerAbort(existing as Promise<RawValue>, signal);
     }
-    const promise = this.fetchOnce(payloadName, fetcher);
+    const promise = this.fetchOnce(payloadName, fetcher, responseSchema);
     this.inflight.set(key, promise);
     try {
       return await this.withCallerAbort(promise, signal);
@@ -130,6 +143,7 @@ export class GcClient {
   private async fetchOnce<RawValue>(
     payloadName: string,
     fetcher: (signal: AbortSignal) => Promise<SupervisorFetchResult<RawValue>>,
+    responseSchema?: SupervisorResponseSchema,
   ): Promise<RawValue> {
     const startedAt = Date.now();
     const controller = new AbortController();
@@ -154,6 +168,12 @@ export class GcClient {
       }
       if (result.data === undefined) {
         throw new Error('gc supervisor returned an empty response body');
+      }
+      if (responseSchema !== undefined) {
+        const parsed = responseSchema.safeParse(result.data);
+        if (!parsed.success) {
+          throw invalidSupervisorPayload(payloadName, parsed.error);
+        }
       }
       recordCounter('supervisor.request.ok', {
         operation: payloadName,

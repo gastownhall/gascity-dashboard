@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentResponse } from '../generated/gc-supervisor-client/types.gen';
+import type { AgentResponse } from 'gas-city-dashboard-shared/gc-supervisor';
 import {
   agentRowLabel,
   buildAgentSynopsis,

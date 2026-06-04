@@ -2,7 +2,7 @@ import type {
   Bead,
   GetV0CityByCityNameBeadsData,
   ListBodyBead,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { activeCityOrThrow } from '../api/cityBase';
 import { SupervisorApiError, supervisorApi } from './client';
 

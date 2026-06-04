@@ -15,7 +15,7 @@ import type {
   HealthOutputBody,
   Message,
   TypedEventStreamEnvelope,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { ATTENTION_DOMAINS, composeAttention } from './compose';
 import {
   createAttentionContributors,

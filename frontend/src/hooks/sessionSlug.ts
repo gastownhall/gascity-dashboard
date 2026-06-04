@@ -1,5 +1,5 @@
 import type { DashboardSession } from 'gas-city-dashboard-shared';
-import type { AgentResponse } from '../generated/gc-supervisor-client/types.gen';
+import type { AgentResponse } from 'gas-city-dashboard-shared/gc-supervisor';
 
 // Resolution order for the drilldown URL segment. session_name is gc's
 // URL-safe primary; alias is human-readable; id is the stable fallback.

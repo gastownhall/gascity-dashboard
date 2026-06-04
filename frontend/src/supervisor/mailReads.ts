@@ -1,5 +1,5 @@
 import { OPERATOR_DISPLAY_ALIAS, OPERATOR_WIRE_ALIAS } from 'gas-city-dashboard-shared';
-import type { MailListBody, Message } from '../generated/gc-supervisor-client/types.gen';
+import type { MailListBody, Message } from 'gas-city-dashboard-shared/gc-supervisor';
 import { activeCityOrThrow } from '../api/cityBase';
 import { SupervisorApiError, supervisorApi } from './client';
 

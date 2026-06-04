@@ -3,7 +3,7 @@ import type {
   OutputTurn,
   SessionResponse,
   SessionTranscriptGetResponse,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import type { DashboardSession } from 'gas-city-dashboard-shared';
 import { activeCityOrThrow } from '../api/cityBase';
 import { supervisorApi } from './client';

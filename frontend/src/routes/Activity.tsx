@@ -8,7 +8,7 @@ import { attentionRowProps, resourceAttentionSeverity } from '../attention/route
 import { Button } from '../components/Button';
 import { PageHeader } from '../components/PageHeader';
 import { StatusBadge, type StatusTone } from '../components/StatusBadge';
-import type { TypedEventStreamEnvelope } from '../generated/gc-supervisor-client/types.gen';
+import type { TypedEventStreamEnvelope } from 'gas-city-dashboard-shared/gc-supervisor';
 import { formatClockTime, formatShortDate } from '../hooks/time';
 import { useCachedData } from '../hooks/useCachedData';
 import { useVisibleRefresh } from '../hooks/useVisibleRefresh';

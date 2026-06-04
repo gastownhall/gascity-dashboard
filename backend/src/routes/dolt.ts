@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { DoltNomsTrend, DoltNomsUnavailableReason } from 'gas-city-dashboard-shared';
-import type { StatusBody } from '../generated/gc-supervisor-client/types.gen.js';
+import type { StatusBody } from 'gas-city-dashboard-shared/gc-supervisor';
 import { recordAudit } from '../audit.js';
 import { LOG_COMPONENT, errorMessage, logWarn } from '../logging.js';
 

@@ -3,7 +3,7 @@ import type { MutableRefObject } from 'react';
 import { errorMessage } from 'gas-city-dashboard-shared';
 import { getActiveCity } from '../api/cityBase';
 import { reportClientError } from '../lib/clientErrorReporting';
-import type { OutputTurn } from '../generated/gc-supervisor-client/types.gen';
+import type { OutputTurn } from 'gas-city-dashboard-shared/gc-supervisor';
 import { supervisorApi } from '../supervisor/client';
 import {
   fetchSupervisorSessionTranscript,

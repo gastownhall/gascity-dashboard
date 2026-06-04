@@ -5,7 +5,7 @@ import type {
   ListBodyBead,
   ListBodySessionResponse,
   SessionResponse,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { resetSupervisorApiForTests, setSupervisorApiForTests, type SupervisorApi } from './client';
 import { loadSupervisorEntityLinks } from './entityLinks';
 

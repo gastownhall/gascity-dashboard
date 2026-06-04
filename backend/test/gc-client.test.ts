@@ -6,7 +6,7 @@ import { GcClient } from '../src/gc-client.js';
 import type {
   StatusBody,
   SupervisorCitiesOutputBody,
-} from '../src/generated/gc-supervisor-client/types.gen.js';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { REQUEST_ID_HEADER, runWithLogContext } from '../src/logging.js';
 
 type Handler = (req: http.IncomingMessage, res: http.ServerResponse) => void;

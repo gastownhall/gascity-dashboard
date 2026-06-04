@@ -7,7 +7,7 @@ import {
   type DoltNomsRuntime,
   type DoltNomsTimer,
 } from '../src/routes/dolt.js';
-import type { StatusBody } from '../src/generated/gc-supervisor-client/types.gen.js';
+import type { StatusBody } from 'gas-city-dashboard-shared/gc-supervisor';
 
 describe('dolt-noms sampler', () => {
   test('records store_health.size_bytes from the injected status fetch', async () => {

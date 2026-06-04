@@ -3,7 +3,7 @@ import type {
   GetV0CityByCityNameEventsData,
   ListBodyWireEvent,
   TypedEventStreamEnvelope,
-} from '../generated/gc-supervisor-client/types.gen';
+} from 'gas-city-dashboard-shared/gc-supervisor';
 import { supervisorApi } from './client';
 
 const EVENT_FETCH_LIMIT = 100;
