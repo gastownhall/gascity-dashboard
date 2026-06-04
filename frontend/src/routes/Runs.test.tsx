@@ -210,6 +210,14 @@ async function waitForMount() {
   // wait stable across copy changes and avoids substring collisions
   // (the page renders both "Active" in CountsHeader and "active
   // runs" in the synopsis line).
+  //
+  // gascity-dashboard-fc3k: this only proves the preview fetch resolved
+  // and the button enabled — the run-summary lanes / rig headers / counts
+  // / error banner paint on a LATER state commit, and the full refresh is
+  // dispatched from a useEffect that runs after that. So any assertion
+  // that reads loaded run-summary data must use an async query
+  // (findByText / findByRole / waitFor), not a synchronous getBy*, or it
+  // races the paint under full-suite parallel load.
   const btn = (await screen.findByRole('button', { name: /refresh/i })) as HTMLButtonElement;
   await waitFor(() => expect(btn.disabled).toBe(false));
 }
@@ -231,7 +239,10 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     expect(await screen.findByRole('link', { name: /Preview formula run/i })).toBeTruthy();
     expect(screen.queryByText(/Loading formula runs/i)).toBeNull();
     expect(mockLoadRunSummaryPreview).toHaveBeenCalledTimes(1);
-    expect(mockLoadRunSummary).toHaveBeenCalledTimes(1);
+    // waitFor (see waitForMount): the full refresh fires from a useEffect a
+    // commit after the preview link paints. Mock is called once, so this
+    // still pins "exactly one" without weakening the assertion.
+    await waitFor(() => expect(mockLoadRunSummary).toHaveBeenCalledTimes(1));
 
     await act(async () => {
       full.resolve(buildRunSource('fresh'));
@@ -251,7 +262,7 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     mount();
     await waitForMount();
     // SseIndicator with state='open' renders a StatusBadge with label 'live'.
-    expect(screen.getByText(/^live$/i)).toBeTruthy();
+    expect(await screen.findByText(/^live$/i)).toBeTruthy();
   });
 
   it('marks run lanes that match composed run attention without hiding other runs', async () => {
@@ -316,7 +327,7 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     await waitForMount();
 
     expect(
-      screen.getByText(/Run counts unavailable: run collector unavailable in test/i),
+      await screen.findByText(/Run counts unavailable: run collector unavailable in test/i),
     ).toBeTruthy();
     expect(screen.queryByText(/^0 active runs/i)).toBeNull();
   });
@@ -371,10 +382,10 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     // History view (?history=1): the historical section renders the lane.
     mount('/runs?history=1');
     await waitForMount();
-    expect(screen.getByText('Completed formula run')).toBeTruthy();
-    const toggleHistory = screen.getByRole('button', {
+    expect(await screen.findByText('Completed formula run')).toBeTruthy();
+    const toggleHistory = (await screen.findByRole('button', {
       name: /hide historical/i,
-    }) as HTMLButtonElement;
+    })) as HTMLButtonElement;
     expect(toggleHistory.getAttribute('aria-expanded')).toBe('true');
     expect(toggleHistory.getAttribute('aria-controls')).toBeTruthy();
   });
@@ -408,20 +419,20 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     mount();
     await waitForMount();
     // Rig section headers (the `rig:` prefix is stripped for display).
-    expect(screen.getByText('gascity')).toBeTruthy();
-    expect(screen.getByText('gascity-packs')).toBeTruthy();
+    expect(await screen.findByText('gascity')).toBeTruthy();
+    expect(await screen.findByText('gascity-packs')).toBeTruthy();
     // Each run's root bead id is rendered so same-formula runs are distinguishable.
-    expect(screen.getByText('gc-aaa')).toBeTruthy();
-    expect(screen.getByText('gc-bbb')).toBeTruthy();
+    expect(await screen.findByText('gc-aaa')).toBeTruthy();
+    expect(await screen.findByText('gc-bbb')).toBeTruthy();
   });
 
   it('yh5i: toggle button is disabled when totalHistorical is 0', async () => {
     // Default run source has totalHistorical = 0.
     mount();
     await waitForMount();
-    const toggle = screen.getByRole('button', {
+    const toggle = (await screen.findByRole('button', {
       name: /no completed formula runs in the current window/i,
-    }) as HTMLButtonElement;
+    })) as HTMLButtonElement;
     expect(toggle.disabled).toBe(true);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     // aria-controls must NOT reference a non-existent DOM id when the
@@ -435,9 +446,11 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     // able to dismiss the historical section.
     mount('/runs?history=1');
     await waitForMount();
-    const toggle = screen.getByRole('button', { name: /hide historical/i }) as HTMLButtonElement;
+    const toggle = (await screen.findByRole('button', {
+      name: /hide historical/i,
+    })) as HTMLButtonElement;
     expect(toggle.disabled).toBe(false);
-    expect(screen.getByText(/No completed runs in the current window/i)).toBeTruthy();
+    expect(await screen.findByText(/No completed runs in the current window/i)).toBeTruthy();
   });
 
   it('manual Refresh button refetches the direct supervisor run summary', async () => {
@@ -539,8 +552,8 @@ describe('RunsPage — partial lane set (gascity-dashboard-n6f1)', () => {
     mount();
     await waitForMount();
 
-    const marker = screen.getByText(/runs partial/i);
-    const live = screen.getByText(/^live$/i);
+    const marker = await screen.findByText(/runs partial/i);
+    const live = await screen.findByText(/^live$/i);
     expect(marker).toBeTruthy();
     expect(marker.getAttribute('role')).toBe('status');
     expect(live.compareDocumentPosition(marker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
