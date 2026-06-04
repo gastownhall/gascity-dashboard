@@ -350,18 +350,26 @@ async function installApiFixtureRoutes(context) {
   await context.route(
     /\/gc-supervisor\/v0\/city\/[^/]+\/health(\?|$)/,
     // Shape mirrors the generated HealthOutputBody (gc-supervisor-client
-    // zod.gen.ts) — re-check after an OpenAPI regen; the tripwire only
-    // observes HTTP status, so body drift here fails silently.
+    // zod.gen.ts) — re-check after an OpenAPI regen. The tripwire only
+    // observes HTTP status for THIS health route, so body drift here fails
+    // silently. The trend/triage mocks below are different: their bodies are
+    // run through shared/ decoders client-side, so their shapes must match
+    // shared/src/{dashboard-health,maintainer-triage}.ts or the page breaks.
     fulfillJson(JSON.stringify({ city: CITY, status: 'ok', uptime_sec: 1, version: 'fixture' })),
   );
   await context.route(
     '**/api/city/*/dolt-noms/trend',
-    fulfillJson(JSON.stringify({ available: false, samples: [] })),
+    fulfillJson(JSON.stringify({ available: false, samples: [], reason: 'store_health_absent' })),
   );
   await context.route(
     '**/api/city/*/maintainer/triage',
     fulfillJson(
-      JSON.stringify({ computed_at: null, repo: 'fixture/fixture', tiers: [], totals: {} }),
+      JSON.stringify({
+        computed_at: null,
+        repo: 'fixture/fixture',
+        tiers: [],
+        totals: { issues_open: 0, prs_open: 0 },
+      }),
     ),
   );
 
