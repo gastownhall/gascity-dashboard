@@ -69,6 +69,28 @@ supervisor, run the browser smoke harness too:
 npm run browser:test
 ```
 
+### Live user-flow regression gate
+
+`npm run dashboard:test` drives **real** operator flows (Home, Agents, Runs +
+run-detail deep-link, Beads, Mail) against a running dashboard node and exits
+non-zero on regression. Unlike `browser:test` (which uses mocked routes on the
+`:5174` dev server), this gate hits live supervisor data and asserts:
+
+- each route renders its header and content (never a blank false all-clear);
+- no broken `/api/*` or `/gc-supervisor/*` responses and no console errors;
+- the SSE stream reaches `live` on Agents/Runs;
+- **fail-safe** — with every data call forced to 503, each route renders an
+  explicit unavailable/degraded signal rather than a healthy-looking shell.
+
+```bash
+npm run dashboard:test                                   # default target http://127.0.0.1:8082
+DASHBOARD_BASE=http://127.0.0.1:5174 npm run dashboard:test  # override the target
+```
+
+Like the snap harness it does **not** start its own server — it drives whatever
+is serving the base URL, and **skips** (exit 0) when nothing is reachable, so a
+non-zero exit always means a real regression.
+
 ## Configuration
 
 All knobs are environment variables. See [`backend/src/config.ts`](backend/src/config.ts) for the authoritative list.

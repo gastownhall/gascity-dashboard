@@ -19,6 +19,7 @@
     "format:check": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore",
     "lint": "eslint . --max-warnings=0",
     "browser:test": "node scripts/snap.mjs --test && node scripts/snap-formula-run-detail.mjs --test",
+    "dashboard:test": "node scripts/dashboard-tester.mjs --test",
     "openapi:gc-supervisor:update": "node scripts/update-gc-supervisor-openapi.mjs",
     "openapi:gc-supervisor:generate": "node scripts/generate-gc-supervisor-client.mjs",
     "openapi:gc-supervisor:check": "node scripts/generate-gc-supervisor-client.mjs --check",
