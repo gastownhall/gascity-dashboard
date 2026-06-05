@@ -278,6 +278,36 @@ describe('useGcEventRefresh', () => {
       emit();
       expect(onMatch).toHaveBeenCalledTimes(2);
     });
+
+    it('honors a caller-supplied coalesceMs to widen the trailing window', () => {
+      const onMatch = vi.fn();
+      renderHook(() =>
+        useGcEventRefresh([GC_EVENT_PREFIX.bead], onMatch, { coalesceMs: 10_000 }),
+      );
+      act(() => eventSources[0]?.open());
+
+      const emit = () =>
+        act(() => eventSources[0]?.emitNamed('event', JSON.stringify({ type: 'bead.updated' })));
+
+      // Leading edge still fires the first match immediately.
+      emit();
+      expect(onMatch).toHaveBeenCalledTimes(1);
+
+      // A burst that would have flushed under the default 2.5s window is held
+      // back: nothing extra fires until the wider 10s window closes.
+      emit();
+      emit();
+      act(() => {
+        vi.advanceTimersByTime(9_999);
+      });
+      expect(onMatch).toHaveBeenCalledTimes(1);
+
+      // At the widened window edge the single trailing fire lands.
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(onMatch).toHaveBeenCalledTimes(2);
+    });
   });
 });
 

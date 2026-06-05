@@ -31,6 +31,14 @@ import { listSupervisorSessions } from '../supervisor/sessionReads';
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 const RIG_FILTER_ALL = '';
 const CLOSED_CHIP_ID = 'closed';
+// The board's refresh is a full list refetch (~1.3MB on a busy city). A busy
+// city emits bead.* events roughly every few seconds, so the default ~2.5s
+// coalesce window still drives a near-continuous full refetch — wasteful under
+// normal churn and, when the supervisor's task query spikes to 14-21s, enough
+// to keep superseding each in-flight slow fetch before it lands. Coalesce the
+// board's SSE-driven refresh into a much wider trailing window so churn yields
+// at most one refetch per window and a latency spike can no longer empty it.
+const BOARD_REFRESH_COALESCE_MS = 10_000;
 
 type BeadAction = 'claim' | 'close' | 'nudge';
 
@@ -169,7 +177,9 @@ export function BeadsPage() {
     [toggleChip],
   );
 
-  useGcEventRefresh([GC_EVENT_PREFIX.bead], () => void refresh());
+  useGcEventRefresh([GC_EVENT_PREFIX.bead], () => void refresh(), {
+    coalesceMs: BOARD_REFRESH_COALESCE_MS,
+  });
 
   useEffect(() => {
     if (selectedBeadParam !== null) setSelectedId(selectedBeadParam);

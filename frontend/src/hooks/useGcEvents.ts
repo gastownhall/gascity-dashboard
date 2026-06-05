@@ -23,9 +23,18 @@ export type GcEventEnvelope = {
 
 export interface GcEventRefreshOptions {
   matches?: (event: GcEventEnvelope) => boolean;
+  /**
+   * Trailing-throttle window for event-driven refreshes. A burst of matching
+   * events yields at most one onMatch per window (leading + trailing). Defaults
+   * to {@link DEFAULT_COALESCE_MS}; widen it for consumers whose refresh is an
+   * expensive full refetch (e.g. the beads board's ~1.3MB list) so normal city
+   * churn and supervisor latency spikes don't trigger a refetch per event.
+   */
+  coalesceMs?: number;
 }
 
 const CONNECTING_GRACE_MS = 2_000;
+const DEFAULT_COALESCE_MS = 2_500;
 
 /**
  * Subscribe to gc events. When an event whose type starts with any of
@@ -42,6 +51,8 @@ export function useGcEventRefresh(
   onMatchRef.current = onMatch;
   const matchesRef = useRef(options.matches);
   matchesRef.current = options.matches;
+  const coalesceMsRef = useRef(options.coalesceMs);
+  coalesceMsRef.current = options.coalesceMs;
   // Stable hash of prefixes for the effect dep array.
   const prefixKey = prefixes.join(',');
 
@@ -51,8 +62,9 @@ export function useGcEventRefresh(
   // Kanban) refetch /beads ungated (~1/sec), which both hammered the
   // supervisor's city-store read AND amplified its partial-read flicker
   // (td- beads vanish/reappear). Throttle to at most one onMatch per
-  // COALESCE_MS (leading + trailing): a burst yields one refetch now and
-  // one after it settles, never a per-event storm.
+  // coalesce window (leading + trailing): a burst yields one refetch now
+  // and one after it settles, never a per-event storm. Consumers with an
+  // expensive refresh widen the window via options.coalesceMs.
   const lastFireRef = useRef(0);
   const coalesceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -69,7 +81,6 @@ export function useGcEventRefresh(
     let retryDelayMs = 1_000;
     let malformedEventReported = false;
 
-    const COALESCE_MS = 2_500;
     const clearConnectGraceTimer = () => {
       if (connectGraceTimer === null) return;
       clearTimeout(connectGraceTimer);
@@ -87,10 +98,11 @@ export function useGcEventRefresh(
     // Leading + trailing throttle: fire immediately when outside the
     // window, otherwise schedule a single trailing fire at the window
     // edge. Coalesces a burst of matching events into <=1 onMatch per
-    // COALESCE_MS.
+    // coalesce window.
     const scheduleMatch = () => {
+      const coalesceMs = coalesceMsRef.current ?? DEFAULT_COALESCE_MS;
       const elapsed = Date.now() - lastFireRef.current;
-      if (elapsed >= COALESCE_MS) {
+      if (elapsed >= coalesceMs) {
         if (coalesceTimerRef.current) {
           clearTimeout(coalesceTimerRef.current);
           coalesceTimerRef.current = null;
@@ -100,7 +112,7 @@ export function useGcEventRefresh(
         coalesceTimerRef.current = setTimeout(() => {
           coalesceTimerRef.current = null;
           if (!cancelled) fireMatch();
-        }, COALESCE_MS - elapsed);
+        }, coalesceMs - elapsed);
       }
     };
 
