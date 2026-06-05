@@ -281,9 +281,7 @@ describe('useGcEventRefresh', () => {
 
     it('honors a caller-supplied coalesceMs to widen the trailing window', () => {
       const onMatch = vi.fn();
-      renderHook(() =>
-        useGcEventRefresh([GC_EVENT_PREFIX.bead], onMatch, { coalesceMs: 10_000 }),
-      );
+      renderHook(() => useGcEventRefresh([GC_EVENT_PREFIX.bead], onMatch, { coalesceMs: 10_000 }));
       act(() => eventSources[0]?.open());
 
       const emit = () =>
