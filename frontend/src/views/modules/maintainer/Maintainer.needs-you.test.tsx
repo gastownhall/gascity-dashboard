@@ -180,7 +180,11 @@ describe('MaintainerPage — needs-you mode (dw8)', () => {
       number: 2,
       status: 'open',
       title: 'drop open-only',
-      updated_at: '2026-05-29T00:00:00.000Z', // fresh, not stalled
+      // Fresh (well under the 7-day stall threshold), expressed relative to the
+      // page's live clock so the case stays deterministic as the calendar
+      // advances. A fixed past date eventually crosses the threshold and the
+      // item is wrongly surfaced as stalled.
+      updated_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     });
     mockTriage.mockResolvedValue(envelope([keep, drop]));
     mount(['/maintainer?view=needs-you']);
