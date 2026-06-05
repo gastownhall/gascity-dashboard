@@ -180,7 +180,12 @@ describe('MaintainerPage — needs-you mode (dw8)', () => {
       number: 2,
       status: 'open',
       title: 'drop open-only',
-      updated_at: '2026-05-29T00:00:00.000Z', // fresh, not stalled
+      // Fresh relative to the REAL clock: MaintainerPage's needs-you
+      // predicate reads wall-clock time from NowProvider, so a pinned
+      // ISO date here turns "stalled unvetted" (and matches the
+      // composite) once it ages past NEEDS_YOU_STALL_THRESHOLD_MS —
+      // which is exactly how this fixture broke CI on 2026-06-05.
+      updated_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // 1h old, far below the 7-day stall threshold
     });
     mockTriage.mockResolvedValue(envelope([keep, drop]));
     mount(['/maintainer?view=needs-you']);
