@@ -32,10 +32,24 @@ describe('runSessionLinkFor — session id normalization', () => {
     assert.equal(link?.sessionId, 'gc-333573');
   });
 
-  test('falls back to the raw value when it carries no extractable supervisor id', () => {
+  test('degrades to no link when an unresolvable value carries no supervisor id', () => {
+    // A completed run whose recorded handle carries no extractable supervisor
+    // id and is absent from the live session index must NOT leak that handle
+    // into link.sessionId — the session route would reject it as "invalid
+    // session id". The link degrades so the Session tab shows a clean
+    // "session not available" empty state instead.
     const bead = { metadata: { session_id: 'mystery-handle' } } as never;
-    const link = runSessionLinkFor(bead, 'done');
-    assert.equal(link?.sessionId, 'mystery-handle');
+    assert.equal(runSessionLinkFor(bead, 'done'), undefined);
+  });
+
+  test('degrades a runtime-derived bare assignee that cannot yield a supervisor id', () => {
+    // The runtime-derived path: a completed pool/rig-store run records only an
+    // assignee (no session_id metadata), and that assignee is a bare worker
+    // name with no embedded supervisor id. With no live index match there is
+    // no usable id, so the link degrades rather than feeding "polecat" to the
+    // route as an "invalid session id".
+    const bead = { assignee: 'polecat' } as never;
+    assert.equal(runSessionLinkFor(bead, 'done'), undefined);
   });
 
   test('returns undefined for pending/ready nodes (no session yet)', () => {

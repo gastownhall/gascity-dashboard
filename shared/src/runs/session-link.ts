@@ -64,7 +64,16 @@ export function runSessionLinkFor(
     sessionName: sessionName ?? sessionId ?? '',
     assignee: assignee ?? sessionName ?? sessionId ?? '',
   };
-  return resolveRunSessionLink(rawLink, context.sessionIndex);
+  const link = resolveRunSessionLink(rawLink, context.sessionIndex);
+  // Final gate: link.sessionId is fed straight to the supervisor session
+  // routes, which reject anything outside SESSION_ID_RE as "invalid session
+  // id". When the index could not resolve the run to a real session (a
+  // completed pool/rig-store run has dropped out of the live index) and the
+  // recorded handle carries no extractable supervisor id, drop the link so the
+  // Session tab degrades to a clean "session not available" state instead of
+  // leaking an unvalidated handle into the route.
+  if (!SESSION_ID_RE.test(link.sessionId)) return undefined;
+  return link;
 }
 
 function supervisorSessionIdFrom(value: string | undefined): string | undefined {
