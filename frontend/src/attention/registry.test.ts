@@ -215,6 +215,77 @@ describe('createAttentionContributors', () => {
     expect(model.byDomain.runs.items[0]?.href).toBe('/runs/run-1');
   });
 
+  it('reclassifies runs data-unavailability emitters into the unavailable tier, carrying read freshness', () => {
+    const model = composeAttention(
+      createAttentionContributors({
+        runs: {
+          provenance: 'stale',
+          fetchedAt: '2026-06-06T12:00:00.000Z',
+          feed: formulaFeed({
+            partial: true,
+            partial_errors: ['feed degraded'],
+            items: [
+              {
+                id: 'run-detail',
+                root_bead_id: 'B-root',
+                root_store_ref: 'city:B-root',
+                scope_kind: 'city',
+                scope_ref: 'test-city',
+                started_at: '2026-05-29T20:00:00.000Z',
+                status: 'running',
+                target: 'mayor',
+                title: 'Detail run',
+                type: 'formula',
+                updated_at: '2026-05-29T20:05:00.000Z',
+                run_detail_available: false,
+              },
+            ],
+          }),
+          summary: {
+            ...runSummary([]),
+            lanesPartial: true,
+            lanes: [healthUnavailableLane('run-health', 'Health run')],
+          },
+        },
+      }),
+    );
+
+    // The four data-unavailability emitters (feed-partial, detail-unavailable,
+    // list-partial, health-unavailable) must never inflate the badge counts…
+    expect(model.byDomain.runs.attention).toBe(0);
+    expect(model.byDomain.runs.watch).toBe(0);
+    // …they land in the dedicated unavailable tier…
+    expect(model.byDomain.runs.unavailable).toBe(4);
+    // …and never color the nav badge.
+    expect(model.byDomain.runs.severity).toBeNull();
+
+    const ids = model.byDomain.runs.items.map((item) => item.id);
+    expect(ids).toContain('runs:feed-partial');
+    expect(ids).toContain('runs:run-detail:detail-unavailable');
+    expect(ids).toContain('runs:partial');
+    expect(ids).toContain('runs:run-health:health-unavailable');
+
+    for (const item of model.byDomain.runs.items) {
+      expect(item.severity).toBe('unavailable');
+      // Provenance + fetch timestamp ride along so a stale read can be aged.
+      expect(item.provenance).toBe('stale');
+      expect(item.fetchedAt).toBe('2026-06-06T12:00:00.000Z');
+    }
+  });
+
+  it('keeps a total runs read failure as a loud attention signal, not the quiet unavailable tier', () => {
+    const model = composeAttention(
+      createAttentionContributors({
+        runs: { error: 'formula run feed unavailable', provenance: 'error' },
+      }),
+    );
+
+    // A complete outage stays attention so the operator is not left blind.
+    expect(model.byDomain.runs.attention).toBe(1);
+    expect(model.byDomain.runs.unavailable).toBe(0);
+    expect(model.byDomain.runs.items[0]?.id).toBe('runs:unavailable');
+  });
+
   it('derives agent attention from pending supervisor interactions', () => {
     const model = composeAttention(
       createAttentionContributors({
@@ -706,6 +777,16 @@ function runLane({
         },
       },
     },
+  } as RunLane;
+}
+
+function healthUnavailableLane(id: string, title: string): RunLane {
+  return {
+    id,
+    title,
+    phase: 'active',
+    phaseLabel: 'active',
+    health: { status: 'unavailable', error: 'health probe failed' },
   } as RunLane;
 }
 

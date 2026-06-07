@@ -9,14 +9,29 @@
 // Refresh-button presses go through useCachedData.refresh(), which
 // overwrites the cache slot in the same pass.
 
-const cache = new Map<string, unknown>();
+interface CacheEntry {
+  value: unknown;
+  /** ISO timestamp of the write that produced `value`. */
+  fetchedAt: string;
+}
+
+const cache = new Map<string, CacheEntry>();
 
 export function getCached<T>(key: string): T | undefined {
-  return cache.get(key) as T | undefined;
+  return cache.get(key)?.value as T | undefined;
+}
+
+/**
+ * ISO timestamp of the most recent setCached for `key`, or undefined if the key
+ * has never been written. Lets stale-while-revalidate consumers age a cached
+ * read — e.g. mark a degradation signal stale instead of rendering it as live.
+ */
+export function getCachedFetchedAt(key: string): string | undefined {
+  return cache.get(key)?.fetchedAt;
 }
 
 export function setCached<T>(key: string, value: T): void {
-  cache.set(key, value);
+  cache.set(key, { value, fetchedAt: new Date().toISOString() });
 }
 
 /** Drop every cache entry whose key starts with the given prefix. */

@@ -1,5 +1,9 @@
 import { useMemo } from 'react';
-import { OPERATOR_DISPLAY_ALIAS, OPERATOR_WIRE_ALIAS } from 'gas-city-dashboard-shared';
+import {
+  OPERATOR_DISPLAY_ALIAS,
+  OPERATOR_WIRE_ALIAS,
+  type SourceStatus,
+} from 'gas-city-dashboard-shared';
 import { api, formatApiError } from '../api/client';
 import { getActiveCity } from '../api/cityBase';
 import { useCachedData } from '../hooks/useCachedData';
@@ -66,11 +70,40 @@ export function useLiveAttentionContributors(
           health: health.data,
           mail: mail.data,
           maintainer: maintainer.data,
-          runs: runs.data,
+          runs: withRunsFreshness(runs.data, runs.error, runs.fetchedAt),
         }),
       ),
-    [activity.data, agents.data, beads.data, health.data, mail.data, maintainer.data, runs.data],
+    [
+      activity.data,
+      agents.data,
+      beads.data,
+      health.data,
+      mail.data,
+      maintainer.data,
+      runs.data,
+      runs.error,
+      runs.fetchedAt,
+    ],
   );
+}
+
+/**
+ * Stamp the runs read's provenance + fetch timestamp onto its facts so the
+ * registry can carry them onto `unavailable`-tier items. A degraded read can
+ * then be aged (gascity-dashboard issue-88 follow-up) rather than rendered as
+ * current truth. The cache is event-refreshed (no TTL), so provenance is the
+ * coarse read status — `error` on failure, otherwise `fresh`; `fetchedAt`
+ * carries the exact read time for any age comparison.
+ */
+function withRunsFreshness(
+  facts: RunsAttentionFacts | undefined,
+  error: string | null,
+  fetchedAt: string | undefined,
+): RunsAttentionFacts | undefined {
+  if (facts === undefined) return undefined;
+  const provenance: SourceStatus =
+    error !== null || (facts.error !== undefined && facts.error.length > 0) ? 'error' : 'fresh';
+  return { ...facts, provenance, ...(fetchedAt === undefined ? {} : { fetchedAt }) };
 }
 
 async function fetchRunsAttention(cityName: string | null): Promise<RunsAttentionFacts> {

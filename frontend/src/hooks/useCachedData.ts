@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getCached, setCached } from '../api/cache';
+import { getCached, getCachedFetchedAt, setCached } from '../api/cache';
 
 interface UseCachedDataResult<T> {
   data: T | undefined;
   loading: boolean;
   error: string | null;
+  /** ISO timestamp of the cache read backing `data`, or undefined before any lands. */
+  fetchedAt: string | undefined;
   refresh: () => Promise<void>;
 }
 
@@ -49,6 +51,7 @@ export function useCachedData<T>(
   const [data, setData] = useState<T | undefined>(() => getCached<T>(key));
   const [loading, setLoading] = useState<boolean>(() => getCached<T>(key) === undefined);
   const [error, setError] = useState<string | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<string | undefined>(() => getCachedFetchedAt(key));
 
   const runFetcher = useCallback(
     async (fetch: () => Promise<T>) => {
@@ -64,6 +67,7 @@ export function useCachedData<T>(
         if (isLatestRun && isActiveKey) {
           setCached(cacheKey, fresh);
           setData(fresh);
+          setFetchedAt(getCachedFetchedAt(cacheKey));
         } else if (isActiveKey) {
           // First-paint rescue: a busy SSE stream can re-fire refresh()
           // faster than a slow fetch (e.g. the beads board's per-type
@@ -98,11 +102,12 @@ export function useCachedData<T>(
     const cached = getCached<T>(key);
     setData(cached);
     setLoading(cached === undefined);
+    setFetchedAt(getCachedFetchedAt(key));
     void runFetcher(fetcherRef.current);
     return () => {
       runIdRef.current += 1;
     };
   }, [key, runFetcher]);
 
-  return { data, loading, error, refresh };
+  return { data, loading, error, fetchedAt, refresh };
 }

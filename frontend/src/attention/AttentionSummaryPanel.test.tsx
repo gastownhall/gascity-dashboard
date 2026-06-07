@@ -46,6 +46,35 @@ describe('AttentionSummaryPanel', () => {
     expect(screen.queryByText('Mayor unread')).toBeNull();
   });
 
+  it('renders unavailable items with a muted tone, never the warn/accent badge colors', () => {
+    render(
+      <MemoryRouter
+        basename="/city/test-city"
+        initialEntries={['/city/test-city/']}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <AttentionProvider
+          contributors={[
+            contributor('runs', [
+              item('runs:feed-partial', 'runs', 'unavailable', {
+                title: 'Formula run feed incomplete',
+                provenance: 'stale',
+              }),
+            ]),
+          ]}
+        >
+          <AttentionSummaryPanel />
+        </AttentionProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Formula run feed incomplete')).toBeTruthy();
+    const tag = screen.getByText('Runs');
+    expect(tag.className).toContain('text-fg-muted');
+    expect(tag.className).not.toContain('text-warn');
+    expect(tag.className).not.toContain('text-accent');
+  });
+
   it('renders nothing when there are no attention facts', () => {
     const { container } = render(
       <AttentionProvider contributors={[]}>

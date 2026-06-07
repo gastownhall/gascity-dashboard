@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getCached, invalidate } from '../api/cache';
+import { getCached, getCachedFetchedAt, invalidate } from '../api/cache';
 import { useCachedData } from './useCachedData';
 
 afterEach(() => {
@@ -129,6 +129,42 @@ describe('useCachedData', () => {
     });
 
     expect(getCached<string>(cacheKey)).toBeUndefined();
+  });
+
+  it('exposes the cache fetch timestamp once data lands', async () => {
+    const value = deferred<string>();
+    const cacheKey = 'fetched-at-key';
+
+    const { result } = renderHook(() => useCachedData(cacheKey, () => value.promise));
+
+    // No write has happened yet, so there is no fetch timestamp.
+    expect(result.current.fetchedAt).toBeUndefined();
+
+    await act(async () => {
+      value.resolve('landed');
+      await value.promise;
+    });
+    await waitFor(() => expect(result.current.data).toBe('landed'));
+
+    // The exposed timestamp mirrors the cache primitive the write stamped.
+    expect(result.current.fetchedAt).toBe(getCachedFetchedAt(cacheKey));
+    expect(result.current.fetchedAt).toEqual(expect.any(String));
+  });
+
+  it('seeds the fetch timestamp from the cache on mount', async () => {
+    const cacheKey = 'preseeded-key';
+    const { result } = renderHook(() => useCachedData(cacheKey, () => Promise.resolve('fresh')));
+    await waitFor(() => expect(result.current.data).toBe('fresh'));
+    const landedAt = result.current.fetchedAt;
+    expect(landedAt).toEqual(expect.any(String));
+
+    // A second mount on the warm cache seeds both data and timestamp
+    // synchronously from cache; the never-settling refetch leaves them intact.
+    const second = renderHook(() =>
+      useCachedData(cacheKey, () => new Promise<string>(() => {})),
+    );
+    expect(second.result.current.data).toBe('fresh');
+    expect(second.result.current.fetchedAt).toBe(landedAt);
   });
 
   it('reports the latest fetch failure through onError', async () => {

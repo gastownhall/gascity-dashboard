@@ -56,7 +56,64 @@ describe('composeAttention', () => {
     );
 
     expect(model.topItems.map((attention) => attention.id)).toEqual(['run-1', 'run-2']);
-    expect(model.overflowByDomain).toEqual([{ domain: 'mail', attention: 0, watch: 2, total: 2 }]);
+    expect(model.overflowByDomain).toEqual([
+      { domain: 'mail', attention: 0, watch: 2, unavailable: 0, total: 2 },
+    ]);
+  });
+
+  it('counts unavailable items in their own tier without inflating the badge or recoloring it', () => {
+    const model = composeAttention([
+      contributor('runs', [
+        item('run-watch', 'runs', 'watch'),
+        item('run-degraded', 'runs', 'unavailable', { provenance: 'stale' }),
+        item('run-down', 'runs', 'unavailable', { provenance: 'error' }),
+      ]),
+    ]);
+
+    // Badge count is attention + watch only — the two unavailable items are excluded.
+    expect(model.byDomain.runs.attention).toBe(0);
+    expect(model.byDomain.runs.watch).toBe(1);
+    expect(model.byDomain.runs.unavailable).toBe(2);
+    // The badge tier stays at watch; degraded reads never escalate the color.
+    expect(model.byDomain.runs.severity).toBe('watch');
+  });
+
+  it('never sets the badge severity from unavailable items alone', () => {
+    const model = composeAttention([
+      contributor('runs', [
+        item('feed-partial', 'runs', 'unavailable', { provenance: 'fresh' }),
+        item('detail-down', 'runs', 'unavailable', { provenance: 'error' }),
+      ]),
+    ]);
+
+    expect(model.byDomain.runs.attention).toBe(0);
+    expect(model.byDomain.runs.watch).toBe(0);
+    expect(model.byDomain.runs.unavailable).toBe(2);
+    // No attention/watch items ⇒ no badge, even though the domain has items.
+    expect(model.byDomain.runs.severity).toBeNull();
+  });
+
+  it('ranks unavailable items last and groups them as their own overflow count', () => {
+    const model = composeAttention(
+      [
+        contributor('runs', [
+          item('run-attention', 'runs', 'attention', { actionable: true }),
+          item('run-unavailable', 'runs', 'unavailable'),
+          item('run-watch', 'runs', 'watch'),
+        ]),
+      ],
+      { topLimit: 1 },
+    );
+
+    // attention < watch < unavailable in rank order.
+    expect(model.items.map((entry) => entry.id)).toEqual([
+      'run-attention',
+      'run-watch',
+      'run-unavailable',
+    ]);
+    expect(model.overflowByDomain).toEqual([
+      { domain: 'runs', attention: 0, watch: 1, unavailable: 1, total: 2 },
+    ]);
   });
 
   it('keeps the domain set explicit so nav consumers cannot drift', () => {

@@ -1,5 +1,5 @@
 import type { HTMLAttributes } from 'react';
-import type { AttentionDomain, AttentionModel, AttentionSeverity } from './compose';
+import type { AttentionDomain, AttentionModel, AttentionSeverity, BadgeSeverity } from './compose';
 
 type AttentionAttributes<T extends HTMLElement> = HTMLAttributes<T> & {
   'data-attention-severity'?: AttentionSeverity;
@@ -9,14 +9,16 @@ export function resourceAttentionSeverity(
   model: AttentionModel,
   domain: AttentionDomain,
   resourceId: string,
-): AttentionSeverity | null {
+): BadgeSeverity | null {
   const prefix = `${domain}:${resourceId}:`;
   const exact = `${domain}:${resourceId}`;
-  let severity: AttentionSeverity | null = null;
+  let severity: BadgeSeverity | null = null;
   for (const item of model.byDomain[domain].items) {
     if (item.id !== exact && !item.id.startsWith(prefix)) continue;
     if (item.severity === 'attention') return 'attention';
-    severity = 'watch';
+    // `unavailable` reports a degraded read, not a watch-worthy state — it must
+    // not tint a row as if the resource itself needs the operator.
+    if (item.severity === 'watch') severity = 'watch';
   }
   return severity;
 }
@@ -25,12 +27,13 @@ export function prefixedAttentionSeverity(
   model: AttentionModel,
   domain: AttentionDomain,
   itemIdPrefixes: readonly string[],
-): AttentionSeverity | null {
-  let severity: AttentionSeverity | null = null;
+): BadgeSeverity | null {
+  let severity: BadgeSeverity | null = null;
   for (const item of model.byDomain[domain].items) {
     if (!itemIdPrefixes.some((prefix) => item.id.startsWith(prefix))) continue;
     if (item.severity === 'attention') return 'attention';
-    severity = 'watch';
+    // `unavailable` reports a degraded read, not a watch-worthy state.
+    if (item.severity === 'watch') severity = 'watch';
   }
   return severity;
 }

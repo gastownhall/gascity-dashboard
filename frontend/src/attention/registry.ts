@@ -4,6 +4,7 @@ import type {
   MaintainerTriage,
   RunLane,
   RunSummary,
+  SourceStatus,
   SystemHealth,
   TriageItem,
 } from 'gas-city-dashboard-shared';
@@ -42,6 +43,14 @@ export interface RunsAttentionFacts {
   feed?: FormulaFeedBody;
   summary?: RunSummary;
   error?: string;
+  /**
+   * Freshness of the runs read these facts were assembled from, threaded by the
+   * live contributor layer. Carried onto `unavailable`-tier items so a degraded
+   * read can be aged rather than rendered as current truth.
+   */
+  provenance?: SourceStatus;
+  /** ISO timestamp of the cache read these facts came from (fetch primitive). */
+  fetchedAt?: string;
 }
 
 export interface AgentsAttentionFacts {
@@ -215,9 +224,13 @@ function maintainerContributor(facts: MaintainerAttentionFacts | undefined): Att
   };
 }
 
+/** The provenance + fetch timestamp carried onto runs `unavailable` items. */
+type ReadFreshness = { provenance: SourceStatus | undefined; fetchedAt: string | undefined };
+
 function deriveRunsAttention(facts: RunsAttentionFacts | undefined): readonly AttentionItem[] {
   const items: AttentionItem[] = [];
   if (facts === undefined) return items;
+  const freshness: ReadFreshness = { provenance: facts.provenance, fetchedAt: facts.fetchedAt };
   if (facts.error !== undefined && facts.error.length > 0) {
     items.push(
       domainAttention('runs', {
@@ -232,47 +245,62 @@ function deriveRunsAttention(facts: RunsAttentionFacts | undefined): readonly At
   const summary = facts.summary;
   const feed = facts.feed;
   if (feed !== undefined) {
-    appendFormulaFeedAttention(items, feed);
+    appendFormulaFeedAttention(items, feed, freshness);
   }
   if (summary === undefined) return items;
   if (summary.lanesPartial === true) {
     items.push(
-      domainWatch('runs', {
-        id: 'runs:partial',
-        title: 'Run list incomplete',
-        href: '/runs',
-      }),
+      domainUnavailable(
+        'runs',
+        {
+          id: 'runs:partial',
+          title: 'Run list incomplete',
+          href: '/runs',
+        },
+        freshness,
+      ),
     );
   }
 
   // gascity-dashboard-4xcv: blocked lanes moved out of summary.lanes into
   // their own bucket; they still need the operator, so both sets contribute.
   for (const lane of [...summary.lanes, ...summary.blockedLanes]) {
-    const item = attentionForRunLane(lane);
+    const item = attentionForRunLane(lane, freshness);
     if (item !== null) items.push(item);
   }
   return items;
 }
 
-function appendFormulaFeedAttention(items: AttentionItem[], feed: FormulaFeedBody): void {
+function appendFormulaFeedAttention(
+  items: AttentionItem[],
+  feed: FormulaFeedBody,
+  freshness: ReadFreshness,
+): void {
   if (feed.partial) {
     const summary = feed.partial_errors?.join('; ');
     items.push(
-      domainWatch('runs', {
-        id: 'runs:feed-partial',
-        title: 'Formula run feed incomplete',
-        href: '/runs',
-        ...(summary === undefined ? {} : { summary }),
-      }),
+      domainUnavailable(
+        'runs',
+        {
+          id: 'runs:feed-partial',
+          title: 'Formula run feed incomplete',
+          href: '/runs',
+          ...(summary === undefined ? {} : { summary }),
+        },
+        freshness,
+      ),
     );
   }
   for (const item of feed.items ?? []) {
-    const attention = attentionForFormulaFeedItem(item);
+    const attention = attentionForFormulaFeedItem(item, freshness);
     if (attention !== null) items.push(attention);
   }
 }
 
-function attentionForFormulaFeedItem(item: MonitorFeedItemResponse): AttentionItem | null {
+function attentionForFormulaFeedItem(
+  item: MonitorFeedItemResponse,
+  freshness: ReadFreshness,
+): AttentionItem | null {
   const status = item.status.toLowerCase();
   const href = runHref(item.id, item.scope_kind, item.scope_ref);
   if (isRunAttentionStatus(status)) {
@@ -285,12 +313,16 @@ function attentionForFormulaFeedItem(item: MonitorFeedItemResponse): AttentionIt
     });
   }
   if (item.run_detail_available === false || item.detail_available === false) {
-    return domainWatch('runs', {
-      id: `runs:${item.id}:detail-unavailable`,
-      title: `${item.title} detail unavailable`,
-      href,
-      updatedAt: item.started_at,
-    });
+    return domainUnavailable(
+      'runs',
+      {
+        id: `runs:${item.id}:detail-unavailable`,
+        title: `${item.title} detail unavailable`,
+        href,
+        updatedAt: item.started_at,
+      },
+      freshness,
+    );
   }
   if (isRunWatchStatus(status)) {
     return domainWatch('runs', {
@@ -304,18 +336,22 @@ function attentionForFormulaFeedItem(item: MonitorFeedItemResponse): AttentionIt
   return null;
 }
 
-function attentionForRunLane(lane: RunLane): AttentionItem | null {
+function attentionForRunLane(lane: RunLane, freshness: ReadFreshness): AttentionItem | null {
   const href =
     lane.scope?.status === 'available'
       ? runHref(lane.id, lane.scope.kind, lane.scope.ref)
       : runHref(lane.id);
   if (lane.health.status !== 'available') {
-    return domainWatch('runs', {
-      id: `runs:${lane.id}:health-unavailable`,
-      title: `${lane.title} health unavailable`,
-      summary: lane.health.error,
-      href,
-    });
+    return domainUnavailable(
+      'runs',
+      {
+        id: `runs:${lane.id}:health-unavailable`,
+        title: `${lane.title} health unavailable`,
+        summary: lane.health.error,
+        href,
+      },
+      freshness,
+    );
   }
 
   const health = lane.health.data;
@@ -1109,6 +1145,28 @@ function domainWatch(
     current: true,
     actionable: false,
     ...item,
+  };
+}
+
+/**
+ * A data-unavailability item: a slice of a source could not be read. It reports
+ * the degradation WITHOUT inflating or recoloring the domain's nav badge (see
+ * AttentionSeverity). `freshness` carries the read's provenance + fetch
+ * timestamp so the signal can be aged rather than rendered as current truth.
+ */
+function domainUnavailable(
+  domain: AttentionDomain,
+  item: Omit<AttentionItem, 'domain' | 'severity' | 'current' | 'actionable' | 'provenance' | 'fetchedAt'>,
+  freshness?: ReadFreshness,
+): AttentionItem {
+  return {
+    domain,
+    severity: 'unavailable',
+    current: true,
+    actionable: false,
+    ...item,
+    ...(freshness?.provenance === undefined ? {} : { provenance: freshness.provenance }),
+    ...(freshness?.fetchedAt === undefined ? {} : { fetchedAt: freshness.fetchedAt }),
   };
 }
 

@@ -54,5 +54,12 @@ function AttentionTitle({ item }: { item: AttentionItem }) {
 }
 
 function severityClass(severity: AttentionSeverity): string {
-  return severity === 'attention' ? 'text-accent' : 'text-warn';
+  switch (severity) {
+    case 'attention':
+      return 'text-accent';
+    case 'watch':
+      return 'text-warn';
+    case 'unavailable':
+      return 'text-fg-muted';
+  }
 }
