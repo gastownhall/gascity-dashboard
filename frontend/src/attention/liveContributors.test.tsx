@@ -265,7 +265,13 @@ describe('useLiveAttentionContributors', () => {
 
     await waitFor(() => {
       const model = composeAttention(result.current);
-      expect(model.byDomain.runs.attention).toBe(1);
+      // gascity-dashboard-2j8e.2: the Runs badge now counts genuinely-blocked
+      // runs from the bead-derived run summary, not the formula feed. This
+      // fixture has no graph.v2 run beads (only a plain task bead + a city feed
+      // item), so there are no blocked runs to count. The blocked-counting
+      // logic is covered in registry.test.ts; here we assert the contributor is
+      // wired to the summary loader (listBeads({ limit: 500 }) below).
+      expect(model.byDomain.runs.attention).toBe(0);
       expect(model.byDomain.agents.attention).toBe(2);
       expect(model.byDomain.beads.attention).toBe(1);
       expect(model.byDomain.mail.attention).toBe(1);
@@ -276,11 +282,9 @@ describe('useLiveAttentionContributors', () => {
       expect(model.byDomain.maintainer.attention).toBe(1);
     });
 
-    expect(mockSupervisorApi.formulaFeed).toHaveBeenCalledWith('test-city', {
-      limit: 100,
-      scope_kind: 'city',
-      scope_ref: 'test-city',
-    });
+    // The Runs contributor drives the bead-derived run summary loader, whose
+    // required read is the active run-bead list (gascity-dashboard-2j8e.2).
+    expect(mockSupervisorApi.listBeads).toHaveBeenCalledWith('test-city', { limit: 500 });
     expect(mockSupervisorApi.listAgents).toHaveBeenCalledWith('test-city');
     expect(mockSupervisorApi.listSessions).toHaveBeenCalledWith('test-city');
     expect(mockSupervisorApi.sessionPending).toHaveBeenCalledWith('test-city', 'gc-2568');

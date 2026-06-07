@@ -11,6 +11,7 @@ import { listAgentPendingInteractions } from '../supervisor/agentPending';
 import { listSupervisorBeads } from '../supervisor/beadReads';
 import { supervisorApi, supervisorApiForRequestBudget } from '../supervisor/client';
 import { DEFAULT_MAIL_HISTORY_LIMIT, listSupervisorMail } from '../supervisor/mailReads';
+import { loadSupervisorRunSummaryPreviewSource } from '../supervisor/runSummary';
 import type { AttentionContributor } from './compose';
 import {
   createAttentionContributors,
@@ -25,7 +26,6 @@ import {
   type RunsAttentionFacts,
 } from './registry';
 
-const FORMULA_FEED_LIMIT = 100;
 const ATTENTION_LIST_LIMIT = 1000;
 const ACTIVITY_EVENT_FETCH_LIMIT = 100;
 const ACTIVITY_EVENT_WINDOW = '24h';
@@ -108,17 +108,25 @@ function withRunsFreshness(
 
 async function fetchRunsAttention(cityName: string | null): Promise<RunsAttentionFacts> {
   if (cityName === null) return {};
-  try {
-    return {
-      feed: await supervisorApi().formulaFeed(cityName, {
-        limit: FORMULA_FEED_LIMIT,
-        scope_kind: 'city',
-        scope_ref: cityName,
-      }),
-    };
-  } catch (err) {
-    return { error: formatApiError(err, 'formula run feed unavailable') };
+  // gascity-dashboard-2j8e.2: the badge derives genuinely-blocked runs from the
+  // bead-derived run summary — the SAME source the /runs page reads — so the
+  // badge and the page count one selector and cannot disagree. The preview
+  // source is sufficient: `phase === 'blocked'` is decided from bead state in
+  // buildRunSummary and needs no session enrichment. The formula feed (the old
+  // source) is dropped: it counted phantom feed-only roots and flapped on
+  // partial fan-outs.
+  //
+  // This refetches the summary under the attention cache key rather than sharing
+  // the page's `runs:summary:*` entry, so when the operator is on /runs the
+  // fan-out runs twice. The attention fetch is mount-driven (no recurring poll),
+  // so the cost is bounded to cold load / city switch; unifying the two cache
+  // entries is a worthwhile follow-up but a cross-cutting cache change kept out
+  // of this focused fix.
+  const source = await loadSupervisorRunSummaryPreviewSource();
+  if (source.status === 'error') {
+    return { error: source.error };
   }
+  return { summary: source.data };
 }
 
 async function fetchAgentsAttention(cityName: string | null): Promise<AgentsAttentionFacts> {

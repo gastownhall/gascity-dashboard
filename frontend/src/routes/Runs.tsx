@@ -209,6 +209,7 @@ export function RunsPage() {
               <span>
                 {lanesPartial ? (
                   <PartialDataNotice
+                    glyph="◐"
                     label="runs partial"
                     title="one or more rigs' recent runs were unavailable; the lane set may be incomplete"
                   />

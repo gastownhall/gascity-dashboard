@@ -144,6 +144,34 @@ describe('buildRunSummary — dangling-root groups are not surfaced (gascity-das
     assert.deepEqual(summary.historicalLanes, []);
     assert.equal(summary.runCounts.total, 1);
   });
+
+  // gascity-dashboard-2j8e.2: the Runs badge counts selectBlockedRuns over
+  // blockedLanes, so a dangling-root group whose orphan step is BLOCKED must
+  // not reach blockedLanes — else the phantom inflates the badge. Pins the
+  // #87/#89 intent (suppress phantom roots with no backing bead) for the
+  // badge's source, not just the Active set.
+  function blockedOrphanStep(rootId: string): RunIssue {
+    return {
+      id: `${rootId}-step-1`,
+      title: 'Blocked patch',
+      status: 'blocked',
+      issue_type: 'task',
+      updated_at: '2026-06-01T00:05:00Z',
+      metadata: {
+        'gc.kind': 'step',
+        'gc.formula_contract': 'graph.v2',
+        'gc.root_bead_id': rootId,
+        'gc.step_id': 'implementation.patch',
+      },
+    };
+  }
+
+  test('a dangling-root group with a blocked step never reaches blockedLanes', () => {
+    const summary = buildRunSummary([blockedOrphanStep('gc-1920'), ...activeRun('run-1')]);
+
+    assert.deepEqual(summary.blockedLanes, []);
+    assert.equal(summary.runCounts.blocked, 0);
+  });
 });
 
 // gascity-dashboard-5e5v: supervisor-controlled rig/scope refs are rendered

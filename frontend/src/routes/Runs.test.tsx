@@ -619,6 +619,49 @@ describe('RunsPage — blocked lanes are not Active (gascity-dashboard-4xcv)', (
   });
 });
 
+describe('RunsPage — blocked legibility + partial glyph (gascity-dashboard-2j8e.2)', () => {
+  it('shows why-blocked and how-to-unblock per blocked run, headed by the count', async () => {
+    const source = buildRunSource('fresh');
+    const runs = requireRunData(source);
+    runs.blockedLanes = [
+      activeLane({
+        id: 'gc-1920',
+        title: 'mol-focus-review latch',
+        phase: 'blocked',
+        phaseLabel: 'blocked',
+        statusCounts: { blocked: 1 },
+        activeAssignees: [],
+      }),
+    ];
+    runs.runCounts = { ...runs.runCounts, blocked: 1 };
+    mockLoadRunSummary.mockResolvedValue(source);
+
+    mount();
+    await waitForMount();
+
+    const blockedSection = await screen.findByRole('region', { name: /blocked runs/i });
+    // The header count is the same selectBlockedRuns the nav badge counts.
+    expect(blockedSection.textContent).toContain('Blocked (1)');
+    // Why-blocked (the completedLane base resolves the Finalization stage).
+    expect(blockedSection.textContent).toContain('Blocked at Finalization');
+    // How-to-unblock.
+    expect(blockedSection.textContent).toContain('No worker assigned. Claim or dispatch one.');
+  });
+
+  it('pairs the partial indicator with a ◐ glyph (DESIGN.md status = glyph + word)', async () => {
+    const source = buildRunSource('fresh');
+    requireRunData(source).lanesPartial = true;
+    mockLoadRunSummary.mockResolvedValue(source);
+
+    mount();
+    await waitForMount();
+
+    const marker = await screen.findByRole('status');
+    expect(marker.textContent).toContain('◐');
+    expect(marker.textContent).toContain('runs partial');
+  });
+});
+
 describe('RunsPage — run scope labels (gascity-dashboard-4xcv)', () => {
   it('groups city-scoped and scope-unavailable lanes under a single "city" header, never "unknown rig"', async () => {
     const source = buildRunSource('fresh');

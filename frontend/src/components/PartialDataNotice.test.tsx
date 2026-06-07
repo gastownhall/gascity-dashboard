@@ -19,4 +19,12 @@ describe('PartialDataNotice', () => {
 
     expect(screen.queryByRole('status')).toBeNull();
   });
+
+  it('pairs an optional leading glyph with the word (DESIGN.md status = glyph + word)', () => {
+    render(<PartialDataNotice glyph="◐" label="runs partial" title="one rig unavailable" />);
+
+    const status = screen.getByRole('status');
+    expect(status.textContent).toContain('◐');
+    expect(status.textContent).toContain('runs partial');
+  });
 });

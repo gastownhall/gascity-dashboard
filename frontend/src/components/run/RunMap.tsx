@@ -1,5 +1,10 @@
 import { useState } from 'react';
-import type { RunLane, RunSummary, SourceState } from 'gas-city-dashboard-shared';
+import {
+  selectBlockedRuns,
+  type RunLane,
+  type RunSummary,
+  type SourceState,
+} from 'gas-city-dashboard-shared';
 import type { BadgeSeverity } from '../../attention/compose';
 import { LaneCard } from './LaneCard';
 
@@ -199,15 +204,34 @@ function BlockedSection({
   now: number;
   attentionSeverity?: (lane: RunLane) => BadgeSeverity | null;
 }) {
-  if (summary.blockedLanes.length === 0) return null;
+  // gascity-dashboard-2j8e.2: selectBlockedRuns is the SAME selector the nav
+  // badge counts, so the header count here and the badge number are one number.
+  // Each row carries why-blocked + how-to-unblock (LaneCard `blocked`), so the
+  // destination is a path to action, not just a list. Rendered inline rather
+  // than through the shared LaneList so that generic list stays blocked-unaware.
+  const detailById = new Map(selectBlockedRuns(summary.blockedLanes).map((run) => [run.id, run]));
+  if (detailById.size === 0) return null;
   return (
     <section aria-label="Blocked runs" className="mt-12">
-      <h2 className="text-label uppercase tracking-wider text-fg-faint">Blocked</h2>
-      <LaneList
-        lanes={summary.blockedLanes}
-        now={now}
-        {...(attentionSeverity === undefined ? {} : { attentionSeverity })}
-      />
+      <h2 className="text-label uppercase tracking-wider text-fg-faint tnum">
+        Blocked ({detailById.size})
+      </h2>
+      <ol className="mt-3 divide-y divide-rule">
+        {summary.blockedLanes.map((lane) => {
+          const detail = detailById.get(lane.id);
+          return (
+            <LaneCard
+              key={lane.id}
+              lane={lane}
+              now={now}
+              {...(attentionSeverity === undefined
+                ? {}
+                : { attentionSeverity: attentionSeverity(lane) })}
+              {...(detail === undefined ? {} : { blocked: detail })}
+            />
+          );
+        })}
+      </ol>
     </section>
   );
 }

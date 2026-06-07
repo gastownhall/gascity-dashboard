@@ -11,7 +11,6 @@ import type {
 import type {
   AgentResponse,
   Bead,
-  FormulaFeedBody,
   HealthOutputBody,
   Message,
   TypedEventStreamEnvelope,
@@ -116,23 +115,21 @@ describe('createAttentionContributors', () => {
     const model = composeAttention(
       createAttentionContributors({
         runs: {
-          feed: formulaFeed({
-            items: [
-              {
-                id: 'run-1',
-                root_bead_id: 'B-root',
-                root_store_ref: 'city:B-root',
-                scope_kind: 'city',
-                scope_ref: 'test-city',
-                started_at: '2026-05-29T20:00:00.000Z',
-                status: 'failed',
-                target: 'mayor',
-                title: 'Review formula output',
-                type: 'formula',
-                updated_at: '2026-05-29T20:05:00.000Z',
+          summary: runSummary([
+            runLane({
+              id: 'run-1',
+              title: 'Review formula output',
+              phase: 'blocked',
+              scope: {
+                status: 'available',
+                kind: 'city',
+                ref: 'test-city',
+                rootStoreRef: 'city:test-city',
               },
-            ],
-          }),
+              statusCounts: { blocked: 1 },
+              health: { phaseConfidence: 'known', needsOperator: true, thrashingDetected: false },
+            }),
+          ]),
         },
         agents: {
           items: [
@@ -191,20 +188,23 @@ describe('createAttentionContributors', () => {
     expect(model.byDomain.health.attention).toBe(1);
   });
 
-  it('still derives run attention from the existing RunSummary health model', () => {
+  it('counts genuinely-blocked runs only — a needs-operator active lane does not count (gascity-dashboard-2j8e.2)', () => {
     const model = composeAttention(
       createAttentionContributors({
         runs: {
           summary: runSummary([
             runLane({
-              id: 'run-1',
-              title: 'Review formula output',
+              id: 'active-1',
+              title: 'Active needs operator',
               phase: 'approval',
-              health: {
-                phaseConfidence: 'known',
-                needsOperator: true,
-                thrashingDetected: false,
-              },
+              health: { phaseConfidence: 'known', needsOperator: true, thrashingDetected: false },
+            }),
+            runLane({
+              id: 'blocked-1',
+              title: 'Stuck run',
+              phase: 'blocked',
+              statusCounts: { blocked: 1 },
+              health: { phaseConfidence: 'known', needsOperator: true, thrashingDetected: false },
             }),
           ]),
         },
@@ -212,35 +212,51 @@ describe('createAttentionContributors', () => {
     );
 
     expect(model.byDomain.runs.attention).toBe(1);
-    expect(model.byDomain.runs.items[0]?.href).toBe('/runs/run-1');
+    expect(model.byDomain.runs.watch).toBe(0);
+    expect(model.byDomain.runs.items.map((item) => item.id)).toEqual(['runs:blocked-1:blocked']);
+    expect(model.byDomain.runs.items[0]?.href).toBe('/runs/blocked-1');
   });
 
-  it('reclassifies runs data-unavailability emitters into the unavailable tier, carrying read freshness', () => {
+  it('never counts a supervisor partial read as a run (gascity-dashboard-2j8e.2)', () => {
+    const summary = runSummary([
+      runLane({
+        id: 'blocked-1',
+        title: 'Stuck run',
+        phase: 'blocked',
+        statusCounts: { blocked: 1 },
+        health: { phaseConfidence: 'inferred', needsOperator: false, thrashingDetected: false },
+      }),
+    ]);
+    const model = composeAttention(
+      createAttentionContributors({ runs: { summary: { ...summary, lanesPartial: true } } }),
+    );
+
+    // The blocked run counts; the partial flag lands only in the non-counting
+    // unavailable tier (dash-ygj) — so the badge count is stable across partial
+    // fan-outs (no 6<->13 flap) while the degraded read still surfaces quietly.
+    expect(model.byDomain.runs.attention).toBe(1);
+    expect(model.byDomain.runs.watch).toBe(0);
+    expect(model.byDomain.runs.unavailable).toBe(1);
+    const ids = model.byDomain.runs.items.map((item) => item.id);
+    expect(ids).toContain('runs:blocked-1:blocked');
+    expect(ids).toContain('runs:partial');
+  });
+
+  it('surfaces a single unavailable item when run data errors (gascity-dashboard-2j8e.2)', () => {
+    const model = composeAttention(
+      createAttentionContributors({ runs: { error: 'supervisor unreachable' } }),
+    );
+
+    expect(model.byDomain.runs.items.map((item) => item.id)).toEqual(['runs:unavailable']);
+    expect(model.byDomain.runs.attention).toBe(1);
+  });
+
+  it('reclassifies summary-derived runs data-unavailability into the unavailable tier, carrying read freshness', () => {
     const model = composeAttention(
       createAttentionContributors({
         runs: {
           provenance: 'stale',
           fetchedAt: '2026-06-06T12:00:00.000Z',
-          feed: formulaFeed({
-            partial: true,
-            partial_errors: ['feed degraded'],
-            items: [
-              {
-                id: 'run-detail',
-                root_bead_id: 'B-root',
-                root_store_ref: 'city:B-root',
-                scope_kind: 'city',
-                scope_ref: 'test-city',
-                started_at: '2026-05-29T20:00:00.000Z',
-                status: 'running',
-                target: 'mayor',
-                title: 'Detail run',
-                type: 'formula',
-                updated_at: '2026-05-29T20:05:00.000Z',
-                run_detail_available: false,
-              },
-            ],
-          }),
           summary: {
             ...runSummary([]),
             lanesPartial: true,
@@ -250,18 +266,18 @@ describe('createAttentionContributors', () => {
       }),
     );
 
-    // The four data-unavailability emitters (feed-partial, detail-unavailable,
-    // list-partial, health-unavailable) must never inflate the badge counts…
+    // The summary-derived data-unavailability emitters (list-partial,
+    // health-unavailable) must never inflate the badge counts… (the formula feed
+    // is no longer a runs-attention source — gascity-dashboard-2j8e.2 — so its
+    // feed-partial / detail-unavailable emitters are gone with it.)
     expect(model.byDomain.runs.attention).toBe(0);
     expect(model.byDomain.runs.watch).toBe(0);
     // …they land in the dedicated unavailable tier…
-    expect(model.byDomain.runs.unavailable).toBe(4);
+    expect(model.byDomain.runs.unavailable).toBe(2);
     // …and never color the nav badge.
     expect(model.byDomain.runs.severity).toBeNull();
 
     const ids = model.byDomain.runs.items.map((item) => item.id);
-    expect(ids).toContain('runs:feed-partial');
-    expect(ids).toContain('runs:run-detail:detail-unavailable');
     expect(ids).toContain('runs:partial');
     expect(ids).toContain('runs:run-health:health-unavailable');
 
@@ -717,19 +733,21 @@ function runSummary(lanes: readonly RunLane[]): RunSummary {
   for (const lane of lanes) {
     byPhase[lane.phase] += 1;
   }
+  const blockedLanes = lanes.filter((lane) => lane.phase === 'blocked');
+  const activeLanes = lanes.filter((lane) => lane.phase !== 'blocked' && lane.phase !== 'complete');
   return {
-    lanes: [...lanes],
-    historicalLanes: [],
-    blockedLanes: [],
-    totalActive: lanes.length,
+    lanes: activeLanes,
+    historicalLanes: lanes.filter((lane) => lane.phase === 'complete'),
+    blockedLanes,
+    totalActive: activeLanes.length,
     totalHistorical: 0,
     runCounts: {
-      total: lanes.length,
-      visible: lanes.length,
+      total: activeLanes.length,
+      visible: activeLanes.length,
       prReview: 0,
       designReview: 0,
       bugfix: 0,
-      blocked: lanes.filter((lane) => lane.phase === 'blocked').length,
+      blocked: blockedLanes.length,
       other: 0,
     },
     recentChanges: [],
@@ -751,6 +769,9 @@ function runLane({
   title,
   phase,
   health,
+  scope,
+  statusCounts = {},
+  activeAssignees = [],
 }: {
   id: string;
   title: string;
@@ -760,12 +781,24 @@ function runLane({
     needsOperator: boolean;
     thrashingDetected: boolean;
   };
+  scope?: RunLane['scope'];
+  statusCounts?: Record<string, number>;
+  activeAssignees?: string[];
 }): RunLane {
   return {
     id,
     title,
     phase,
     phaseLabel: phase,
+    formula: { status: 'known', name: 'mol-test' },
+    scope: scope ?? { status: 'unavailable', error: 'run scope metadata unavailable' },
+    external: { status: 'unavailable', error: 'external reference unavailable' },
+    statusCounts,
+    activeAssignees,
+    updatedAt: { status: 'available', at: '2026-05-29T20:00:00.000Z' },
+    stages: [],
+    progress: { status: 'unavailable', error: 'run progress unavailable' },
+    formulaStageResolved: false,
     health: {
       status: 'available',
       data: {
@@ -777,7 +810,7 @@ function runLane({
         },
       },
     },
-  } as RunLane;
+  };
 }
 
 function healthUnavailableLane(id: string, title: string): RunLane {
@@ -786,6 +819,7 @@ function healthUnavailableLane(id: string, title: string): RunLane {
     title,
     phase: 'active',
     phaseLabel: 'active',
+    scope: { status: 'unavailable', error: 'run scope metadata unavailable' },
     health: { status: 'unavailable', error: 'health probe failed' },
   } as RunLane;
 }
@@ -830,14 +864,6 @@ function deploys(overrides: Partial<DeployList>): DeployList {
     failed_marker: false,
     items: [],
     source: null,
-    ...overrides,
-  };
-}
-
-function formulaFeed(overrides: Partial<FormulaFeedBody>): FormulaFeedBody {
-  return {
-    items: [],
-    partial: false,
     ...overrides,
   };
 }

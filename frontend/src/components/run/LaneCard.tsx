@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { BadgeSeverity } from '../../attention/compose';
 import { attentionListItemProps } from '../../attention/routeHighlight';
 import { formatRelative } from '../../hooks/time';
+import { runDetailHref } from '../../supervisor/runHref';
 import { StageLadder } from './StageLadder';
 
 // Per-lane typographic row. No card chrome — vertical rhythm carries the
@@ -16,6 +17,12 @@ interface LaneCardProps {
   lane: RunLane;
   now: number;
   attentionSeverity?: BadgeSeverity | null;
+  /**
+   * gascity-dashboard-2j8e.2: why-blocked + how-to-unblock, shown only in the
+   * Blocked section so a blocked run reads as actionable (which step, what to
+   * do) rather than just "blocked". Derived by selectBlockedRuns.
+   */
+  blocked?: { reason: string; remedy: string };
 }
 
 /**
@@ -37,7 +44,7 @@ function phaseLabelTone(phase: RunLane['phase']): 'text-accent' | 'text-fg-muted
   return 'text-fg';
 }
 
-export function LaneCard({ lane, now, attentionSeverity = null }: LaneCardProps) {
+export function LaneCard({ lane, now, attentionSeverity = null, blocked }: LaneCardProps) {
   const statusEntries = Object.entries(lane.statusCounts).sort((a, b) =>
     statusSortKey(a[0]).localeCompare(statusSortKey(b[0])),
   );
@@ -62,7 +69,7 @@ export function LaneCard({ lane, now, attentionSeverity = null }: LaneCardProps)
       </div>
 
       <Link
-        to={runDetailHref(lane)}
+        to={runDetailHref(lane.id, lane.scope)}
         className="focus-mark mt-1 block text-body text-fg leading-snug hover:text-accent"
       >
         {lane.title}
@@ -109,18 +116,20 @@ export function LaneCard({ lane, now, attentionSeverity = null }: LaneCardProps)
           </span>
         )}
       </div>
+
+      {blocked !== undefined && (
+        <div className="mt-2">
+          <p className="text-body text-fg leading-snug">
+            <span aria-hidden="true" className="text-accent">
+              ✕
+            </span>{' '}
+            {blocked.reason}
+          </p>
+          <p className="mt-1 text-body text-fg-muted leading-snug">{blocked.remedy}</p>
+        </div>
+      )}
     </li>
   );
-}
-
-function runDetailHref(lane: RunLane): string {
-  const search = new URLSearchParams();
-  if (lane.scope.status === 'available') {
-    search.set('scope_kind', lane.scope.kind);
-    search.set('scope_ref', lane.scope.ref);
-  }
-  const qs = search.toString();
-  return `/runs/${encodeURIComponent(lane.id)}${qs ? `?${qs}` : ''}`;
 }
 
 function statusSortKey(status: string): string {

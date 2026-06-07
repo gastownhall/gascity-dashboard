@@ -2,19 +2,18 @@ import type {
   DeployList,
   DoltNomsTrend,
   MaintainerTriage,
-  RunLane,
   RunSummary,
   SourceStatus,
   SystemHealth,
   TriageItem,
 } from 'gas-city-dashboard-shared';
+import { selectBlockedRuns } from 'gas-city-dashboard-shared';
+import { runDetailHref } from '../supervisor/runHref';
 import type {
   AgentResponse,
   Bead,
-  FormulaFeedBody,
   HealthOutputBody,
   Message,
-  MonitorFeedItemResponse,
   TypedEventStreamEnvelope,
 } from 'gas-city-dashboard-shared/gc-supervisor';
 import type { AgentPendingInteraction } from '../supervisor/agentPending';
@@ -40,7 +39,14 @@ export interface HealthAttentionFacts {
 }
 
 export interface RunsAttentionFacts {
-  feed?: FormulaFeedBody;
+  /**
+   * The bead-derived run summary (gascity-dashboard-2j8e.2). The Runs badge
+   * counts genuinely-blocked runs from `summary.blockedLanes` — the same
+   * selectBlockedRuns the /runs page reads, so the badge and the page count
+   * cannot disagree. The formula feed is deliberately NOT a source here: it
+   * surfaced phantom feed-only roots (gc-1920 codeprobe upstream_error) and
+   * flapped 6<->13 on partial fan-outs.
+   */
   summary?: RunSummary;
   error?: string;
   /**
@@ -240,14 +246,19 @@ function deriveRunsAttention(facts: RunsAttentionFacts | undefined): readonly At
         href: '/runs',
       }),
     );
+    return items;
   }
 
   const summary = facts.summary;
-  const feed = facts.feed;
-  if (feed !== undefined) {
-    appendFormulaFeedAttention(items, feed, freshness);
-  }
   if (summary === undefined) return items;
+
+  // dash-ygj + gascity-dashboard-2j8e.2: degraded runs reads land in the
+  // `unavailable` tier, which BadgeSeverity excludes — so a partial fan-out and
+  // any lane whose health could not be read surface as quiet, non-counting items
+  // (never a badge number) and ride read freshness so a stale read can be aged.
+  // The formula feed is no longer a source (it produced the gc-1920 phantom roots
+  // and flapped 6<->13), so #91's feed-derived emitters are gone; only the
+  // summary-derived degraded reads survive.
   if (summary.lanesPartial === true) {
     items.push(
       domainUnavailable(
@@ -261,131 +272,38 @@ function deriveRunsAttention(facts: RunsAttentionFacts | undefined): readonly At
       ),
     );
   }
-
-  // gascity-dashboard-4xcv: blocked lanes moved out of summary.lanes into
-  // their own bucket; they still need the operator, so both sets contribute.
   for (const lane of [...summary.lanes, ...summary.blockedLanes]) {
-    const item = attentionForRunLane(lane, freshness);
-    if (item !== null) items.push(item);
-  }
-  return items;
-}
-
-function appendFormulaFeedAttention(
-  items: AttentionItem[],
-  feed: FormulaFeedBody,
-  freshness: ReadFreshness,
-): void {
-  if (feed.partial) {
-    const summary = feed.partial_errors?.join('; ');
+    if (lane.health.status === 'available') continue;
     items.push(
       domainUnavailable(
         'runs',
         {
-          id: 'runs:feed-partial',
-          title: 'Formula run feed incomplete',
-          href: '/runs',
-          ...(summary === undefined ? {} : { summary }),
+          id: `runs:${lane.id}:health-unavailable`,
+          title: `${lane.title} health unavailable`,
+          summary: lane.health.error,
+          href: runDetailHref(lane.id, lane.scope),
         },
         freshness,
       ),
     );
   }
-  for (const item of feed.items ?? []) {
-    const attention = attentionForFormulaFeedItem(item, freshness);
-    if (attention !== null) items.push(attention);
-  }
-}
 
-function attentionForFormulaFeedItem(
-  item: MonitorFeedItemResponse,
-  freshness: ReadFreshness,
-): AttentionItem | null {
-  const status = item.status.toLowerCase();
-  const href = runHref(item.id, item.scope_kind, item.scope_ref);
-  if (isRunAttentionStatus(status)) {
-    return domainAttention('runs', {
-      id: `runs:${item.id}:${status}`,
-      title: item.title,
-      summary: item.status,
-      href,
-      updatedAt: item.started_at,
-    });
-  }
-  if (item.run_detail_available === false || item.detail_available === false) {
-    return domainUnavailable(
-      'runs',
-      {
-        id: `runs:${item.id}:detail-unavailable`,
-        title: `${item.title} detail unavailable`,
-        href,
-        updatedAt: item.started_at,
-      },
-      freshness,
+  // gascity-dashboard-2j8e.2: the Runs badge counts GENUINELY-BLOCKED runs only
+  // — exactly the selectBlockedRuns set the /runs page renders, so the badge
+  // number and the page's Blocked count read one selector and cannot disagree.
+  // A supervisor `partial` read is never counted (it lands in the unavailable
+  // tier above), so the count no longer flaps on a partial fan-out.
+  for (const run of selectBlockedRuns(summary.blockedLanes)) {
+    items.push(
+      domainAttention('runs', {
+        id: `runs:${run.id}:blocked`,
+        title: `${run.title} blocked`,
+        summary: run.reason,
+        href: runDetailHref(run.id, run.scope),
+      }),
     );
   }
-  if (isRunWatchStatus(status)) {
-    return domainWatch('runs', {
-      id: `runs:${item.id}:${status}`,
-      title: item.title,
-      summary: item.status,
-      href,
-      updatedAt: item.started_at,
-    });
-  }
-  return null;
-}
-
-function attentionForRunLane(lane: RunLane, freshness: ReadFreshness): AttentionItem | null {
-  const href =
-    lane.scope?.status === 'available'
-      ? runHref(lane.id, lane.scope.kind, lane.scope.ref)
-      : runHref(lane.id);
-  if (lane.health.status !== 'available') {
-    return domainUnavailable(
-      'runs',
-      {
-        id: `runs:${lane.id}:health-unavailable`,
-        title: `${lane.title} health unavailable`,
-        summary: lane.health.error,
-        href,
-      },
-      freshness,
-    );
-  }
-
-  const health = lane.health.data;
-  if (health.needsOperator || lane.phase === 'blocked') {
-    return domainAttention('runs', {
-      id: `runs:${lane.id}:needs-operator`,
-      title: `${lane.title} needs operator`,
-      href,
-    });
-  }
-  if (health.phaseConfidence === 'known' && health.thrashingDetected) {
-    return domainAttention('runs', {
-      id: `runs:${lane.id}:thrashing`,
-      title: `${lane.title} is thrashing`,
-      href,
-    });
-  }
-  if (health.phaseConfidence === 'inferred') {
-    return domainWatch('runs', {
-      id: `runs:${lane.id}:unverifiable`,
-      title: `${lane.title} health unverifiable`,
-      href,
-    });
-  }
-  return null;
-}
-
-function runHref(runId: string, scopeKind?: string, scopeRef?: string): string {
-  const path = `/runs/${encodeURIComponent(runId)}`;
-  if (scopeKind === undefined || scopeRef === undefined) return path;
-  const search = new URLSearchParams();
-  search.set('scope_kind', scopeKind);
-  search.set('scope_ref', scopeRef);
-  return `${path}?${search.toString()}`;
+  return items;
 }
 
 function deriveAgentsAttention(facts: AgentsAttentionFacts | undefined): readonly AttentionItem[] {
@@ -1083,24 +1001,6 @@ function formatElapsed(ageMs: number): string {
 
 function isFailureState(state: string): boolean {
   return state === 'failed' || state === 'errored' || state === 'stuck' || state === 'crashed';
-}
-
-function isRunAttentionStatus(status: string): boolean {
-  return (
-    status === 'failed' ||
-    status === 'error' ||
-    status === 'errored' ||
-    status === 'blocked' ||
-    status === 'waiting' ||
-    status === 'needs_operator' ||
-    status === 'needs-operator'
-  );
-}
-
-function isRunWatchStatus(status: string): boolean {
-  return (
-    status === 'partial' || status === 'unknown' || status === 'inferred' || status === 'stale'
-  );
 }
 
 function addressMatches(raw: string, alias: string): boolean {
