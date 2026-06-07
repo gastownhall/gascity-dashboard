@@ -8,6 +8,8 @@ import type {
   TriageItem,
 } from 'gas-city-dashboard-shared';
 import { selectBlockedRuns } from 'gas-city-dashboard-shared';
+import { selectBeadsNeedingAttention, type BeadAttentionReason } from './beadsNeedingAttention';
+import { elapsedSince, formatElapsed } from './elapsed';
 import { runDetailHref } from '../supervisor/runHref';
 import type {
   AgentResponse,
@@ -79,11 +81,21 @@ export interface BeadsAttentionFacts {
    * their own attention identity, never re-triaged (ZFC).
    */
   decisions?: readonly Bead[];
+  /**
+   * The open-`gc:escalation` queue: the help-request / escalation beads
+   * (gascity-dashboard-2j8e.3). Fetched with the dedicated label+status filter
+   * because the general bead list drops `gc:`-labelled bookkeeping beads, so an
+   * escalation would never reach the generic triage. The same dedicated-queue
+   * shape as `decisions`.
+   */
+  escalations?: readonly Bead[];
   nowMs?: number;
   partial?: boolean;
   error?: string;
   /** Failure of the dedicated decision-queue fetch, independent of `error`. */
   decisionsError?: string;
+  /** Failure of the dedicated escalation-queue fetch, independent of `error`. */
+  escalationsError?: string;
 }
 
 export interface MailAttentionFacts {
@@ -121,8 +133,6 @@ export interface AttentionContributorFacts {
 }
 
 const AGENT_IDLE_WATCH_MS = 4 * 60 * 60 * 1000;
-const BEAD_UNCLAIMED_WATCH_MS = 24 * 60 * 60 * 1000;
-const BEAD_STALE_ATTENTION_MS = 72 * 60 * 60 * 1000;
 const MAIL_UNREAD_STALE_MS = 24 * 60 * 60 * 1000;
 const DASHBOARD_PROCESS_STARTING_UPTIME_SEC = 30;
 const DASHBOARD_PROCESS_RSS_HIGH_BYTES = 2_000_000_000;
@@ -137,6 +147,16 @@ const DASHBOARD_PROCESS_HEAP_ELEVATED_BYTES = 512_000_000;
  * generic-loop skip below resolve the same marker — a rename touches one line.
  */
 export const NEEDS_STEPHANIE_LABEL = 'needs/stephanie';
+
+/**
+ * The gc-native escalation marker (gascity-dashboard-2j8e.3). An open bead
+ * carrying it has raised a help-request / escalation — abnormal blocking that
+ * needs a human, unlike a bead in `blocked` status that is merely waiting on a
+ * dependency. The same marker the prior `gc dashboard` escalations panel keyed
+ * on. Exported so the dedicated fetch filter (liveContributors) resolves the
+ * same marker — a rename touches one line.
+ */
+export const GC_ESCALATION_LABEL = 'gc:escalation';
 
 /**
  * Flat metadata key for the mayor's one-sentence decision question (the spec's
@@ -441,83 +461,51 @@ function deriveBeadsAttention(facts: BeadsAttentionFacts | undefined): readonly 
       }),
     );
   }
+  if (facts.escalationsError !== undefined && facts.escalationsError.length > 0) {
+    items.push(
+      domainAttention('beads', {
+        id: 'beads:escalations-unavailable',
+        title: 'Escalation queue unavailable',
+        summary: facts.escalationsError,
+        href: '/beads',
+      }),
+    );
+  }
   for (const decision of facts.decisions ?? []) {
     items.push(mayorDecisionAttention(decision));
   }
   const nowMs = facts.nowMs ?? Date.now();
-  for (const bead of facts.items ?? []) {
-    // Marker beads surface via the dedicated decision queue above; skip them
-    // here so a priority-1 decision bead is not also surfaced as a generic
-    // high-priority/stale bead alert (double-surfacing).
-    if (isMayorDecision(bead)) continue;
-    if (bead.status === 'blocked') {
-      items.push(
-        domainAttention('beads', {
-          id: `beads:${bead.id}:blocked`,
-          title: `${bead.id} blocked`,
-          summary: bead.title,
-          href: beadHref(bead.id),
-        }),
-      );
-      continue;
-    }
-    if (
-      bead.status !== 'closed' &&
-      bead.priority !== null &&
-      bead.priority !== undefined &&
-      bead.priority <= 1
-    ) {
-      items.push(
-        domainAttention('beads', {
-          id: `beads:${bead.id}:high-priority`,
-          title: `${bead.id} high priority`,
-          summary: bead.title,
-          href: beadHref(bead.id),
-        }),
-      );
-    }
-    const stale = attentionForStaleBead(bead, nowMs);
-    if (stale !== null) items.push(stale);
+  // gascity-dashboard-2j8e.3: the Beads badge counts exactly the ready-unclaimed
+  // + abnormally-blocked (escalated / help-requested) set — plain
+  // dependency-blocked is excluded (bd `blocked` = "blocked by a dependency",
+  // working-as-intended queuing). Ready-unclaimed comes from the general list;
+  // escalations from the dedicated gc:escalation queue (the general list drops
+  // gc:-labelled beads). Marker beads surface via the decision queue above, so
+  // skip them in the general list (no double-surfacing). selectBeadsNeedingAttention
+  // is the membership SSOT the /beads page also reads, so the nav badge count
+  // and the page count cannot disagree.
+  const generic = (facts.items ?? []).filter((bead) => !isMayorDecision(bead));
+  for (const row of selectBeadsNeedingAttention(
+    { beads: generic, escalations: facts.escalations ?? [] },
+    nowMs,
+  )) {
+    const builder = row.severity === 'attention' ? domainAttention : domainWatch;
+    items.push(
+      builder('beads', {
+        id: `beads:${row.beadId}:${row.reason}`,
+        title: `${row.beadId} ${beadAttentionWord(row.reason)}`,
+        summary: row.summary,
+        href: beadHref(row.beadId),
+        updatedAt: row.updatedAt,
+      }),
+    );
   }
   return items;
 }
 
-function attentionForStaleBead(bead: Bead, nowMs: number): AttentionItem | null {
-  if (bead.status === 'closed') return null;
-  const createdAgeMs = elapsedSince(bead.created_at, nowMs);
-  if (createdAgeMs === null) return null;
-  const hasAssignee = bead.assignee !== undefined && bead.assignee.trim().length > 0;
-
-  if (!hasAssignee && createdAgeMs >= BEAD_STALE_ATTENTION_MS) {
-    return domainAttention('beads', {
-      id: `beads:${bead.id}:stale-unclaimed`,
-      title: `${bead.id} unclaimed`,
-      summary: `${bead.title} opened ${formatElapsed(createdAgeMs)} ago`,
-      href: beadHref(bead.id),
-      updatedAt: bead.created_at,
-    });
-  }
-  if (!hasAssignee && createdAgeMs >= BEAD_UNCLAIMED_WATCH_MS) {
-    return domainWatch('beads', {
-      id: `beads:${bead.id}:ready-unclaimed`,
-      title: `${bead.id} still unclaimed`,
-      summary: `${bead.title} opened ${formatElapsed(createdAgeMs)} ago`,
-      href: beadHref(bead.id),
-      updatedAt: bead.created_at,
-    });
-  }
-  const movementAt = bead.updated_at ?? bead.created_at;
-  const movementAgeMs = elapsedSince(movementAt, nowMs);
-  if (hasAssignee && movementAgeMs !== null && movementAgeMs >= BEAD_STALE_ATTENTION_MS) {
-    return domainAttention('beads', {
-      id: `beads:${bead.id}:stale-assigned`,
-      title: `${bead.id} assigned without movement`,
-      summary: `${bead.title} assigned to ${bead.assignee} without movement for ${formatElapsed(movementAgeMs)}`,
-      href: beadHref(bead.id),
-      updatedAt: movementAt,
-    });
-  }
-  return null;
+/** The glyph+word noun for a bead-attention reason (DESIGN.md §Status). */
+function beadAttentionWord(reason: BeadAttentionReason): string {
+  return reason === 'escalated' ? 'escalated' : 'unclaimed';
 }
 
 function beadHref(beadId: string): string {
@@ -983,20 +971,6 @@ function formatBytes(bytes: number): string {
 function safeRatio(numerator: number, denominator: number): number | null {
   if (denominator <= 0) return null;
   return numerator / denominator;
-}
-
-function elapsedSince(rawTimestamp: string | undefined, nowMs: number): number | null {
-  if (rawTimestamp === undefined || rawTimestamp.length === 0) return null;
-  const timestampMs = Date.parse(rawTimestamp);
-  if (!Number.isFinite(timestampMs)) return null;
-  const ageMs = nowMs - timestampMs;
-  return ageMs >= 0 ? ageMs : null;
-}
-
-function formatElapsed(ageMs: number): string {
-  const hours = Math.max(1, Math.round(ageMs / (60 * 60 * 1000)));
-  if (hours < 48) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
 }
 
 function isFailureState(state: string): boolean {

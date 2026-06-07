@@ -141,11 +141,12 @@ describe('createAttentionContributors', () => {
           ],
         },
         beads: {
-          items: [
+          escalations: [
             bead({
               id: 'B-1',
               title: 'Fix broken formula',
               status: 'blocked',
+              labels: ['gc:escalation'],
             }),
           ],
         },
@@ -423,13 +424,15 @@ describe('createAttentionContributors', () => {
     expect(model.byDomain.agents.items.map((item) => item.id)).toContain(
       'agents:idle-agent:stale-idle',
     );
+    // gascity-dashboard-2j8e.3: a long-stale ready-unclaimed open bead surfaces
+    // (attention tier); an assigned in-progress bead is working-as-intended and
+    // no longer counts (the stale-assigned emitter was removed with the badge
+    // redefinition).
     expect(model.byDomain.beads.items.map((item) => item.id)).toEqual([
-      'beads:B-stale-open:stale-unclaimed',
-      'beads:B-stale-assigned:stale-assigned',
+      'beads:B-stale-open:ready-unclaimed',
     ]);
     expect(model.byDomain.beads.items.map((item) => item.href)).toEqual([
       '/beads?bead=B-stale-open',
-      '/beads?bead=B-stale-assigned',
     ]);
     expect(model.byDomain.mail.items.map((item) => item.id)).toContain(
       'mail:M-stale-unread:unread-stale',
@@ -476,35 +479,50 @@ describe('createAttentionContributors', () => {
     ]);
   });
 
-  it('uses bead update movement, not creation age, for stale assigned attention', () => {
+  it('counts ready-unclaimed + escalated beads and excludes plain dependency-blocked (gascity-dashboard-2j8e.3)', () => {
     const nowMs = Date.parse('2026-06-01T12:00:00.000Z');
     const model = composeAttention(
       createAttentionContributors({
         beads: {
           nowMs,
           items: [
+            // ready-unclaimed: open, no assignee, aged past the watch window.
             bead({
-              assignee: 'reviewer',
               created_at: '2026-05-29T11:00:00.000Z',
-              id: 'B-active-assigned',
-              status: 'in_progress',
-              updated_at: '2026-06-01T11:30:00.000Z',
+              id: 'B-ready',
+              status: 'open',
             }),
+            // plain dependency-blocked: working-as-intended queuing — excluded.
+            bead({
+              created_at: '2026-05-29T11:00:00.000Z',
+              id: 'B-dep',
+              status: 'blocked',
+            }),
+            // assigned in-progress work — excluded (no longer a bead alert).
             bead({
               assignee: 'reviewer',
               created_at: '2026-05-29T11:00:00.000Z',
-              id: 'B-stale-assigned',
+              id: 'B-assigned',
               status: 'in_progress',
-              updated_at: '2026-05-29T11:30:00.000Z',
+            }),
+          ],
+          // abnormally-blocked: an escalation marker — counted immediately, from
+          // the dedicated gc:escalation queue (the general list drops gc: labels).
+          escalations: [
+            bead({
+              created_at: '2026-06-01T11:55:00.000Z',
+              id: 'B-esc',
+              status: 'blocked',
+              labels: ['gc:escalation'],
             }),
           ],
         },
       }),
     );
 
-    expect(model.byDomain.beads.items.map((item) => item.id)).toEqual([
-      'beads:B-stale-assigned:stale-assigned',
-    ]);
+    const ids = model.byDomain.beads.items.map((item) => item.id);
+    expect([...ids].sort()).toEqual(['beads:B-esc:escalated', 'beads:B-ready:ready-unclaimed']);
+    expect(model.byDomain.beads.attention).toBe(2);
   });
 
   it('surfaces each open mayor-decision bead as an attention item linked to the bead view', () => {
@@ -563,7 +581,8 @@ describe('createAttentionContributors', () => {
       createAttentionContributors({
         beads: {
           // Same bead in both the dedicated queue and the capped general list:
-          // priority 1 would otherwise also trip the generic high-priority branch.
+          // the isMayorDecision filter in the generic loop is what keeps it from
+          // surfacing twice.
           decisions: [
             bead({
               id: 'dec-nqy',
@@ -594,14 +613,21 @@ describe('createAttentionContributors', () => {
       createAttentionContributors({
         beads: {
           decisionsError: 'decision queue unavailable: ECONNREFUSED',
-          items: [bead({ id: 'B-1', title: 'Fix broken formula', status: 'blocked' })],
+          escalations: [
+            bead({
+              id: 'B-1',
+              title: 'Fix broken formula',
+              status: 'blocked',
+              labels: ['gc:escalation'],
+            }),
+          ],
         },
       }),
     );
 
     const ids = model.byDomain.beads.items.map((item) => item.id);
     expect(ids).toContain('beads:decisions-unavailable');
-    expect(ids).toContain('beads:B-1:blocked');
+    expect(ids).toContain('beads:B-1:escalated');
   });
 
   it('derives maintainer attention from needs-you, awaiting-triage, and blocked slung facts', () => {

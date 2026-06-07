@@ -115,24 +115,30 @@ describe('useLiveAttentionContributors', () => {
       },
     });
     mockSupervisorApi.listBeads.mockImplementation((_city, query) => {
-      // The label-filtered call is the dedicated mayor-decision queue; the
-      // unfiltered call is the general bead list.
+      // Two dedicated label-filtered queues — the escalation queue surfaces the
+      // one abnormally-blocked bead; the mayor-decision queue is empty here. The
+      // unfiltered calls (general bead list + the runs summary loader) return no
+      // engineering beads, so the Beads badge count is the lone escalation.
+      if (query?.label === 'gc:escalation') {
+        return Promise.resolve({
+          total: 1,
+          items: [
+            {
+              created_at: '2026-05-29T20:00:00.000Z',
+              id: 'B-1',
+              issue_type: 'task',
+              priority: null,
+              status: 'blocked',
+              title: 'Escalated bead',
+              labels: ['gc:escalation'],
+            },
+          ],
+        });
+      }
       if (query?.label !== undefined) {
         return Promise.resolve({ total: 0, items: [] });
       }
-      return Promise.resolve({
-        total: 1,
-        items: [
-          {
-            created_at: '2026-05-29T20:00:00.000Z',
-            id: 'B-1',
-            issue_type: 'task',
-            priority: null,
-            status: 'blocked',
-            title: 'Blocked bead',
-          },
-        ],
-      });
+      return Promise.resolve({ total: 0, items: [] });
     });
     mockSupervisorApi.listMail.mockResolvedValue({
       total: 2,
@@ -291,6 +297,10 @@ describe('useLiveAttentionContributors', () => {
     expect(mockSupervisorApi.listBeads).toHaveBeenCalledWith('test-city', { limit: 1000 });
     expect(mockSupervisorApi.listBeads).toHaveBeenCalledWith('test-city', {
       label: 'needs/stephanie',
+      status: 'open',
+    });
+    expect(mockSupervisorApi.listBeads).toHaveBeenCalledWith('test-city', {
+      label: 'gc:escalation',
       status: 'open',
     });
     expect(mockSupervisorApi.listEvents).toHaveBeenCalledWith('test-city', {

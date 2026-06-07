@@ -15,6 +15,7 @@ import { loadSupervisorRunSummaryPreviewSource } from '../supervisor/runSummary'
 import type { AttentionContributor } from './compose';
 import {
   createAttentionContributors,
+  GC_ESCALATION_LABEL,
   NEEDS_STEPHANIE_LABEL,
   type ActivityAttentionFacts,
   type AgentsAttentionFacts,
@@ -155,13 +156,16 @@ async function fetchAgentsAttention(cityName: string | null): Promise<AgentsAtte
 
 async function fetchBeadsAttention(cityName: string | null): Promise<BeadsAttentionFacts> {
   if (cityName === null) return {};
-  // Two independent reads: the general bead list (capped) and the dedicated
-  // mayor-decision queue (label+status filtered, always complete). Settled
-  // separately so one failing does not blank the other — the decision queue
-  // and generic bead alerts are distinct signals.
-  const [list, decisions] = await Promise.allSettled([
+  // Three independent reads: the general bead list (capped) and two dedicated
+  // label+status-filtered queues — the mayor-decision queue and the escalation
+  // queue. Both queues bypass the general list's gc:-label filter and are always
+  // complete. Settled separately so one failing does not blank the others — the
+  // decision queue, the escalation queue, and generic bead alerts are distinct
+  // signals (gascity-dashboard-2j8e.3).
+  const [list, decisions, escalations] = await Promise.allSettled([
     listSupervisorBeads({ limit: ATTENTION_LIST_LIMIT }),
     listDecisionBeads(cityName),
+    listEscalationBeads(cityName),
   ]);
   const facts: BeadsAttentionFacts = { nowMs: Date.now() };
   if (list.status === 'fulfilled') {
@@ -175,12 +179,24 @@ async function fetchBeadsAttention(cityName: string | null): Promise<BeadsAttent
   } else {
     facts.decisionsError = formatApiError(decisions.reason, 'decision queue unavailable');
   }
+  if (escalations.status === 'fulfilled') {
+    facts.escalations = escalations.value.items ?? [];
+  } else {
+    facts.escalationsError = formatApiError(escalations.reason, 'escalation queue unavailable');
+  }
   return facts;
 }
 
 async function listDecisionBeads(cityName: string) {
   return supervisorApi().listBeads(cityName, {
     label: NEEDS_STEPHANIE_LABEL,
+    status: 'open',
+  });
+}
+
+async function listEscalationBeads(cityName: string) {
+  return supervisorApi().listBeads(cityName, {
+    label: GC_ESCALATION_LABEL,
     status: 'open',
   });
 }

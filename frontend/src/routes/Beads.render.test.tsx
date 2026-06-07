@@ -132,10 +132,10 @@ describe('BeadsPage supervisor reads', () => {
     renderPage('/beads', [
       contributor('beads', [
         {
-          id: 'beads:td-bead-abc123:high-priority',
+          id: 'beads:td-bead-abc123:ready-unclaimed',
           domain: 'beads',
           severity: 'attention',
-          title: 'td-bead-abc123 high priority',
+          title: 'td-bead-abc123 unclaimed',
         },
       ]),
     ]);

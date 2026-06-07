@@ -5,6 +5,7 @@ import { formatApiError } from '../api/client';
 import { getActiveCity } from '../api/cityBase';
 import { useAttentionModel } from '../attention/context';
 import { resourceAttentionSeverity } from '../attention/routeHighlight';
+import { BeadAttentionPanel } from '../components/beads/BeadAttentionPanel';
 import { BeadBoardSection } from '../components/beads/BeadBoardSection';
 import { BeadDetailModal } from '../components/BeadDetailModal';
 import { Button } from '../components/Button';
@@ -306,6 +307,13 @@ export function BeadsPage() {
     [attention],
   );
 
+  // The "Needs you" section (gascity-dashboard-2j8e.3) renders the same
+  // beads-domain attention items the nav badge counts, so the page count and the
+  // badge agree. Claim is offered inline for a ready-unclaimed bead the board
+  // already loaded; everything else opens the bead to act on it.
+  const beadById = useCallback((beadId: string) => rows.find((b) => b.id === beadId), [rows]);
+  const claimingId = actionInFlight?.action === 'claim' ? actionInFlight.id : null;
+
   const renderBeadActions = useCallback(
     (bead: SupervisorBead) => {
       const assignee = bead.assignee?.trim() ?? '';
@@ -448,6 +456,15 @@ export function BeadsPage() {
           </p>
         )}
       </div>
+
+      <BeadAttentionPanel
+        items={attention.byDomain.beads.items}
+        beadById={beadById}
+        onOpen={setSelectedId}
+        onClaim={(bead) => void runAction(bead, 'claim')}
+        readOnly={readOnly}
+        claimingId={claimingId}
+      />
 
       <div className="mb-6 space-y-3">
         <ListSearchBar
