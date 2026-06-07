@@ -7,10 +7,11 @@ import type {
   SystemHealth,
   TriageItem,
 } from 'gas-city-dashboard-shared';
-import { selectBlockedRuns } from 'gas-city-dashboard-shared';
+import { selectAgentsNeedingYou, selectBlockedRuns } from 'gas-city-dashboard-shared';
 import { selectBeadsNeedingAttention, type BeadAttentionReason } from './beadsNeedingAttention';
 import { elapsedSince, formatElapsed } from './elapsed';
 import { runDetailHref } from '../supervisor/runHref';
+import { agentNeedsYouReasonLabel } from './agentNeedsYou';
 import type {
   AgentResponse,
   Bead,
@@ -64,7 +65,6 @@ export interface RunsAttentionFacts {
 export interface AgentsAttentionFacts {
   items?: readonly AgentResponse[];
   pendingInteractions?: readonly AgentPendingInteraction[];
-  nowMs?: number;
   partial?: boolean;
   error?: string;
   pendingError?: string;
@@ -132,7 +132,6 @@ export interface AttentionContributorFacts {
   runs?: RunsAttentionFacts;
 }
 
-const AGENT_IDLE_WATCH_MS = 4 * 60 * 60 * 1000;
 const MAIL_UNREAD_STALE_MS = 24 * 60 * 60 * 1000;
 const DASHBOARD_PROCESS_STARTING_UPTIME_SEC = 30;
 const DASHBOARD_PROCESS_RSS_HIGH_BYTES = 2_000_000_000;
@@ -329,19 +328,26 @@ function deriveRunsAttention(facts: RunsAttentionFacts | undefined): readonly At
 function deriveAgentsAttention(facts: AgentsAttentionFacts | undefined): readonly AttentionItem[] {
   const items: AttentionItem[] = [];
   if (facts === undefined) return items;
+
+  // gascity-dashboard-2j8e.4: data-availability degradation lands in the
+  // `unavailable` tier (BadgeSeverity excludes it), so a failed/partial read
+  // surfaces the degradation WITHOUT inflating the needs-you badge number. A
+  // whole-roster failure can't be projected into needs-you, so return with just
+  // the degradation marker.
   if (facts.error !== undefined && facts.error.length > 0) {
     items.push(
-      domainAttention('agents', {
+      domainUnavailable('agents', {
         id: 'agents:unavailable',
         title: 'Agent data unavailable',
         summary: facts.error,
         href: '/agents',
       }),
     );
+    return items;
   }
   if (facts.partial === true) {
     items.push(
-      domainWatch('agents', {
+      domainUnavailable('agents', {
         id: 'agents:partial',
         title: 'Agent list incomplete',
         href: '/agents',
@@ -350,7 +356,7 @@ function deriveAgentsAttention(facts: AgentsAttentionFacts | undefined): readonl
   }
   if (facts.pendingError !== undefined && facts.pendingError.length > 0) {
     items.push(
-      domainWatch('agents', {
+      domainUnavailable('agents', {
         id: 'agents:pending-unavailable',
         title: 'Agent pending state unavailable',
         summary: facts.pendingError,
@@ -358,75 +364,27 @@ function deriveAgentsAttention(facts: AgentsAttentionFacts | undefined): readonl
       }),
     );
   }
-  for (const interaction of facts.pendingInteractions ?? []) {
+
+  // The Agents badge counts agents that NEED THE OPERATOR — exactly the
+  // selectAgentsNeedingYou set the /agents page renders, so the badge number and
+  // the page's "Needs you" count read one selector and cannot disagree.
+  // Actively-running, idle, asleep, and suspended agents are ambient roster
+  // state, never a badge number.
+  const pendingSignals = (facts.pendingInteractions ?? []).map((interaction) => ({
+    agentName: interaction.agentName,
+    ...(interaction.pending.prompt === undefined ? {} : { prompt: interaction.pending.prompt }),
+  }));
+  for (const need of selectAgentsNeedingYou(facts.items ?? [], pendingSignals)) {
     items.push(
       domainAttention('agents', {
-        id: `agents:${interaction.agentName}:pending:${interaction.pending.request_id}`,
-        title: `${interaction.agentName} needs you`,
-        summary: interaction.pending.prompt ?? interaction.pending.kind,
-        href: `/agents/${encodeURIComponent(interaction.agentName)}`,
+        id: `agents:${need.name}:needs-you`,
+        title: `${need.name} ${agentNeedsYouReasonLabel(need.reason)}`,
+        summary: need.detail,
+        href: `/agents/${encodeURIComponent(need.name)}`,
       }),
     );
   }
-  const nowMs = facts.nowMs ?? Date.now();
-  for (const agent of facts.items ?? []) {
-    const item = attentionForAgent(agent, nowMs);
-    if (item !== null) items.push(item);
-  }
   return items;
-}
-
-function attentionForAgent(agent: AgentResponse, nowMs: number): AttentionItem | null {
-  const href = `/agents/${encodeURIComponent(agent.name)}`;
-  const state = agent.state.toLowerCase();
-  const idleAgeMs = elapsedSince(agent.session?.last_activity, nowMs);
-  if (agent.running && agent.session === undefined) {
-    return domainAttention('agents', {
-      id: `agents:${agent.name}:no-session`,
-      title: `${agent.name} has no live session`,
-      href,
-    });
-  }
-  if (isFailureState(state)) {
-    return domainAttention('agents', {
-      id: `agents:${agent.name}:failed`,
-      title: `${agent.name} ${agent.state}`,
-      href,
-    });
-  }
-  if (state === 'detached') {
-    return domainAttention('agents', {
-      id: `agents:${agent.name}:detached`,
-      title: `${agent.name} detached`,
-      href,
-    });
-  }
-  if (agent.suspended || state === 'asleep' || state === 'idle') {
-    if (idleAgeMs !== null && idleAgeMs < AGENT_IDLE_WATCH_MS) return null;
-    return domainWatch('agents', {
-      id: idleAgeMs === null ? `agents:${agent.name}:idle` : `agents:${agent.name}:stale-idle`,
-      title: `${agent.name} idle`,
-      ...(idleAgeMs === null ? {} : { summary: `last activity ${formatElapsed(idleAgeMs)} ago` }),
-      href,
-    });
-  }
-  if (!agent.available) {
-    return domainWatch('agents', {
-      id: `agents:${agent.name}:unavailable`,
-      title: `${agent.name} unavailable`,
-      href,
-      ...(agent.unavailable_reason === undefined ? {} : { summary: agent.unavailable_reason }),
-    });
-  }
-  if (agent.running && idleAgeMs !== null && idleAgeMs >= AGENT_IDLE_WATCH_MS) {
-    return domainWatch('agents', {
-      id: `agents:${agent.name}:stale-idle`,
-      title: `${agent.name} idle`,
-      summary: `last activity ${formatElapsed(idleAgeMs)} ago`,
-      href,
-    });
-  }
-  return null;
 }
 
 function deriveBeadsAttention(facts: BeadsAttentionFacts | undefined): readonly AttentionItem[] {
@@ -971,10 +929,6 @@ function formatBytes(bytes: number): string {
 function safeRatio(numerator: number, denominator: number): number | null {
   if (denominator <= 0) return null;
   return numerator / denominator;
-}
-
-function isFailureState(state: string): boolean {
-  return state === 'failed' || state === 'errored' || state === 'stuck' || state === 'crashed';
 }
 
 function addressMatches(raw: string, alias: string): boolean {

@@ -136,7 +136,6 @@ async function fetchAgentsAttention(cityName: string | null): Promise<AgentsAtte
     const list = await supervisorApi().listAgents(cityName);
     const facts: AgentsAttentionFacts = {
       items: list.items ?? [],
-      nowMs: Date.now(),
       partial: list.partial === true,
     };
     try {

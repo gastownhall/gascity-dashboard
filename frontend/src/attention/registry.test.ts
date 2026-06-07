@@ -15,6 +15,7 @@ import type {
   Message,
   TypedEventStreamEnvelope,
 } from 'gas-city-dashboard-shared/gc-supervisor';
+import { selectAgentsNeedingYou } from 'gas-city-dashboard-shared';
 import { ATTENTION_DOMAINS, composeAttention } from './compose';
 import {
   createAttentionContributors,
@@ -303,11 +304,11 @@ describe('createAttentionContributors', () => {
     expect(model.byDomain.runs.items[0]?.id).toBe('runs:unavailable');
   });
 
-  it('derives agent attention from pending supervisor interactions', () => {
+  it('counts an agent awaiting an input decision as needs-you', () => {
     const model = composeAttention(
       createAttentionContributors({
         agents: {
-          items: [],
+          items: [agent({ name: 'mayor', running: true, state: 'active' })],
           pendingInteractions: [
             {
               agentName: 'mayor',
@@ -326,8 +327,9 @@ describe('createAttentionContributors', () => {
 
     expect(model.byDomain.agents.attention).toBe(1);
     expect(model.byDomain.agents.items[0]).toMatchObject({
-      id: 'agents:mayor:pending:req-1',
-      title: 'mayor needs you',
+      id: 'agents:mayor:needs-you',
+      title: 'mayor awaiting input',
+      summary: 'Approve deployment?',
       href: '/agents/mayor',
     });
   });
@@ -371,24 +373,10 @@ describe('createAttentionContributors', () => {
     ]);
   });
 
-  it('derives stale-threshold attention from agent, bead, and mail timestamps', () => {
+  it('derives stale-threshold attention from bead and mail timestamps', () => {
     const nowMs = Date.parse('2026-06-01T12:00:00.000Z');
     const model = composeAttention(
       createAttentionContributors({
-        agents: {
-          nowMs,
-          items: [
-            agent({
-              name: 'idle-agent',
-              running: true,
-              session: {
-                attached: true,
-                last_activity: '2026-06-01T07:30:00.000Z',
-                name: 'idle-agent',
-              },
-            }),
-          ],
-        },
         beads: {
           nowMs,
           items: [
@@ -421,9 +409,6 @@ describe('createAttentionContributors', () => {
       }),
     );
 
-    expect(model.byDomain.agents.items.map((item) => item.id)).toContain(
-      'agents:idle-agent:stale-idle',
-    );
     // gascity-dashboard-2j8e.3: a long-stale ready-unclaimed open bead surfaces
     // (attention tier); an assigned in-progress bead is working-as-intended and
     // no longer counts (the stale-assigned emitter was removed with the badge
@@ -442,40 +427,93 @@ describe('createAttentionContributors', () => {
     );
   });
 
-  it('waits for the idle threshold before surfacing asleep agents', () => {
-    const nowMs = Date.parse('2026-06-01T12:00:00.000Z');
+  it('does not count actively-running, idle, asleep, or suspended agents', () => {
     const model = composeAttention(
       createAttentionContributors({
         agents: {
-          nowMs,
           items: [
-            agent({
-              name: 'recent-asleep',
-              running: true,
-              state: 'asleep',
-              session: {
-                attached: true,
-                last_activity: '2026-06-01T11:45:00.000Z',
-                name: 'recent-asleep',
-              },
-            }),
-            agent({
-              name: 'stale-asleep',
-              running: true,
-              state: 'asleep',
-              session: {
-                attached: true,
-                last_activity: '2026-06-01T07:30:00.000Z',
-                name: 'stale-asleep',
-              },
-            }),
+            agent({ name: 'running', running: true, state: 'active', session: liveSession }),
+            agent({ name: 'asleep', running: true, state: 'asleep', session: liveSession }),
+            agent({ name: 'idle', state: 'idle', session: liveSession }),
+            agent({ name: 'suspended', suspended: true, state: 'active', session: liveSession }),
           ],
         },
       }),
     );
 
+    expect(model.byDomain.agents.attention).toBe(0);
+    expect(model.byDomain.agents.watch).toBe(0);
+    expect(model.byDomain.agents.items).toEqual([]);
+  });
+
+  it('counts each needs-you reason and keeps the badge equal to selectAgentsNeedingYou', () => {
+    const items = [
+      agent({ name: 'mayor', running: true, state: 'active' }),
+      agent({ name: 'crashed', state: 'failed' }),
+      agent({ name: 'throttled', running: true, state: 'rate-limited' }),
+      agent({ name: 'ghost', running: true, state: 'active' }),
+      agent({ name: 'calm', running: true, state: 'active', session: liveSession }),
+    ];
+    const pendingInteractions = [
+      {
+        agentName: 'mayor',
+        sessionId: 'gc-1',
+        sessionName: 'mayor',
+        pending: { kind: 'tool_approval', prompt: 'Approve?', request_id: 'req-1' },
+      },
+    ];
+    const model = composeAttention(
+      createAttentionContributors({
+        agents: { items, pendingInteractions } as AgentsAttentionFacts,
+      }),
+    );
+
+    const needsYou = selectAgentsNeedingYou(
+      items,
+      pendingInteractions.map((p) => ({ agentName: p.agentName, prompt: p.pending.prompt })),
+    );
+    // The nav badge counts attention + watch; needs-you is the ONLY agent
+    // attention source and it never emits watch, so the badge equals the
+    // selector the /agents page renders (count parity).
+    expect(needsYou).toHaveLength(4);
+    expect(model.byDomain.agents.attention).toBe(needsYou.length);
+    expect(model.byDomain.agents.watch).toBe(0);
+    expect(model.byDomain.agents.items.map((item) => item.id).sort()).toEqual([
+      'agents:crashed:needs-you',
+      'agents:ghost:needs-you',
+      'agents:mayor:needs-you',
+      'agents:throttled:needs-you',
+    ]);
+  });
+
+  it('reports a roster read failure in the non-counting unavailable tier', () => {
+    const model = composeAttention(
+      createAttentionContributors({
+        agents: { error: 'agent list unavailable' },
+      }),
+    );
+
+    expect(model.byDomain.agents.attention).toBe(0);
+    expect(model.byDomain.agents.watch).toBe(0);
+    expect(model.byDomain.agents.unavailable).toBe(1);
+    expect(model.byDomain.agents.items[0]?.id).toBe('agents:unavailable');
+  });
+
+  it('reports a partial roster in the non-counting unavailable tier', () => {
+    const model = composeAttention(
+      createAttentionContributors({
+        agents: {
+          partial: true,
+          items: [agent({ name: 'crashed', state: 'failed' })],
+        },
+      }),
+    );
+
+    expect(model.byDomain.agents.attention).toBe(1);
+    expect(model.byDomain.agents.unavailable).toBe(1);
     expect(model.byDomain.agents.items.map((item) => item.id)).toEqual([
-      'agents:stale-asleep:stale-idle',
+      'agents:partial',
+      'agents:crashed:needs-you',
     ]);
   });
 
@@ -849,6 +887,8 @@ function healthUnavailableLane(id: string, title: string): RunLane {
     health: { status: 'unavailable', error: 'health probe failed' },
   } as RunLane;
 }
+
+const liveSession = { attached: true, last_activity: '2026-06-01T11:59:00.000Z', name: 'agent' };
 
 function agent(overrides: Partial<AgentResponse>): AgentResponse {
   return {

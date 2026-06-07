@@ -278,7 +278,11 @@ describe('useLiveAttentionContributors', () => {
       // logic is covered in registry.test.ts; here we assert the contributor is
       // wired to the summary loader (listBeads({ limit: 500 }) below).
       expect(model.byDomain.runs.attention).toBe(0);
-      expect(model.byDomain.agents.attention).toBe(2);
+      // gascity-dashboard-2j8e.4: the one agent ('reviewer') is both in a
+      // failure state AND awaiting an input decision; selectAgentsNeedingYou
+      // counts it once with its highest-priority reason (awaiting-input), so
+      // the badge is 1, not the old double-count of 2.
+      expect(model.byDomain.agents.attention).toBe(1);
       expect(model.byDomain.beads.attention).toBe(1);
       expect(model.byDomain.mail.attention).toBe(1);
       expect(model.byDomain.mail.watch).toBe(0);

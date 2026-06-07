@@ -11,6 +11,7 @@ export * from './strip-non-printable.js';
 export * from './session-id.js';
 export * from './work-in-flight.js';
 export type * from './viewing-as.js';
+export * from './agents/needsYou.js';
 export * from './runs/bead-fields.js';
 export * from './runs/blocked.js';
 export * from './runs/display-state.js';

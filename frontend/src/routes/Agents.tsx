@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { GC_EVENT_PREFIX, effectiveContextPct } from 'gas-city-dashboard-shared';
+import {
+  GC_EVENT_PREFIX,
+  effectiveContextPct,
+  selectAgentsNeedingYou,
+  type AgentNeedsYou,
+} from 'gas-city-dashboard-shared';
 import { Button } from '../components/Button';
 import { useAttentionModel } from '../attention/context';
+import {
+  agentNeedsYouActionLabel,
+  agentNeedsYouReasonLabel,
+  agentNeedsYouReasonTone,
+} from '../attention/agentNeedsYou';
 import { attentionDataProps, resourceAttentionSeverity } from '../attention/routeHighlight';
 import { ListSearchBar } from '../components/ListSearchBar';
 import { Modal } from '../components/Modal';
@@ -124,6 +134,24 @@ export function AgentsPage() {
     }
     return map;
   }, [pendingCache.data]);
+  // gascity-dashboard-2j8e.4: the same selectAgentsNeedingYou the nav badge
+  // counts, so the "Needs you" section header and the badge number are one
+  // number (count parity). The detail rows pair each agent with the cleaned
+  // 'rig · agent' label and a drilldown link (the path to address it).
+  const needsYouRows = useMemo(() => {
+    const pending = (pendingCache.data ?? []).map((p) => ({
+      agentName: p.agentName,
+      ...(p.pending.prompt === undefined ? {} : { prompt: p.pending.prompt }),
+    }));
+    const byName = new Map(rows.map((a) => [a.name, a]));
+    return selectAgentsNeedingYou(rows, pending).flatMap((need) => {
+      const agent = byName.get(need.name);
+      // need.name came from `rows`, so the lookup always resolves; flatMap with
+      // an empty fallback narrows the type without inventing a label.
+      if (agent === undefined) return [];
+      return [{ need, label: agentRowLabel(agent), slug: agentSlug(agent) }];
+    });
+  }, [rows, pendingCache.data]);
   const now = useNow();
 
   // Default to the actively-running view (restores the older simple view).
@@ -445,6 +473,8 @@ export function AgentsPage() {
         }
       />
 
+      <NeedsYouSection rows={needsYouRows} />
+
       <WorkInFlight
         beads={beadsCache.data?.items ?? []}
         sessions={sessionsCache.data?.items ?? []}
@@ -552,6 +582,49 @@ export function AgentsPage() {
           showCaption
         />
       </Modal>
+    </section>
+  );
+}
+
+interface NeedsYouRow {
+  need: AgentNeedsYou;
+  label: string;
+  slug: string;
+}
+
+// gascity-dashboard-2j8e.4: the agents that need the operator, each with the
+// reason (glyph + word) and the next step. Mirrors the Runs Blocked section:
+// hairline-divided rows, no card chrome, hidden entirely when nothing needs
+// you (the calm room does not announce the absence of trouble).
+function NeedsYouSection({ rows }: { rows: readonly NeedsYouRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <section aria-label="Agents needing you" className="mb-10">
+      <h2 className="text-label uppercase tracking-wider text-fg-faint tnum">
+        Needs you ({rows.length})
+      </h2>
+      <ol className="mt-3 divide-y divide-rule">
+        {rows.map(({ need, label, slug }) => (
+          <li key={need.name} className="py-3">
+            <div className="flex items-baseline justify-between gap-4">
+              <Link
+                to={`/agents/${encodeURIComponent(slug)}`}
+                className="focus-mark block min-w-0 truncate text-title text-fg hover:text-accent"
+              >
+                {label}
+              </Link>
+              <StatusBadge
+                tone={agentNeedsYouReasonTone(need.reason)}
+                label={agentNeedsYouReasonLabel(need.reason)}
+              />
+            </div>
+            <p className="mt-1 text-body text-fg leading-snug">{need.detail}</p>
+            <p className="mt-0.5 text-body text-fg-muted leading-snug">
+              {agentNeedsYouActionLabel(need.action)}
+            </p>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }

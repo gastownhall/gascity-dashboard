@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentsPage } from './Agents';
@@ -368,7 +368,8 @@ describe('AgentsPage (post-ay6 regressions)', () => {
     );
 
     expect(await screen.findByText('needs you')).toBeTruthy();
-    expect(screen.getByText('Approve deployment?')).toBeTruthy();
+    // The prompt shows in both the "Needs you" section and the roster row.
+    expect(within(screen.getByRole('table')).getByText('Approve deployment?')).toBeTruthy();
     expect(fetchUrls()).toContain('/gc-supervisor/v0/city/test-city/session/gc-2568/pending');
 
     fireEvent.click(screen.getByRole('button', { name: /copy attach/i }));
@@ -416,7 +417,8 @@ describe('AgentsPage (post-ay6 regressions)', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Approve deployment?')).toBeTruthy();
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('Approve deployment?')).toBeTruthy();
 
     const approve = screen.getByRole('button', { name: /approve/i }) as HTMLButtonElement;
     const deny = screen.getByRole('button', { name: /deny/i }) as HTMLButtonElement;
@@ -446,8 +448,11 @@ describe('AgentsPage (post-ay6 regressions)', () => {
     // Link, but the title must differ — session-bound agents promise a
     // real drilldown; orphan agents warn the detail page shows no session.
     await showAllAgents();
-    const mayorLink = await screen.findByRole('link', { name: /mayor/i });
-    const orphanLink = await screen.findByRole('link', { name: /control-dispatcher/i });
+    // mayor also appears in the "Needs you" section (it has a pending ask), so
+    // scope the roster-row tooltip assertions to the table.
+    const roster = within(await screen.findByRole('table'));
+    const mayorLink = await roster.findByRole('link', { name: /mayor/i });
+    const orphanLink = await roster.findByRole('link', { name: /control-dispatcher/i });
 
     const mayorTitle = mayorLink.getAttribute('title') ?? '';
     const orphanTitle = orphanLink.getAttribute('title') ?? '';
@@ -484,11 +489,35 @@ describe('AgentsPage (post-ay6 regressions)', () => {
 
     // Toggle off the default 'running' chip so the asleep orphan shows.
     await showAllAgents();
-    const orphanLink = await screen.findByRole('link', { name: /control-dispatcher/i });
-    const mayorLink = await screen.findByRole('link', { name: /mayor/i });
+    // mayor also appears in the "Needs you" section; the row-marking assertion
+    // is about the roster <tr>, so scope the lookup to the table.
+    const roster = within(await screen.findByRole('table'));
+    const orphanLink = await roster.findByRole('link', { name: /control-dispatcher/i });
+    const mayorLink = await roster.findByRole('link', { name: /mayor/i });
 
     expect(orphanLink.closest('tr')?.getAttribute('data-attention-severity')).toBe('watch');
     expect(mayorLink.closest('tr')?.getAttribute('data-attention-severity')).toBeNull();
+  });
+
+  it('lists agents needing the operator with reason and next step, excluding calm agents', async () => {
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <NowProvider intervalMs={1_000_000}>
+          <AgentsPage />
+        </NowProvider>
+      </MemoryRouter>,
+    );
+
+    const section = within(await screen.findByRole('region', { name: /agents needing you/i }));
+    // The header count is the same selectAgentsNeedingYou the nav badge counts;
+    // only mayor (a pending ask) needs the operator here.
+    expect(section.getByRole('heading', { name: /needs you \(1\)/i })).toBeTruthy();
+    // Reason word (survives the greyscale test), the prompt, and the next step.
+    expect(section.getByText('awaiting input')).toBeTruthy();
+    expect(section.getByText('Approve deployment?')).toBeTruthy();
+    expect(section.getByText('Respond to its prompt.')).toBeTruthy();
+    // The asleep orphan is calm; it must never appear in the needs-you list.
+    expect(section.queryByText(/control-dispatcher/i)).toBeNull();
   });
 });
 
