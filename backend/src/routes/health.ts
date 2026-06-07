@@ -9,7 +9,6 @@ import {
   type VersionProbe,
   type VersionProbeResult,
 } from './version-probe.js';
-import { RECOMMENDED_TOOL_FLOORS, recommendedToolVersion } from './recommended-versions.js';
 
 export interface HealthRouterOptions {
   doltProbe?: VersionProbe;
@@ -57,18 +56,9 @@ export function healthRouter(options: HealthRouterOptions = {}): Router {
   router.get('/local-tools', async (_req, res) => {
     const [dolt, beads, gc] = await Promise.all([doltProbe(), beadsProbe(), gcProbe()]);
     const payload: LocalToolVersions = {
-      dolt: recommendedToolVersion(
-        localToolVersion(dolt, 'local probe: dolt version'),
-        RECOMMENDED_TOOL_FLOORS.dolt,
-      ),
-      beads: recommendedToolVersion(
-        localToolVersion(beads, 'local probe: bd version'),
-        RECOMMENDED_TOOL_FLOORS.beads,
-      ),
-      gc: recommendedToolVersion(
-        localToolVersion(gc, 'local probe: gc version'),
-        RECOMMENDED_TOOL_FLOORS.gc,
-      ),
+      dolt: localToolVersion(dolt, 'local probe: dolt version'),
+      beads: localToolVersion(beads, 'local probe: bd version'),
+      gc: localToolVersion(gc, 'local probe: gc version'),
     };
     await recordAudit({
       type: 'dashboard.fetch',

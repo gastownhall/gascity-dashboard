@@ -61,33 +61,21 @@ describe('dashboard-local routes', () => {
       const res = await fetch(`${url}/api/system/local-tools`);
       assert.equal(res.status, 200);
       assert.deepEqual(await res.json(), {
-        // dolt 2.0.7 is below its 2.1.2 floor → drift; beads probe failed →
-        // unknown; gc is a `dev` build with no published floor → unknown.
+        // Passthrough of each installed version: dolt + gc probed OK, the beads
+        // probe failed and surfaces its reason. No floor or drift verdict.
         dolt: {
-          installed: {
-            status: 'available',
-            version: '2.0.7',
-            source: 'local probe: dolt version',
-          },
-          recommendedFloor: '2.1.2',
-          drift: 'below_floor',
+          status: 'available',
+          version: '2.0.7',
+          source: 'local probe: dolt version',
         },
         beads: {
-          installed: {
-            status: 'unavailable',
-            reason: 'bd missing',
-          },
-          recommendedFloor: '1.0.4',
-          drift: 'unknown',
+          status: 'unavailable',
+          reason: 'bd missing',
         },
         gc: {
-          installed: {
-            status: 'available',
-            version: 'dev',
-            source: 'local probe: gc version',
-          },
-          recommendedFloor: null,
-          drift: 'unknown',
+          status: 'available',
+          version: 'dev',
+          source: 'local probe: gc version',
         },
       });
     } finally {

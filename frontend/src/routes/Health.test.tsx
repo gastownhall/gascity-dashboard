@@ -346,71 +346,30 @@ describe('HealthPage', () => {
     expect(screen.getByText(/per-rig store health unavailable/i)).toBeTruthy();
   });
 
-  it('shows installed vs recommended tool versions and warns on drift below the floor', async () => {
+  it('shows installed tool versions as a plain passthrough', async () => {
     const { container } = renderPage();
 
     await screen.findByRole('heading', { name: /tool versions/i });
 
-    // dolt is below its floor: installed + recommended both visible, and a
-    // visible cell carries the warning tone. (The row wrapper is
-    // `display:contents`, which can't carry color — the cells do.)
+    // The panel reports each installed version with no floor, drift verdict, or
+    // warn tone — gc owns any version policy, the dashboard only surfaces it.
     const dolt = toolRow(container, 'dolt');
     expect(dolt?.textContent).toContain('2.0.7');
-    expect(dolt?.textContent).toContain('2.1.2');
-    expect(dolt?.textContent).toMatch(/below floor/i);
-    expect(dolt?.querySelector('.text-warn')).not.toBeNull();
+    expect(dolt?.textContent).not.toMatch(/below floor/i);
+    expect(dolt?.querySelector('.text-warn')).toBeNull();
 
-    // beads sits at its floor: no warning, and its cells read in neutral tone.
     const beads = toolRow(container, 'bd');
     expect(beads?.textContent).toContain('1.0.4');
-    expect(beads?.textContent).not.toMatch(/below floor/i);
-    expect(beads?.querySelector('.text-warn')).toBeNull();
-    expect(beads?.querySelector('.text-fg')).not.toBeNull();
 
-    // gc has no published floor: installed dev build, "not pinned" recommended.
     const gc = toolRow(container, 'gc');
     expect(gc?.textContent).toContain('dev');
-    expect(gc?.textContent).toContain('not pinned');
-    expect(gc?.textContent).not.toMatch(/below floor/i);
-  });
-
-  it('renders only the first below-floor tool in warn tone (One Mark Rule)', async () => {
-    // The bead's own example: bd and dolt both pinned below floor at once. Only
-    // the first drift may carry the maroon mark; every later drifted row keeps
-    // the "below floor" word but reads neutral, so the viewport holds one mark.
-    currentLocalTools = {
-      ...baseLocalTools(),
-      beads: {
-        installed: { status: 'available', version: '1.0.3', source: 'local probe: bd version' },
-        recommendedFloor: '1.0.4',
-        drift: 'below_floor',
-      },
-      // dolt stays below_floor from baseLocalTools().
-    };
-
-    const { container } = renderPage();
-
-    await screen.findByRole('heading', { name: /tool versions/i });
-
-    // bd is the first below-floor row (gc carries no floor): single warn mark.
-    const beads = toolRow(container, 'bd');
-    expect(beads?.textContent).toMatch(/below floor/i);
-    expect(beads?.querySelector('.text-warn')).not.toBeNull();
-
-    // dolt is below floor too but later — word kept, tone neutral, no 2nd mark.
-    const dolt = toolRow(container, 'dolt');
-    expect(dolt?.textContent).toMatch(/below floor/i);
-    expect(dolt?.querySelector('.text-warn')).toBeNull();
+    expect(gc?.textContent).not.toMatch(/recommended|not pinned|below floor/i);
   });
 
   it('surfaces a probe failure reason in the tool versions table', async () => {
     currentLocalTools = {
       ...baseLocalTools(),
-      gc: {
-        installed: { status: 'unavailable', reason: 'gc version probe failed: ENOENT' },
-        recommendedFloor: null,
-        drift: 'unknown',
-      },
+      gc: { status: 'unavailable', reason: 'gc version probe failed: ENOENT' },
     };
 
     const { container } = renderPage();
@@ -561,23 +520,10 @@ function baseHealth(): SystemHealth {
 
 function baseLocalTools(): LocalToolVersions {
   return {
-    // dolt below its floor (drift), beads at its floor (satisfied), gc a
-    // dev build with no published floor (unknown).
-    dolt: {
-      installed: { status: 'available', version: '2.0.7', source: 'local probe: dolt version' },
-      recommendedFloor: '2.1.2',
-      drift: 'below_floor',
-    },
-    beads: {
-      installed: { status: 'available', version: '1.0.4', source: 'local probe: bd version' },
-      recommendedFloor: '1.0.4',
-      drift: 'satisfied',
-    },
-    gc: {
-      installed: { status: 'available', version: 'dev', source: 'local probe: gc version' },
-      recommendedFloor: null,
-      drift: 'unknown',
-    },
+    // Plain installed-version passthrough — no floor or drift verdict.
+    dolt: { status: 'available', version: '2.0.7', source: 'local probe: dolt version' },
+    beads: { status: 'available', version: '1.0.4', source: 'local probe: bd version' },
+    gc: { status: 'available', version: 'dev', source: 'local probe: gc version' },
   };
 }
 

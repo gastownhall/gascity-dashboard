@@ -260,29 +260,26 @@ const decodeSystemHealth = objectDecoder<SystemHealth>('system health', (record,
   requireObjectField(record, url, 'system health', 'admin');
   requireObjectField(record, url, 'system health', 'host');
 });
-function requireRecommendedToolVersionField(
+function requireLocalToolVersionField(
   record: JsonRecord,
   url: string,
   label: string,
   field: string,
 ): void {
   requireObjectField(record, url, label, field);
-  // The Health renderer branches on `installed.status` and `drift`, so validate
-  // them here at the edge rather than letting a malformed wire value mis-render.
+  // The Health renderer branches on each tool's `status`, so validate it here at
+  // the edge rather than letting a malformed wire value mis-render.
   const tool = record[field] as JsonRecord;
   const toolLabel = `${label}.${field}`;
-  requireObjectField(tool, url, toolLabel, 'installed');
-  requireStringField(tool.installed as JsonRecord, url, `${toolLabel}.installed`, 'status');
-  requireNullableStringField(tool, url, toolLabel, 'recommendedFloor');
-  requireStringField(tool, url, toolLabel, 'drift');
+  requireStringField(tool, url, toolLabel, 'status');
 }
 
 const decodeLocalToolVersions = objectDecoder<LocalToolVersions>(
   'local tool versions',
   (record, url) => {
-    requireRecommendedToolVersionField(record, url, 'local tool versions', 'dolt');
-    requireRecommendedToolVersionField(record, url, 'local tool versions', 'beads');
-    requireRecommendedToolVersionField(record, url, 'local tool versions', 'gc');
+    requireLocalToolVersionField(record, url, 'local tool versions', 'dolt');
+    requireLocalToolVersionField(record, url, 'local tool versions', 'beads');
+    requireLocalToolVersionField(record, url, 'local tool versions', 'gc');
   },
 );
 const decodeDoltTrend = objectDecoder<DoltNomsTrend>('dolt trend', (record, url) => {

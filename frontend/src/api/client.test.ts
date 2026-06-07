@@ -118,14 +118,10 @@ describe('api client error handling', () => {
     await expect(api.config()).resolves.toMatchObject({ readOnly: true });
   });
 
-  it('rejects a local-tools body whose drift union is absent at the edge', async () => {
-    // The Health renderer branches on each tool's `drift`; a tool object that
+  it('rejects a local-tools body whose installed status is absent at the edge', async () => {
+    // The Health renderer branches on each tool's `status`; a tool object that
     // omits it would mis-render silently, so the decoder rejects it up front.
-    const tool = {
-      installed: { status: 'available' },
-      recommendedFloor: '2.1.2',
-      drift: 'below_floor',
-    };
+    const tool = { status: 'available', version: '2.1.2', source: 'local probe: dolt version' };
     vi.stubGlobal(
       'fetch',
       vi.fn(
@@ -134,7 +130,7 @@ describe('api client error handling', () => {
             JSON.stringify({
               gc: tool,
               beads: tool,
-              dolt: { installed: { status: 'available' }, recommendedFloor: '2.1.2' },
+              dolt: { version: '2.1.2' },
             }),
             { status: 200, headers: { 'content-type': 'application/json' } },
           ),
@@ -143,7 +139,7 @@ describe('api client error handling', () => {
 
     await expect(api.localToolVersions()).rejects.toMatchObject({
       name: 'ApiResponseDecodeError',
-      message: expect.stringContaining('dolt.drift must be a string'),
+      message: expect.stringContaining('dolt.status must be a string'),
     });
   });
 

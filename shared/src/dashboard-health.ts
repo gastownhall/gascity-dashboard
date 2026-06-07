@@ -26,27 +26,14 @@ export type LocalToolVersion =
   | { status: 'available'; version: string; source: string }
   | { status: 'unavailable'; reason: string };
 
-/** How an installed tool compares to its recommended floor:
- *  - `satisfied`   — installed is a comparable semver at or above the floor.
- *  - `below_floor` — installed is a comparable semver below the floor (drift).
- *  - `unknown`     — no floor is published, the probe failed, or the installed
- *                    version is not a comparable `X.Y.Z` (e.g. gc `dev` builds). */
-export type ToolVersionDrift = 'satisfied' | 'below_floor' | 'unknown';
-
-export interface RecommendedToolVersion {
-  /** Locally probed installed version. */
-  installed: LocalToolVersion;
-  /** Recommended minimum ("floor") version, or null when the tool has no
-   *  published pin (gc ships as `dev` builds, so it carries no numeric floor). */
-  recommendedFloor: string | null;
-  /** Drift of `installed` against `recommendedFloor`. */
-  drift: ToolVersionDrift;
-}
-
+/** Installed versions of the host tools the dashboard probes locally — the same
+ *  version data `gc doctor` surfaces, reported as a plain passthrough. The
+ *  dashboard does not maintain a recommended-version floor or compute drift
+ *  verdicts; gc owns that policy. */
 export interface LocalToolVersions {
-  dolt: RecommendedToolVersion;
-  beads: RecommendedToolVersion;
-  gc: RecommendedToolVersion;
+  dolt: LocalToolVersion;
+  beads: LocalToolVersion;
+  gc: LocalToolVersion;
 }
 
 export interface DoltNomsSample {

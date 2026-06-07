@@ -1,8 +1,8 @@
 import { useCallback, type ReactNode } from 'react';
 import type {
   DoltNomsTrend,
+  LocalToolVersion,
   LocalToolVersions,
-  RecommendedToolVersion,
   RigStoreHealth,
   RigStoreHealthReport,
   RigStoreHealthUnavailableReason,
@@ -346,74 +346,40 @@ function ToolVersionsTable({ state }: { state: LocalToolVersionsState | null }) 
       <p className="text-body text-fg-muted italic">Tool versions unavailable: {state.error}.</p>
     );
   }
-  // gc first (it carries no floor and frames the section), then the pinned
-  // tools the operator most often drifts on.
-  const rows: { label: string; tool: RecommendedToolVersion }[] = [
+  // gc first (it frames the section), then the tools the operator most often
+  // checks. A plain passthrough of each installed version — gc owns version-floor
+  // policy, so the panel reports what is installed without judging it.
+  const rows: { label: string; tool: LocalToolVersion }[] = [
     { label: 'gc', tool: state.data.gc },
     { label: 'bd', tool: state.data.beads },
     { label: 'dolt', tool: state.data.dolt },
   ];
-  // One Mark Rule (Workers-Active precedent): several tools can sit below floor
-  // at once (the bead's own example: bd + dolt both pinned), but the maroon warn
-  // tone renders only on the first drift. Every other below-floor row keeps the
-  // "· below floor" word in neutral tone so the signal survives without a second
-  // mark competing for the viewport's single accent.
-  const accentIndex = rows.findIndex((row) => row.tool.drift === 'below_floor');
   return (
-    <div className="grid grid-cols-[1fr_max-content_max-content] gap-x-8 gap-y-3 max-w-prose">
+    <div className="grid grid-cols-[1fr_max-content] gap-x-8 gap-y-3 max-w-prose">
       <div className="text-label uppercase tracking-wider text-fg-muted">Tool</div>
       <div className="text-label uppercase tracking-wider text-fg-muted text-right">Installed</div>
-      <div className="text-label uppercase tracking-wider text-fg-muted text-right">
-        Recommended
-      </div>
-      {rows.map((row, i) => (
-        <ToolVersionRow
-          key={row.label}
-          label={row.label}
-          tool={row.tool}
-          accent={i === accentIndex}
-        />
+      {rows.map((row) => (
+        <ToolVersionRow key={row.label} label={row.label} tool={row.tool} />
       ))}
     </div>
   );
 }
 
-function ToolVersionRow({
-  label,
-  tool,
-  accent,
-}: {
-  label: string;
-  tool: RecommendedToolVersion;
-  accent: boolean;
-}) {
-  const belowFloor = tool.drift === 'below_floor';
-  // Only the first below-floor tool (accent) carries the maroon warn tone; later
-  // drifted rows keep the word but read neutral, per the One Mark Rule.
-  const tone = accent ? 'text-warn' : 'text-fg';
-  const recommended = tool.recommendedFloor ?? 'not pinned';
+function ToolVersionRow({ label, tool }: { label: string; tool: LocalToolVersion }) {
   // `contents` makes the row's cells participate directly in the parent grid.
-  // Color can't inherit through a `display:contents` box, so each visible cell
-  // carries its own `tone` rather than relying on the wrapper.
   return (
     <div className="contents" data-tool-version-row={label}>
-      <div className={`text-body ${tone}`}>
-        {label}
-        {belowFloor && (
-          <span className={`text-label uppercase tracking-wider ${tone}`}> · below floor</span>
-        )}
-      </div>
+      <div className="text-body text-fg">{label}</div>
       <div className="text-right">
-        {tool.installed.status === 'available' ? (
-          <span className={`text-body tnum font-medium ${tone}`}>{tool.installed.version}</span>
+        {tool.status === 'available' ? (
+          <span className="text-body tnum font-medium text-fg">{tool.version}</span>
         ) : (
           <div className="space-y-1">
             <div className="text-body tnum font-medium text-warn">unavailable</div>
-            <div className="text-label text-fg-muted normal-case">{tool.installed.reason}</div>
+            <div className="text-label text-fg-muted normal-case">{tool.reason}</div>
           </div>
         )}
       </div>
-      <div className="text-body tnum text-fg-muted text-right">{recommended}</div>
     </div>
   );
 }
