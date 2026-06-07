@@ -67,12 +67,27 @@ function WorkerRow({
     <li className="px-2 py-2 -mx-2 rounded-sm transition-colors duration-150 ease-out-quart hover:bg-surface-tint/60">
       <div className="flex items-baseline justify-between gap-4">
         <div className="min-w-0 text-body text-fg">
-          <span className="font-medium">{rig}</span>
-          <span className="text-fg-faint" aria-hidden="true">
-            {' '}
-            ·{' '}
-          </span>
-          <span className="text-fg-muted">{worker.worker}</span>
+          {/* Consistency with the Available-agents roster (Agents.tsx), whose
+              row label is a clickable Link into the agent's detail: the worker
+              label opens this session's transcript in the same LiveSessionPeek
+              the Peek button uses, so the whole worker is one click from its
+              transcript. A button (not a Link) because the peek is a modal, not
+              a route. focus-mark + group-hover accent match the roster's
+              interactive affordance; the bold-rig / muted-worker hierarchy is
+              preserved at rest. */}
+          <button
+            type="button"
+            onClick={() => onPeek(session.id)}
+            className="group text-left cursor-pointer focus-mark"
+            title={`Peek ${rig} · ${worker.worker} transcript`}
+          >
+            <span className="font-medium group-hover:text-accent">{rig}</span>
+            <span className="text-fg-faint" aria-hidden="true">
+              {' '}
+              ·{' '}
+            </span>
+            <span className="text-fg-muted group-hover:text-accent">{worker.worker}</span>
+          </button>
           {bead && (
             <Link
               to={`/beads?bead=${encodeURIComponent(bead.id)}`}

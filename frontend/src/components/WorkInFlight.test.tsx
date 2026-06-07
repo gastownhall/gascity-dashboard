@@ -165,6 +165,25 @@ describe('WorkInFlight (Workers active)', () => {
     });
   });
 
+  it('opens the peek when the worker row label is clicked, for consistency with the Available-agents roster', async () => {
+    stubTranscriptFetch();
+    const sessions = [
+      session({ id: 'gc-335825', template: 'polecat', rig: 'gascity', state: 'active' }),
+    ];
+    renderSection([], sessions);
+
+    // The worker label is itself a button (mirroring the clickable agent-roster
+    // row label), distinct from the explicit Peek button — its accessible name
+    // is the worker identity, not "Peek". Clicking it opens the same transcript.
+    fireEvent.click(screen.getByRole('button', { name: /gascity.*polecat/i }));
+
+    await waitFor(() => {
+      expect(transcriptUrls).toContain(
+        '/gc-supervisor/v0/city/test-city/session/gc-335825/transcript?format=conversation',
+      );
+    });
+  });
+
   it('surfaces the captured bead as a link beside the peek transcript', async () => {
     stubTranscriptFetch();
     const sessions = [session({ id: 'gc-335825', template: 'polecat', rig: 'gascity' })];
