@@ -78,6 +78,14 @@ export function useCachedData<T>(
           // landed, latest-run-wins resumes and a stale slow fetch never
           // clobbers fresher data.
           setData((prev) => (prev === undefined ? fresh : prev));
+          // Mirror the data adoption for provenance. The rescue skips setCached
+          // (a superseded slow fetch must not become the authoritative cache
+          // value), so getCachedFetchedAt is undefined on a cold first paint —
+          // the exact SSE-storm case this rescue exists for. Stamp the rescued
+          // result as-of-now (same clock setCached uses) so fetchedAt never
+          // stays undefined while data is shown, while a kept prev or a real
+          // cache write keeps its own timestamp.
+          setFetchedAt((prev) => prev ?? getCachedFetchedAt(cacheKey) ?? new Date().toISOString());
         }
       } catch (err) {
         if (runIdRef.current === runId) {

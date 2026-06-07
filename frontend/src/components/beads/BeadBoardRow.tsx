@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { BeadNode } from '../../lib/beadGraph';
-import type { AttentionSeverity } from '../../attention/compose';
+import type { BadgeSeverity } from '../../attention/compose';
 import { attentionListItemProps } from '../../attention/routeHighlight';
 
 // One bead on the board, in the editorial register: a typeset row, no card,
@@ -13,7 +13,7 @@ import { attentionListItemProps } from '../../attention/routeHighlight';
 interface BeadBoardRowProps {
   node: BeadNode;
   selected: boolean;
-  attentionSeverity?: AttentionSeverity | null;
+  attentionSeverity?: BadgeSeverity | null;
   onSelect: (beadId: string) => void;
 }
 

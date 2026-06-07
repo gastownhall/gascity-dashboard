@@ -1,6 +1,6 @@
 import type { RunLane } from 'gas-city-dashboard-shared';
 import { Link } from 'react-router-dom';
-import type { AttentionSeverity } from '../../attention/compose';
+import type { BadgeSeverity } from '../../attention/compose';
 import { attentionListItemProps } from '../../attention/routeHighlight';
 import { formatRelative } from '../../hooks/time';
 import { StageLadder } from './StageLadder';
@@ -15,7 +15,7 @@ import { StageLadder } from './StageLadder';
 interface LaneCardProps {
   lane: RunLane;
   now: number;
-  attentionSeverity?: AttentionSeverity | null;
+  attentionSeverity?: BadgeSeverity | null;
 }
 
 /**

@@ -1156,7 +1156,10 @@ function domainWatch(
  */
 function domainUnavailable(
   domain: AttentionDomain,
-  item: Omit<AttentionItem, 'domain' | 'severity' | 'current' | 'actionable' | 'provenance' | 'fetchedAt'>,
+  item: Omit<
+    AttentionItem,
+    'domain' | 'severity' | 'current' | 'actionable' | 'provenance' | 'fetchedAt'
+  >,
   freshness?: ReadFreshness,
 ): AttentionItem {
   return {

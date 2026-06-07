@@ -1,6 +1,6 @@
 import { BOARD_COLUMNS, type BeadNode, type BoardColumnId } from '../../lib/beadGraph';
 import { BeadBoardRow } from './BeadBoardRow';
-import type { AttentionSeverity } from '../../attention/compose';
+import type { BadgeSeverity } from '../../attention/compose';
 
 // The Beads board: status columns (kanban) whose rows carry the dependency
 // graph (gascity-dashboard-6frc). Editorial register — columns are
@@ -17,7 +17,7 @@ import type { AttentionSeverity } from '../../attention/compose';
 interface BeadBoardProps {
   columns: Record<BoardColumnId, BeadNode[]>;
   selectedId: string | null;
-  attentionSeverity?: (beadId: string) => AttentionSeverity | null;
+  attentionSeverity?: (beadId: string) => BadgeSeverity | null;
   onSelect: (beadId: string) => void;
 }
 

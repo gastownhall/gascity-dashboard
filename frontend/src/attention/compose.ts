@@ -144,10 +144,7 @@ function emptyDomainSummaries(): Record<AttentionDomain, AttentionDomainSummary>
   return summaries;
 }
 
-function highestSeverity(
-  current: BadgeSeverity | null,
-  next: BadgeSeverity,
-): BadgeSeverity {
+function highestSeverity(current: BadgeSeverity | null, next: BadgeSeverity): BadgeSeverity {
   if (current === 'attention' || next === 'attention') return 'attention';
   return 'watch';
 }

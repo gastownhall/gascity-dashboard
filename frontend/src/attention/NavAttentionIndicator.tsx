@@ -1,4 +1,4 @@
-import type { AttentionDomainSummary, AttentionSeverity } from './compose';
+import type { AttentionDomainSummary, BadgeSeverity } from './compose';
 
 export function NavAttentionIndicator({
   label,
@@ -21,6 +21,6 @@ export function NavAttentionIndicator({
   );
 }
 
-function severityClass(severity: AttentionSeverity): string {
+function severityClass(severity: BadgeSeverity): string {
   return severity === 'attention' ? 'text-accent' : 'text-warn';
 }

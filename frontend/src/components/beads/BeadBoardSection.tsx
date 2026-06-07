@@ -1,7 +1,7 @@
 import type { BeadGraph } from '../../lib/beadGraph';
 import { selectColumns } from '../../lib/beadGraph';
 import { BeadBoard } from './BeadBoard';
-import type { AttentionSeverity } from '../../attention/compose';
+import type { BadgeSeverity } from '../../attention/compose';
 
 // One rig's slice of the board (gascity-dashboard-6frc). The board groups
 // by rig so a city with hundreds of beads stays parseable — each rig gets a
@@ -18,7 +18,7 @@ interface BeadBoardSectionProps {
   graph: BeadGraph;
   ids: ReadonlySet<string>;
   selectedId: string | null;
-  attentionSeverity?: (beadId: string) => AttentionSeverity | null;
+  attentionSeverity?: (beadId: string) => BadgeSeverity | null;
   onSelect: (beadId: string) => void;
 }
 

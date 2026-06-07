@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { RunLane, RunSummary, SourceState } from 'gas-city-dashboard-shared';
-import type { AttentionSeverity } from '../../attention/compose';
+import type { BadgeSeverity } from '../../attention/compose';
 import { LaneCard } from './LaneCard';
 
 // Run phase-lane map (gascity-dashboard-0t6). Renders the snapshot's
@@ -19,7 +19,7 @@ interface RunMapProps {
   source: SourceState<RunSummary>;
   now: number;
   showHistory: boolean;
-  attentionSeverity?: (lane: RunLane) => AttentionSeverity | null;
+  attentionSeverity?: (lane: RunLane) => BadgeSeverity | null;
 }
 
 const COUNT_LABELS: Array<[keyof RunSummary['runCounts'], string]> = [
@@ -81,7 +81,7 @@ function ActiveSection({
 }: {
   summary: RunSummary;
   now: number;
-  attentionSeverity?: (lane: RunLane) => AttentionSeverity | null;
+  attentionSeverity?: (lane: RunLane) => BadgeSeverity | null;
 }) {
   if (summary.lanes.length === 0) {
     // gascity-dashboard-4xcv: a partial fetch with zero lanes is "we could
@@ -137,7 +137,7 @@ function LaneList({
 }: {
   lanes: readonly RunLane[];
   now: number;
-  attentionSeverity?: (lane: RunLane) => AttentionSeverity | null;
+  attentionSeverity?: (lane: RunLane) => BadgeSeverity | null;
   listId?: string;
 }) {
   return (
@@ -197,7 +197,7 @@ function BlockedSection({
 }: {
   summary: RunSummary;
   now: number;
-  attentionSeverity?: (lane: RunLane) => AttentionSeverity | null;
+  attentionSeverity?: (lane: RunLane) => BadgeSeverity | null;
 }) {
   if (summary.blockedLanes.length === 0) return null;
   return (
@@ -219,7 +219,7 @@ function HistoricalSection({
 }: {
   summary: RunSummary;
   now: number;
-  attentionSeverity?: (lane: RunLane) => AttentionSeverity | null;
+  attentionSeverity?: (lane: RunLane) => BadgeSeverity | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const lanes = summary.historicalLanes;

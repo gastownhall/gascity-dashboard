@@ -106,6 +106,12 @@ describe('useCachedData', () => {
     });
     await waitFor(() => expect(result.current.data).toBe('first result'));
 
+    // The rescued first-paint result carries a provenance timestamp even
+    // though the rescue path never wrote the cache — without it, fetchedAt
+    // would stay undefined for the whole storm, defeating provenance exactly
+    // when the source is busiest.
+    expect(result.current.fetchedAt).toEqual(expect.any(String));
+
     // Once the latest run lands it wins, replacing the rescued value.
     await act(async () => {
       second.resolve('second result');
@@ -160,9 +166,7 @@ describe('useCachedData', () => {
 
     // A second mount on the warm cache seeds both data and timestamp
     // synchronously from cache; the never-settling refetch leaves them intact.
-    const second = renderHook(() =>
-      useCachedData(cacheKey, () => new Promise<string>(() => {})),
-    );
+    const second = renderHook(() => useCachedData(cacheKey, () => new Promise<string>(() => {})));
     expect(second.result.current.data).toBe('fresh');
     expect(second.result.current.fetchedAt).toBe(landedAt);
   });

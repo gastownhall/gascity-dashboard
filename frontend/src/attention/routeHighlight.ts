@@ -39,7 +39,7 @@ export function prefixedAttentionSeverity(
 }
 
 export function attentionRowProps(
-  severity: AttentionSeverity | null,
+  severity: BadgeSeverity | null,
 ): AttentionAttributes<HTMLTableRowElement> {
   if (severity === null) return {};
   return {
@@ -60,7 +60,7 @@ export function attentionDataProps(
 }
 
 export function attentionListItemProps(
-  severity: AttentionSeverity | null,
+  severity: BadgeSeverity | null,
 ): AttentionAttributes<HTMLLIElement> {
   if (severity === null) return {};
   return {
@@ -70,7 +70,7 @@ export function attentionListItemProps(
 }
 
 export function attentionBlockProps(
-  severity: AttentionSeverity | null,
+  severity: BadgeSeverity | null,
 ): AttentionAttributes<HTMLDivElement> {
   if (severity === null) return {};
   return {
@@ -80,7 +80,7 @@ export function attentionBlockProps(
 }
 
 export function attentionSectionProps(
-  severity: AttentionSeverity | null,
+  severity: BadgeSeverity | null,
 ): AttentionAttributes<HTMLElement> {
   if (severity === null) return {};
   const toneClass =
@@ -91,7 +91,7 @@ export function attentionSectionProps(
   };
 }
 
-function attentionHighlightClass(severity: AttentionSeverity): string {
+function attentionHighlightClass(severity: BadgeSeverity): string {
   return severity === 'attention'
     ? 'bg-accent/10 hover:bg-accent/15'
     : 'bg-warn/10 hover:bg-warn/15';
