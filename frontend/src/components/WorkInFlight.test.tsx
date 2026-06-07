@@ -174,8 +174,15 @@ describe('WorkInFlight (Workers active)', () => {
 
     // The worker label is itself a button (mirroring the clickable agent-roster
     // row label), distinct from the explicit Peek button — its accessible name
-    // is the worker identity, not "Peek". Clicking it opens the same transcript.
-    fireEvent.click(screen.getByRole('button', { name: /gascity.*polecat/i }));
+    // is the worker identity, not "Peek".
+    const labelButton = screen.getByRole('button', { name: /gascity.*polecat/i });
+    // The label is announced as the worker identity, NOT as another peek control:
+    // getByRole would throw on ambiguity if the label's name also matched /peek/i,
+    // so a unique resolution proves the two controls stay distinct.
+    expect(screen.getByRole('button', { name: /peek/i })).not.toBe(labelButton);
+
+    // Clicking the label opens the same transcript the Peek button does.
+    fireEvent.click(labelButton);
 
     await waitFor(() => {
       expect(transcriptUrls).toContain(

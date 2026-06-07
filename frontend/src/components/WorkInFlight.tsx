@@ -79,7 +79,7 @@ function WorkerRow({
             type="button"
             onClick={() => onPeek(session.id)}
             className="group text-left cursor-pointer focus-mark"
-            title={`Peek ${rig} · ${worker.worker} transcript`}
+            title={`Open ${rig} · ${worker.worker} transcript`}
           >
             <span className="font-medium group-hover:text-accent">{rig}</span>
             <span className="text-fg-faint" aria-hidden="true">
