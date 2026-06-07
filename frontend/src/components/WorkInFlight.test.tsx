@@ -165,30 +165,34 @@ describe('WorkInFlight (Workers active)', () => {
     });
   });
 
-  it('opens the peek when the worker row label is clicked, for consistency with the Available-agents roster', async () => {
+  it('opens the peek for the clicked worker (not just any worker), mirroring the Available-agents roster', async () => {
     stubTranscriptFetch();
+    // Two distinct workers so the test proves the clicked label maps to ITS OWN
+    // session — a single-worker render would still pass if the wiring opened the
+    // first/only session regardless of which label was clicked.
     const sessions = [
-      session({ id: 'gc-335825', template: 'polecat', rig: 'gascity', state: 'active' }),
+      session({ id: 'gc-100', template: 'polecat', rig: 'alpha', state: 'active' }),
+      session({ id: 'gc-200', template: 'polecat', rig: 'bravo', state: 'active' }),
     ];
     renderSection([], sessions);
 
     // The worker label is itself a button (mirroring the clickable agent-roster
-    // row label), distinct from the explicit Peek button — its accessible name
-    // is the worker identity, not "Peek".
-    const labelButton = screen.getByRole('button', { name: /gascity.*polecat/i });
-    // The label is announced as the worker identity, NOT as another peek control:
-    // getByRole would throw on ambiguity if the label's name also matched /peek/i,
-    // so a unique resolution proves the two controls stay distinct.
-    expect(screen.getByRole('button', { name: /peek/i })).not.toBe(labelButton);
+    // row label), distinct from that row's explicit Peek button — its accessible
+    // name is the worker identity ("bravo · polecat"), not "Peek".
+    const bravoLabel = screen.getByRole('button', { name: /bravo.*polecat/i });
+    expect(screen.getAllByRole('button', { name: /peek/i })).not.toContain(bravoLabel);
 
-    // Clicking the label opens the same transcript the Peek button does.
-    fireEvent.click(labelButton);
+    fireEvent.click(bravoLabel);
 
+    // Only the clicked worker's transcript is fetched — the other worker's is not.
     await waitFor(() => {
       expect(transcriptUrls).toContain(
-        '/gc-supervisor/v0/city/test-city/session/gc-335825/transcript?format=conversation',
+        '/gc-supervisor/v0/city/test-city/session/gc-200/transcript?format=conversation',
       );
     });
+    expect(transcriptUrls).not.toContain(
+      '/gc-supervisor/v0/city/test-city/session/gc-100/transcript?format=conversation',
+    );
   });
 
   it('surfaces the captured bead as a link beside the peek transcript', async () => {
