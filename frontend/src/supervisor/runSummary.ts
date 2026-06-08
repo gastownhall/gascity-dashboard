@@ -23,8 +23,8 @@ import {
   type LaneProgressMark,
 } from 'gas-city-dashboard-shared';
 import { activeCityOrThrow } from '../api/cityBase';
-import type { Bead, FormulaFeedBody } from 'gas-city-dashboard-shared/gc-supervisor';
-import { supervisorApiForRequestBudget } from './client';
+import type { Bead, FormulaFeedBody, ListBodyBead } from 'gas-city-dashboard-shared/gc-supervisor';
+import { SupervisorApiError, supervisorApiForRequestBudget } from './client';
 import { listIsIncomplete, listIsPartial } from './listPartial';
 import { normalizeSessions } from './sessionReads';
 
@@ -42,7 +42,22 @@ const RUNS_FETCH_LIMIT = 500;
 // real fix beyond raising the cap means cursor pagination.
 const RECENT_RUN_FETCH_LIMIT = 500;
 const RUNS_STALE_AFTER_MS = 60 * 1000;
-const REQUIRED_RUN_SUMMARY_TIMEOUT_MS = 5_000;
+// The CORE active-bead read is the one fetch whose failure blanks the whole runs
+// view (everything else degrades to `partial`). The proxy path is ~0.02s
+// normally, but the box runs at load avg ~30 under a slung-pipeline burst (the
+// supervisor reconciler alone hits ~274% CPU), and during a spike a single core
+// read occasionally crosses the old 5s budget → a first load with no last-good
+// snapshot blanks to "Run data unavailable". Raise this read's ceiling to absorb
+// a burst (the higher bound only costs time when actually slow), and retry once
+// on a transient timeout/5xx before giving up. A real outage still surfaces an
+// error after the retries are spent — the resilience only hides a brief spike,
+// never a sustained failure (upstream gascity-dashboard#88).
+const REQUIRED_RUN_SUMMARY_TIMEOUT_MS = 15_000;
+// One retry on a transient core-read failure, after a short fixed backoff. The
+// common (fast) path never reaches the retry, so first-paint stays prompt; the
+// retry only adds latency when a burst already made the first attempt fail.
+const CORE_FETCH_RETRIES = 1;
+const CORE_FETCH_RETRY_BACKOFF_MS = 250;
 // Optional run-summary enrichment (recent-bead / formula-feed / session reads)
 // is best-effort: a miss degrades the lanes to "partial" rather than failing the
 // load. The budget is split by call site (gascity-dashboard-4bol). The preview
@@ -181,8 +196,43 @@ export function resetSupervisorRunSummaryStateForTests(): void {
   progressStateByCity.clear();
 }
 
+// Exposed for tests: the raised core-read budget that absorbs a CPU-burst spike.
+export const CORE_RUN_SUMMARY_TIMEOUT_MS = REQUIRED_RUN_SUMMARY_TIMEOUT_MS;
+
 function requiredRunSummaryApi() {
   return supervisorApiForRequestBudget(REQUIRED_RUN_SUMMARY_TIMEOUT_MS);
+}
+
+// The core active-bead read, with a bounded retry on a transient failure. This
+// is the one read whose rejection blanks the whole runs view, so a brief CPU
+// burst that times out the first attempt should not lose the load; a sustained
+// failure still propagates after the retries are spent. Optional enrichment
+// reads keep their own degrade-to-partial handling and are NOT retried here.
+async function fetchCoreActiveBeads(cityName: string, limit: number): Promise<ListBodyBead> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= CORE_FETCH_RETRIES; attempt += 1) {
+    try {
+      return await requiredRunSummaryApi().listBeads(cityName, { limit });
+    } catch (err) {
+      lastError = err;
+      if (attempt === CORE_FETCH_RETRIES || !isTransientSupervisorError(err)) throw err;
+      await delay(CORE_FETCH_RETRY_BACKOFF_MS);
+    }
+  }
+  throw lastError;
+}
+
+// A timeout (status undefined, "timed out after Nms") or a 5xx is transient: the
+// supervisor is briefly overloaded, not reporting a stable failure. A 4xx is the
+// caller's fault and must not be retried.
+function isTransientSupervisorError(err: unknown): boolean {
+  if (!(err instanceof SupervisorApiError)) return false;
+  if (err.status === undefined) return /timed out after \d+ms/.test(err.message);
+  return err.status >= 500;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function optionalRunSummaryApi(budgetMs: number) {
@@ -207,7 +257,7 @@ async function loadRunBeads(
     Math.min(MOLECULE_HISTORY_TIMEOUT_MS, enrichmentBudgetMs),
   );
   const [activeList, feedDiscovery] = await Promise.all([
-    requiredRunSummaryApi().listBeads(cityName, { limit }),
+    fetchCoreActiveBeads(cityName, limit),
     discoverFromFeed(cityName, enrichmentBudgetMs),
   ]);
   const active = normalizeBeads(activeList.items ?? []);
