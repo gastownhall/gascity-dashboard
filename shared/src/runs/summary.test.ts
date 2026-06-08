@@ -1,7 +1,13 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildRunSummary, emptyRunSummary, runLane, MAX_HISTORICAL_LANES } from './summary.js';
+import {
+  buildRunSummary,
+  emptyRunSummary,
+  runLane,
+  MAX_HISTORICAL_LANES,
+  MAX_VISIBLE_ACTIVE_LANES,
+} from './summary.js';
 import type { RunFeedScope } from './summary.js';
 import type { RunIssue } from './phaseMapping.js';
 
@@ -301,6 +307,22 @@ describe('buildRunSummary — v1 / wisp runs surface as lanes (gascity-dashboard
     assert.deepEqual(summary.blockedLanes, []);
     assert.equal(summary.totalActive, 0);
     assert.equal(summary.totalHistorical, 0);
+  });
+});
+
+// gascity-dashboard: the builder carries the FULL active set on the wire — the
+// rendered 8-lane collapse is applied by the consumer (RunMap), mirroring the
+// historical section. The builder must NOT pre-cap `lanes`.
+describe('buildRunSummary — active lanes carry the full set (component-collapsed)', () => {
+  test('lanes carries every active run when there are more than MAX_VISIBLE_ACTIVE_LANES', () => {
+    const count = MAX_VISIBLE_ACTIVE_LANES + 3;
+    const issues = Array.from({ length: count }, (_, i) => activeRun(`run-${i}`)).flat();
+    const summary = buildRunSummary(issues);
+
+    assert.equal(summary.totalActive, count);
+    assert.equal(summary.lanes.length, count);
+    assert.equal(summary.runCounts.total, count);
+    assert.equal(summary.runCounts.visible, count);
   });
 });
 

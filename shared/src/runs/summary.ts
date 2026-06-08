@@ -15,6 +15,9 @@ import {
   type RunIssue,
 } from './phaseMapping.js';
 
+// Default collapsed active-lane count (component-controlled). The wire carries
+// the FULL active set in `lanes`; RunMap renders this many by default and offers
+// a "Show N more runs" expander (mirroring historicalLanes/MAX_HISTORICAL_LANES).
 export const MAX_VISIBLE_ACTIVE_LANES = 8;
 export const RECENT_CHANGES_CAP = 12;
 // gascity-dashboard-9w3k: once v1 history is surfaced the completed set can grow
@@ -79,19 +82,18 @@ export function buildRunSummary(
   const totalHistorical = completedLanes.length;
   const historicalLanes = completedLanes.slice(0, MAX_HISTORICAL_LANES);
   const blockedLanes = sortedLanes.filter((lane) => lane.phase === 'blocked');
-  const visibleActive = activeLanes.slice(0, MAX_VISIBLE_ACTIVE_LANES);
 
-  // gascity-dashboard-s4rp: `lanes` carries the FULL active set, not the capped
+  // gascity-dashboard-s4rp: `lanes` carries the FULL active set, not a capped
   // window. Session-less-latch demotion (enrichRunSummary) is session-aware and
   // can only run downstream of this builder, so it must see every active lane to
   // recompute totalActive exactly — capping here would hide phantoms beyond the
-  // 8th slot from demotion and leave them in the count. Both consumers
-  // (preview and enriched loaders) apply MAX_VISIBLE_ACTIVE_LANES to `lanes`
-  // before it reaches the DTO, so the rendered window stays capped.
+  // 8th slot from demotion and leave them in the count. RunMap owns the rendered
+  // collapse (default MAX_VISIBLE_ACTIVE_LANES) and its "Show N more" expander,
+  // mirroring the historical section — so the wire is never pre-capped.
   const summary: RunSummary = {
     totalActive: activeLanes.length,
     totalHistorical,
-    runCounts: runCounts(activeLanes, visibleActive.length, blockedLanes.length),
+    runCounts: runCounts(activeLanes, activeLanes.length, blockedLanes.length),
     lanes: activeLanes,
     historicalLanes,
     blockedLanes,

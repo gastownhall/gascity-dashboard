@@ -1,9 +1,15 @@
 import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { type RunSummary, type SourceState, type SourceStatus } from 'gas-city-dashboard-shared';
+import {
+  type RunLane,
+  type RunSummary,
+  type SourceState,
+  type SourceStatus,
+} from 'gas-city-dashboard-shared';
 import { invalidateKey } from '../api/cache';
 import { setActiveCity } from '../api/cityBase';
 import {
+  loadSupervisorRunSummaryActiveSource,
   loadSupervisorRunSummaryPreviewSource,
   loadSupervisorRunSummarySource,
 } from '../supervisor/runSummary';
@@ -19,6 +25,7 @@ import { RunSummaryProvider, useRunSummary } from './runSummarySubscription';
 vi.mock('../supervisor/runSummary', () => ({
   loadSupervisorRunSummaryPreviewSource: vi.fn(),
   loadSupervisorRunSummarySource: vi.fn(),
+  loadSupervisorRunSummaryActiveSource: vi.fn(),
 }));
 
 const lastHookCall: { prefixes: ReadonlyArray<string> | null; onMatch: (() => void) | null } = {
@@ -35,6 +42,9 @@ vi.mock('../hooks/useGcEvents', () => ({
 
 const mockPreview = loadSupervisorRunSummaryPreviewSource as Mock;
 const mockFull = loadSupervisorRunSummarySource as Mock;
+// gascity-dashboard: SSE-driven refreshes route through the CHEAP active source,
+// not the wide one — only the manual button + one-time first upgrade are wide.
+const mockActive = loadSupervisorRunSummaryActiveSource as Mock;
 
 function buildRunSource(
   status: Exclude<SourceStatus, 'error'>,
@@ -67,6 +77,54 @@ function buildRunSource(
   };
 }
 
+function lane(id: string): RunLane {
+  return {
+    id,
+    title: `Run ${id}`,
+    formula: { status: 'known', name: 'mol-focus-review' },
+    scope: {
+      status: 'available',
+      kind: 'city',
+      ref: 'racoon-city',
+      rootStoreRef: 'city:racoon-city',
+    },
+    external: { status: 'unavailable', error: 'external unavailable in test' },
+    phase: 'implementation',
+    phaseLabel: 'implementation',
+    statusCounts: { in_progress: 1 },
+    activeAssignees: [],
+    updatedAt: { status: 'available', at: '2026-06-01T00:00:00.000Z' },
+    stages: [],
+    progress: { status: 'unavailable', error: 'run progress unavailable in test' },
+    formulaStageResolved: false,
+    health: { status: 'unavailable', error: 'run health has not been derived' },
+  };
+}
+
+// Build a source carrying explicit active / blocked / historical lane sets, so a
+// test can assert WHICH run ids land in WHICH section after a cheap merge.
+function buildLaneSource(opts: {
+  status?: Exclude<SourceStatus, 'error'>;
+  active?: string[];
+  blocked?: string[];
+  historical?: string[];
+  totalHistorical?: number;
+}): SourceState<RunSummary> {
+  const base = buildRunSource(opts.status ?? 'fresh');
+  if (base.status === 'error') throw new Error('unreachable');
+  const historical = (opts.historical ?? []).map(lane);
+  return {
+    ...base,
+    data: {
+      ...base.data,
+      lanes: (opts.active ?? []).map(lane),
+      blockedLanes: (opts.blocked ?? []).map(lane),
+      historicalLanes: historical,
+      totalHistorical: opts.totalHistorical ?? historical.length,
+    },
+  };
+}
+
 // A stand-in for the two real consumers — the nav badge and the /runs page —
 // rendering the status + blocked count of the source it reads.
 function Consumer({ label }: { label: string }) {
@@ -75,15 +133,31 @@ function Consumer({ label }: { label: string }) {
   return <div data-testid={label}>{`${source?.status ?? 'pending'}:${blocked}`}</div>;
 }
 
+// A consumer that renders the active+blocked lane ids, the historical lane ids,
+// and totalHistorical — for asserting cheap-refresh history reconciliation.
+function LaneConsumer({ label }: { label: string }) {
+  const { source } = useRunSummary();
+  if (!source || source.status === 'error') return <div data-testid={label}>none</div>;
+  const live = [...source.data.lanes, ...source.data.blockedLanes].map((l) => l.id).join(',');
+  const hist = source.data.historicalLanes.map((l) => l.id).join(',');
+  return (
+    <div
+      data-testid={label}
+    >{`live=[${live}] hist=[${hist}] totalHist=${source.data.totalHistorical}`}</div>
+  );
+}
+
 beforeEach(() => {
   setActiveCity('racoon-city');
   mockPreview.mockReset();
   mockFull.mockReset();
+  mockActive.mockReset();
   lastHookCall.prefixes = null;
   lastHookCall.onMatch = null;
   invalidateKey('runs:summary:racoon-city');
   mockPreview.mockResolvedValue(buildRunSource('fresh'));
   mockFull.mockResolvedValue(buildRunSource('fresh'));
+  mockActive.mockResolvedValue(buildRunSource('fresh'));
 });
 
 afterEach(() => {
@@ -131,8 +205,8 @@ describe('useRunSummarySubscription / RunSummaryProvider (gascity-dashboard-2j8e
     await waitFor(() => expect(mockFull).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('badge').textContent).toBe('fresh:0');
 
-    // A bead event lands and the next load carries a newly-blocked run.
-    mockFull.mockResolvedValue(buildRunSource('fresh', 1));
+    // A bead event lands and the next CHEAP load carries a newly-blocked run.
+    mockActive.mockResolvedValue(buildRunSource('fresh', 1));
     await act(async () => {
       lastHookCall.onMatch?.();
     });
@@ -166,9 +240,9 @@ describe('useRunSummarySubscription / RunSummaryProvider (gascity-dashboard-2j8e
     // The full upgrade has been kicked off and is parked, mid-flight.
     await waitFor(() => expect(mockFull).toHaveBeenCalledTimes(1));
 
-    // A bead event lands while the load is in flight; the next load must carry
-    // the newly-blocked run.
-    mockFull.mockResolvedValue(buildRunSource('fresh', 1));
+    // A bead event lands while the load is in flight; the queued trailing CHEAP
+    // refresh must carry the newly-blocked run.
+    mockActive.mockResolvedValue(buildRunSource('fresh', 1));
     await act(async () => {
       lastHookCall.onMatch?.();
     });
@@ -202,10 +276,10 @@ describe('useRunSummarySubscription / RunSummaryProvider (gascity-dashboard-2j8e
     // First good load lands.
     await waitFor(() => expect(screen.getByTestId('badge').textContent).toBe('fresh:2'));
 
-    // A bead event triggers a refresh that resolves to an error source (the
-    // supervisor list timed out). Prior good data exists, so the published
+    // A bead event triggers a CHEAP refresh that resolves to an error source
+    // (the supervisor list timed out). Prior good data exists, so the published
     // state must keep that data as 'stale', not flip to 'error'.
-    mockFull.mockResolvedValue({
+    mockActive.mockResolvedValue({
       source: 'runs',
       status: 'error',
       error: 'gc supervisor request timed out after 5000ms',
@@ -228,9 +302,9 @@ describe('useRunSummarySubscription / RunSummaryProvider (gascity-dashboard-2j8e
     );
     await waitFor(() => expect(screen.getByTestId('page').textContent).toBe('fresh:3'));
 
-    // A refresh that rejects (rather than resolving to an error source) must
-    // also retain the last-good snapshot rather than latching the view dead.
-    mockFull.mockRejectedValue(new Error('gc supervisor request timed out after 5000ms'));
+    // A CHEAP refresh that rejects (rather than resolving to an error source)
+    // must also retain the last-good snapshot rather than latching the view dead.
+    mockActive.mockRejectedValue(new Error('gc supervisor request timed out after 5000ms'));
     await act(async () => {
       lastHookCall.onMatch?.();
     });
@@ -326,6 +400,79 @@ describe('useRunSummarySubscription / RunSummaryProvider (gascity-dashboard-2j8e
     );
 
     await waitFor(() => expect(screen.getByTestId('page').textContent).toBe('error:-1'));
+  });
+
+  it('reconciles merged history against the fresh active set on a cheap refresh (no double-display)', async () => {
+    // MAJOR 1: the cheap refresh borrows historicalLanes from the last wide
+    // snapshot. If a run that WAS historical is now active/blocked again, it must
+    // appear ONLY in the live set, not in both. The wide upgrade seeds history
+    // with gc-1 (historical); the cheap refresh then reports gc-1 as active again.
+    mockFull.mockResolvedValue(buildLaneSource({ active: [], historical: ['gc-1', 'gc-2'] }));
+
+    render(
+      <RunSummaryProvider>
+        <LaneConsumer label="page" />
+      </RunSummaryProvider>,
+    );
+
+    // Wide upgrade landed: gc-1 + gc-2 are historical, nothing live.
+    await waitFor(() =>
+      expect(screen.getByTestId('page').textContent).toBe('live=[] hist=[gc-1,gc-2] totalHist=2'),
+    );
+
+    // A bead event lands and the cheap active read now reports gc-1 active again.
+    mockActive.mockResolvedValue(buildLaneSource({ active: ['gc-1'], historical: [] }));
+    await act(async () => {
+      lastHookCall.onMatch?.();
+    });
+
+    // gc-1 appears ONLY in the live set; the borrowed history drops it and the
+    // count is recomputed. gc-2 (still only historical) stays in history.
+    await waitFor(() =>
+      expect(screen.getByTestId('page').textContent).toBe('live=[gc-1] hist=[gc-2] totalHist=1'),
+    );
+  });
+
+  it('does not let a cheap SSE success cancel the bounded wide-failure retry', async () => {
+    // MAJOR 2: a failed WIDE upgrade arms the bounded wide retry (off
+    // staleDueToFailureRef). A cheap SSE success must NOT clear that flag, so the
+    // wide retry still fires; only a successful WIDE refresh marks recovery.
+    vi.useFakeTimers();
+    mockPreview.mockResolvedValue(buildRunSource('fresh', 4));
+    // The one-time wide upgrade fails the first time, arming the retry...
+    mockFull.mockRejectedValueOnce(new Error('gc supervisor request timed out after 5000ms'));
+    // ...and the retried wide refresh succeeds.
+    mockFull.mockResolvedValue(buildRunSource('fresh', 7));
+    // A cheap SSE refresh in between succeeds — it must not be treated as recovery.
+    mockActive.mockResolvedValue(buildRunSource('fresh', 4));
+
+    render(
+      <RunSummaryProvider>
+        <Consumer label="page" />
+      </RunSummaryProvider>,
+    );
+
+    // Preview lands, wide upgrade fails and is retained as stale.
+    await vi.waitFor(() => expect(screen.getByTestId('page').textContent).toBe('stale:4'));
+    const wideCallsAfterFirstFail = mockFull.mock.calls.length;
+
+    // A cheap SSE refresh succeeds before the wide retry timer fires.
+    await act(async () => {
+      lastHookCall.onMatch?.();
+    });
+    // The cheap success did NOT add a wide call and (critically) did not cancel
+    // the armed wide retry — the published view is still stale-due-to-failure.
+    expect(mockFull.mock.calls.length).toBe(wideCallsAfterFirstFail);
+
+    // Advance through the backoff budget: the WIDE retry must still fire (the
+    // cheap success did not cancel it) and recover the view to the full snapshot.
+    // The intervening cheap-success render re-arms the retry timer at the next
+    // backoff slot, so drain the whole budget rather than just the first delay.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(mockFull.mock.calls.length).toBeGreaterThan(wideCallsAfterFirstFail);
+    await vi.waitFor(() => expect(screen.getByTestId('page').textContent).toBe('fresh:7'));
   });
 
   it('throws when used outside a RunSummaryProvider', () => {

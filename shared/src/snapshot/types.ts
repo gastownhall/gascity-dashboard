@@ -316,7 +316,10 @@ export interface RunSummary {
    *  so the operator sees the real number behind the recency window. */
   totalHistorical: number;
   runCounts: RunCounts;
-  /** Active lanes, sorted by compareLanes, capped at MAX_VISIBLE_ACTIVE_LANES. */
+  /** Active lanes, sorted by compareLanes (newest-first). The FULL active set —
+   *  `totalActive === lanes.length`. The rendered collapsed window
+   *  (MAX_VISIBLE_ACTIVE_LANES) and its "Show N more runs" expander are applied
+   *  by the consumer (RunMap), mirroring historicalLanes/MAX_HISTORICAL_LANES. */
   lanes: RunLane[];
   /** Historical (phase === 'complete') lanes, sorted by compareLanes, capped at
    *  MAX_HISTORICAL_LANES (most-recent-first). Frontend renders these only when
@@ -449,6 +452,11 @@ export type RunLaneHealthState = Avail<{
 
 export interface RunCounts {
   total: number;
+  /** @deprecated use total — RunMap owns the rendered collapse; always equals total.
+   *
+   *  Count of active lanes carried on the wire. Now equal to `total` (the full
+   *  active set), since RunMap owns the rendered collapse rather than the wire
+   *  pre-capping at MAX_VISIBLE_ACTIVE_LANES. */
   visible: number;
   prReview: number;
   designReview: number;

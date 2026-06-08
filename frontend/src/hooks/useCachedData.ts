@@ -8,6 +8,12 @@ interface UseCachedDataResult<T> {
   /** ISO timestamp of the cache read backing `data`, or undefined before any lands. */
   fetchedAt: string | undefined;
   refresh: () => Promise<void>;
+  /**
+   * Routes through `sseRefreshFetcher` when configured, else falls back to the
+   * primary refresh. A second, cheaper refresh path for high-frequency triggers
+   * (e.g. SSE bursts) that should not pay the full refresh cost.
+   */
+  cheapRefresh: () => Promise<void>;
 }
 
 export interface UseCachedDataOptions<T> {
@@ -19,6 +25,14 @@ export interface UseCachedDataOptions<T> {
    * the GET as `fetcher` and the POST as `refreshFetcher`.
    */
   refreshFetcher?: () => Promise<T>;
+  /**
+   * When provided, `cheapRefresh()` routes through this fetcher instead of the
+   * primary refresh path. Use for a cheaper variant of the same source that
+   * high-frequency triggers (SSE bursts) prefer, while the manual/explicit
+   * refresh stays on `refreshFetcher`. Falls back to `refreshFetcher` (or the
+   * primary `fetcher`) when undefined, so existing callers are unaffected.
+   */
+  sseRefreshFetcher?: () => Promise<T>;
   onError?: (error: unknown) => void;
 }
 
@@ -42,6 +56,8 @@ export function useCachedData<T>(
   fetcherRef.current = fetcher;
   const refreshFetcherRef = useRef(options?.refreshFetcher);
   refreshFetcherRef.current = options?.refreshFetcher;
+  const sseRefreshFetcherRef = useRef(options?.sseRefreshFetcher);
+  sseRefreshFetcherRef.current = options?.sseRefreshFetcher;
   const onErrorRef = useRef(options?.onError);
   onErrorRef.current = options?.onError;
   const currentKeyRef = useRef(key);
@@ -105,6 +121,13 @@ export function useCachedData<T>(
     () => runFetcher(refreshFetcherRef.current ?? fetcherRef.current),
     [runFetcher],
   );
+  // Cheap refresh prefers the SSE fetcher, then the primary refresh fetcher,
+  // then the cheap primary fetcher — so it is always a no-config superset.
+  const cheapRefresh = useCallback(
+    () =>
+      runFetcher(sseRefreshFetcherRef.current ?? refreshFetcherRef.current ?? fetcherRef.current),
+    [runFetcher],
+  );
 
   useEffect(() => {
     const cached = getCached<T>(key);
@@ -117,5 +140,5 @@ export function useCachedData<T>(
     };
   }, [key, runFetcher]);
 
-  return { data, loading, error, fetchedAt, refresh };
+  return { data, loading, error, fetchedAt, refresh, cheapRefresh };
 }

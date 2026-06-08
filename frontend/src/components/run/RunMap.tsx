@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  MAX_VISIBLE_ACTIVE_LANES,
   selectBlockedRuns,
   type RunLane,
   type RunSummary,
@@ -36,6 +37,7 @@ const COUNT_LABELS: Array<[keyof RunSummary['runCounts'], string]> = [
 
 const HISTORICAL_SECTION_ID = 'runs-historical-section';
 const HISTORICAL_LIST_ID = 'runs-historical-list';
+const ACTIVE_LIST_ID = 'runs-active-list';
 // How many completed runs show before the operator opts into the rest.
 // The wire carries up to MAX_HISTORICAL_LANES most-recent historical lanes
 // (gascity-dashboard-l9q9, recency-bounded in gascity-dashboard-9w3k); this
@@ -89,6 +91,13 @@ function ActiveSection({
   now: number;
   attentionSeverity?: (lane: RunLane) => BadgeSeverity | null;
 }) {
+  // gascity-dashboard: `lanes` now carries the FULL active set; the collapsed
+  // window (MAX_VISIBLE_ACTIVE_LANES) and its "Show N more runs" expander live
+  // here, mirroring HistoricalSection. Collapsed by default keeps the calm
+  // density; expansion is opt-in. The hook precedes the empty-state early
+  // returns so hook order stays stable across renders.
+  const [expanded, setExpanded] = useState(false);
+
   if (summary.lanes.length === 0) {
     // gascity-dashboard-4xcv: a partial fetch with zero lanes is "we could
     // not see the runs", not "there are no runs". Never present a degraded
@@ -106,28 +115,39 @@ function ActiveSection({
       <p className="mt-8 text-body text-fg-muted italic">{`No active formula runs.${trailer}`}</p>
     );
   }
+  const shown = expanded ? summary.lanes : summary.lanes.slice(0, MAX_VISIBLE_ACTIVE_LANES);
   // gascity-dashboard-7hek: organize active lanes by rig (the run-root store).
   // A flat list of same-named molecule runs is indistinguishable; grouping
   // under the rig — a section head, no card, per the Flat Page Rule — gives
   // the operator the store context they navigate by. Within a group, lanes
   // keep their pre-sorted (recency/priority) order.
-  const groups = groupLanesByRig(summary.lanes);
+  const groups = groupLanesByRig(shown);
   return (
     <>
-      {groups.map(({ rig, lanes }) => (
-        <div key={rig} className="mt-6">
-          <h3 className="text-label uppercase tracking-wider text-fg-faint">{rigLabel(rig)}</h3>
-          <LaneList
-            lanes={lanes}
-            now={now}
-            {...(attentionSeverity === undefined ? {} : { attentionSeverity })}
-          />
-        </div>
-      ))}
-      {summary.totalActive > summary.lanes.length && (
-        <p className="mt-3 text-label uppercase tracking-wider text-fg-faint tnum">
-          {summary.totalActive - summary.lanes.length} more not shown
-        </p>
+      <div id={ACTIVE_LIST_ID}>
+        {groups.map(({ rig, lanes }) => (
+          <div key={rig} className="mt-6">
+            <h3 className="text-label uppercase tracking-wider text-fg-faint">{rigLabel(rig)}</h3>
+            <LaneList
+              lanes={lanes}
+              now={now}
+              {...(attentionSeverity === undefined ? {} : { attentionSeverity })}
+            />
+          </div>
+        ))}
+      </div>
+      {summary.lanes.length > MAX_VISIBLE_ACTIVE_LANES && (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          aria-controls={ACTIVE_LIST_ID}
+          className="mt-3 text-label uppercase tracking-wider text-fg-faint tnum hover:text-fg focus-mark"
+        >
+          {expanded
+            ? 'Show fewer'
+            : `Show ${summary.lanes.length - MAX_VISIBLE_ACTIVE_LANES} more runs`}
+        </button>
       )}
     </>
   );

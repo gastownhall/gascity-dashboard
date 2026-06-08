@@ -10,6 +10,7 @@ import { getActiveCity } from '../api/cityBase';
 import { useCachedData } from '../hooks/useCachedData';
 import { useGcEventRefresh, type GcEventConnState } from '../hooks/useGcEvents';
 import {
+  loadSupervisorRunSummaryActiveSource,
   loadSupervisorRunSummaryPreviewSource,
   loadSupervisorRunSummarySource,
 } from '../supervisor/runSummary';
@@ -27,12 +28,15 @@ import {
 // both. The page reads it through useRunSummary(); the badge reads its `source`
 // through the attention layer (liveContributors `runsFactsFromSource`).
 //
-// The fetch contract is unchanged from the page's prior implementation: the
-// cheap preview (2.5s budget) paints first, a one-time full refresh (30s,
-// session-enriched) upgrades the snapshot to the page-complete one, a bounded
-// backoff recovers a degraded first load, and SSE-driven refetches are gated by
-// an in-component debounce floor on top of useGcEventRefresh's own coalescing
-// (architect H1/H2 upstream-load protection during slung-pipeline bursts).
+// The fetch contract: the cheap preview (2.5s budget) paints first, a one-time
+// full refresh (30s, session-enriched, WIDE) upgrades the snapshot to the
+// page-complete one and populates the historical lanes, a bounded backoff
+// recovers a degraded first load (WIDE), and SSE-driven refetches take the CHEAP
+// active-only path (skips the molecule(all=true) + city feed + per-rig reads,
+// merging historical lanes from the last wide snapshot) gated by an in-component
+// debounce floor on top of useGcEventRefresh's own coalescing (architect H1/H2
+// upstream-load protection during slung-pipeline bursts). The manual Refresh
+// button still triggers a WIDE scan on demand.
 
 const REFRESH_DEBOUNCE_MS = 10_000;
 // gascity-dashboard-4xcv: bounded retry backoff for a degraded first load (error
@@ -94,10 +98,63 @@ export function useRunSummarySubscription(): RunSummarySubscription {
     return { ...lastGood, status: 'stale' };
   }, []);
 
-  const { data, loading, error, refresh } = useCachedData(
+  // gascity-dashboard: the CHEAP SSE-burst refresh. loadSupervisorRunSummaryActiveSource
+  // skips the molecule(all=true) + city feed + per-rig task reads, so a routine
+  // bead burst no longer saturates the browser connection pool and queues the
+  // run-detail's fast workflowRun read behind it. The active/blocked set is fully
+  // correct (scope/health/counts/census); only HISTORICAL lanes come from the
+  // recent reads, so we merge those back from the last wide snapshot to keep the
+  // History section populated. Failure handling mirrors the wide wrapper.
+  const refreshActiveWithMerge = useCallback(async (): Promise<SourceState<RunSummary>> => {
+    const result = await loadSupervisorRunSummaryActiveSource().catch(
+      (err): SourceState<RunSummary> => ({
+        source: 'runs',
+        status: 'error',
+        error: err instanceof Error ? err.message : 'formula runs unavailable',
+      }),
+    );
+    if (result.status !== 'error') {
+      // A cheap (active-only) success does NOT prove the WIDE failure recovered:
+      // the wide retry loop must keep driving off staleDueToFailureRef until a
+      // wide refresh actually lands (refreshWithLastGoodRetention clears it). So
+      // we deliberately do NOT clear the flag here.
+      const lastGood = lastGoodRef.current;
+      const borrowedHistorical = lastGood?.data.historicalLanes ?? [];
+      // Reconcile the borrowed history against the CURRENT active/blocked set: a
+      // run that was historical in last-good but is active or blocked again in
+      // this fresh snapshot would otherwise appear in BOTH sets (double-display).
+      // Drop any historical lane whose run is now live; recompute the count to
+      // match. (A run that completes between wide refreshes still lags into
+      // History on the next wide scan — accepted; this only kills the overlap.)
+      const liveIds = new Set<string>([
+        ...result.data.lanes.map((lane) => lane.id),
+        ...result.data.blockedLanes.map((lane) => lane.id),
+      ]);
+      const historicalLanes = borrowedHistorical.filter((lane) => !liveIds.has(lane.id));
+      const dropped = borrowedHistorical.length - historicalLanes.length;
+      const totalHistorical = Math.max(0, (lastGood?.data.totalHistorical ?? 0) - dropped);
+      return {
+        ...result,
+        data: {
+          ...result.data,
+          historicalLanes,
+          totalHistorical,
+        },
+      };
+    }
+    const lastGood = lastGoodRef.current;
+    if (lastGood === null) return result;
+    staleDueToFailureRef.current = true;
+    return { ...lastGood, status: 'stale' };
+  }, []);
+
+  const { data, loading, error, refresh, cheapRefresh } = useCachedData(
     `runs:summary:${cityName ?? 'no-city'}`,
     loadSupervisorRunSummaryPreviewSource,
-    { refreshFetcher: refreshWithLastGoodRetention },
+    {
+      refreshFetcher: refreshWithLastGoodRetention,
+      sseRefreshFetcher: refreshActiveWithMerge,
+    },
   );
   // Capture the latest available snapshot so the next failed refresh can fall
   // back to it. A re-published 'stale' snapshot stays good data, so it keeps
@@ -176,12 +233,15 @@ export function useRunSummarySubscription(): RunSummarySubscription {
       trailingTimerRef.current = null;
     }
     lastRefreshAtRef.current = Date.now();
-    void refresh().catch(() => {
+    // SSE-driven bursts take the CHEAP path (active-only + merged history); the
+    // wide scan is reserved for the manual Refresh button and the one-time
+    // first-upgrade.
+    void cheapRefresh().catch(() => {
       // Reset on error so the next event retries instead of being silently
       // dropped for the rest of the debounce window.
       lastRefreshAtRef.current = 0;
     });
-  }, [refresh]);
+  }, [cheapRefresh]);
 
   const onSseMatch = useCallback(() => {
     // Skip when fixtures are serving (supervisor down) — every forced refresh

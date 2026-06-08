@@ -17,7 +17,6 @@ import {
   fromRootMetadataScope,
   fromStoreRef,
   isStaleSessionlessLatch,
-  MAX_VISIBLE_ACTIVE_LANES,
   runBeadFilter,
   runCounts,
   SCOPE_REF_RE,
@@ -160,6 +159,66 @@ async function loadRunSummarySource(enrichmentBudgetMs: number): Promise<SourceS
   }
 }
 
+// gascity-dashboard: the CHEAP SSE-refresh source. The wide source's loadRunBeads
+// fires the two expensive HISTORICAL/discovery reads (molecule(all=true) ~6.8s,
+// city formulaFeed ~10s) plus per-rig task reads on every SSE burst, saturating
+// the browser ~6-conn/host cap so the run-detail's fast workflowRun read queues
+// behind them. The active/blocked set and its scope/health/counts/census do NOT
+// need those reads: runScope takes the bead's own gc.root_store_ref/gc.scope_ref
+// metadata first (feedScopes is only a fallback), and runRigNames derives the
+// active rig set from that same per-bead metadata. So this fetches only the core
+// active read + sessions, skipping molecule + city feed + per-rig task reads.
+// historicalLanes/totalHistorical come back empty here; the subscription merges
+// them from the last wide snapshot so History is never blanked.
+export async function loadSupervisorRunSummaryActiveSource(): Promise<SourceState<RunSummary>> {
+  const cityName = activeCityOrThrow('load supervisor run summary active');
+  const fetchedAt = new Date().toISOString();
+  try {
+    const [loaded, sessions] = await Promise.all([
+      loadActiveRunBeads(cityName, RUNS_FETCH_LIMIT),
+      loadRunSessions(cityName, PREVIEW_ENRICHMENT_TIMEOUT_MS),
+    ]);
+    const summary = buildRunSummary(
+      loaded.beads.filter(runBeadFilter).map(fromDashboardBead),
+      loaded.feedScopes,
+      loaded.partial,
+    );
+    const source: SourceAvailableState<RunSummary> = {
+      source: 'runs',
+      status: 'fresh',
+      fetchedAt,
+      staleAt: new Date(Date.parse(fetchedAt) + RUNS_STALE_AFTER_MS).toISOString(),
+      error: { kind: 'none' },
+      data: summary,
+    };
+    return {
+      ...source,
+      data: enrichRunSummary(cityName, source, sessions),
+    };
+  } catch (err) {
+    return {
+      source: 'runs',
+      status: 'error',
+      error: errorMessage(err, 'formula runs unavailable'),
+    };
+  }
+}
+
+// Core active read only — no molecule history scan, no city formula feed, no
+// per-rig task reads. Truncation still reads as partial lanes. feedScopes is
+// empty: a run root whose OWN bead carries no scope metadata falls back to
+// 'unavailable' scope until the next wide refresh repairs it (minority path —
+// runScope prefers per-bead metadata).
+async function loadActiveRunBeads(cityName: string, limit: number): Promise<LoadedRunBeads> {
+  const activeList = await fetchCoreActiveBeads(cityName, limit);
+  const active = normalizeBeads(activeList.items ?? []);
+  return {
+    beads: active,
+    feedScopes: new Map(),
+    partial: listIsIncomplete(activeList, active.length),
+  };
+}
+
 export async function loadSupervisorRunSummaryPreviewSource(): Promise<SourceState<RunSummary>> {
   const cityName = activeCityOrThrow('load supervisor run summary preview');
   const fetchedAt = new Date().toISOString();
@@ -176,9 +235,9 @@ export async function loadSupervisorRunSummaryPreviewSource(): Promise<SourceSta
       fetchedAt,
       staleAt: new Date(Date.parse(fetchedAt) + RUNS_STALE_AFTER_MS).toISOString(),
       error: { kind: 'none' },
-      // First paint has no sessions yet, so no latch demotion — just apply the
-      // visible cap that buildRunSummary now defers to its consumers (s4rp).
-      data: { ...summary, lanes: summary.lanes.slice(0, MAX_VISIBLE_ACTIVE_LANES) },
+      // First paint has no sessions yet, so no latch demotion. `lanes` carries
+      // the full active set; RunMap applies the collapsed window.
+      data: summary,
     };
   } catch (err) {
     return {
@@ -405,15 +464,17 @@ function enrichRunSummary(
   const liveActive = activeEnriched.filter(
     (lane) => !isStaleSessionlessLatch(lane, generationMs, sessionsAvailable),
   );
-  const visibleActive = liveActive.slice(0, MAX_VISIBLE_ACTIVE_LANES);
   const census = buildCensus([...liveActive, ...blockedLanes]);
 
+  // gascity-dashboard: `lanes` carries the FULL active set; RunMap owns the
+  // collapsed window (MAX_VISIBLE_ACTIVE_LANES) and its "Show N more runs"
+  // expander, mirroring the historical section.
   return {
     ...source.data,
     totalActive: liveActive.length,
-    lanes: visibleActive,
+    lanes: liveActive,
     blockedLanes,
-    runCounts: runCounts(liveActive, visibleActive.length, blockedLanes.length),
+    runCounts: runCounts(liveActive, liveActive.length, blockedLanes.length),
     census: { status: 'available', data: census },
   };
 }

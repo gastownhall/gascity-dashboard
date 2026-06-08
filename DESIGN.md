@@ -103,6 +103,13 @@ The calm "what is working right now" section at the top of the Agents view.
 - **One mark.** An active worker is the normal, calm case, so worker state reads neutral. At most one accent (maroon) badge per viewport: only the first stuck/failed worker, an actual anomaly, renders its state in tone.
 - **Empty state.** "No workers active right now." Calm, not an alert.
 
+### Expand-in-place lists (Runs view)
+
+Both the Active and Historical sections of the Runs view collapse to a small default and offer a quiet "Show N more" control.
+
+- **Same register as the Historical toggle.** The Active section gains a quiet expand-in-place control identical to the Historical "Show N more" toggle: faint tracked-uppercase text, no filled button, expands in place. Collapsed default stays MAX_VISIBLE_ACTIVE_LANES (8); no new color, no filled button, One Mark Rule unaffected.
+- **Wire carries the full set.** The collapse is a render concern: the full active set crosses the wire (`RunSummary.lanes`), and the component owns the window — mirroring `historicalLanes`/`MAX_HISTORICAL_LANES`.
+
 ## 6. Do's and Don'ts
 
 ### Do:

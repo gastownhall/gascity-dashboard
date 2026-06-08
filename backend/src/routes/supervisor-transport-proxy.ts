@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 
 import { HTTP_STATUS } from '../lib/http-status.js';
+import { createTtlSingleFlightCache, type CachedResponse } from '../lib/ttl-single-flight-cache.js';
 import { LOG_COMPONENT, errorMessage, logWarn } from '../logging.js';
 import { isAllowedReadPath } from './supervisor-read-allowlist.js';
 
@@ -36,9 +37,118 @@ const READONLY_STRIPPED_REQUEST_HEADERS = new Set([
   'content-type',
 ]);
 
+// gascity-dashboard: short-TTL + single-flight cache for the two expensive
+// city-wide GET reads (the always-mounted run-summary subscription re-fires both
+// on every SSE bead-event burst). The molecule(all=true) history scan (~7s,
+// 340k-row) and the city formula feed (~10s) are city-wide, carry no
+// auth-varying headers, and are pure GETs — safe to coalesce + briefly cache so
+// the browser connection pool stays free for the run-detail's fast workflowRun
+// read. NOTHING scoped/per-rig/per-run/mutating is cached: the active-bead list
+// (no all=true), per-rig task reads (type=task&rig=...), and any query carrying
+// an extra param (rig/status/label/assignee/cursor/...) all fail the EXACT
+// param-set match below and go straight upstream.
+const CACHEABLE_CITY_WIDE_READS: readonly RegExp[] = [
+  /^\/v0\/city\/[^/]+\/formulas\/feed$/,
+  /^\/v0\/city\/[^/]+\/beads$/,
+];
+
+// The exact param sets the run-summary subscription sends for the two cacheable
+// reads (frontend/src/supervisor/runSummary.ts + discoverFromFeed). The match is
+// EXACT: any param outside the expected set (a scoped/per-rig/filtered read)
+// disqualifies the request, so a broader query can never be served a cached
+// city-wide body.
+const MOLECULE_HISTORY_FETCH_LIMIT = '500';
+const MOLECULE_HISTORY_PARAMS: ReadonlyArray<readonly [string, string]> = [
+  ['type', 'molecule'],
+  ['all', 'true'],
+  ['limit', MOLECULE_HISTORY_FETCH_LIMIT],
+];
+
+function paramsMatchExactly(
+  q: URLSearchParams,
+  expected: ReadonlyArray<readonly [string, string]>,
+): boolean {
+  if ([...q.keys()].length !== expected.length) return false;
+  return expected.every(([key, value]) => q.get(key) === value);
+}
+
+// 3s: single-flight collapses the SIMULTANEOUS duplicate reads within one SSE
+// burst; the short ready-window absorbs the closely-spaced re-fires that arrive
+// just after the first ~7-10s scan resolves. Kept well under the SPA's own
+// enrichment budgets (MOLECULE_HISTORY_TIMEOUT_MS=3s,
+// REQUIRED_RUN_SUMMARY_TIMEOUT_MS=15s) and far below the 60s status sampler, so
+// the historical-root discovery never visibly trails the live SSE-driven active
+// view (which is not cached). Do not exceed 5s.
+const CITY_WIDE_READ_TTL_MS = 3_000;
+
+export function cacheableCityWideRead(target: URL): boolean {
+  if (!CACHEABLE_CITY_WIDE_READS.some((p) => p.test(target.pathname))) return false;
+  const q = target.searchParams;
+  if (target.pathname.endsWith('/formulas/feed')) {
+    // The city feed sends EXACTLY scope_kind=city + scope_ref=<city>. scope_ref
+    // is the (dynamic) city name, so only its presence + the fixed scope_kind
+    // are matched; any extra param disqualifies the read.
+    return [...q.keys()].length === 2 && q.get('scope_kind') === 'city' && q.has('scope_ref');
+  }
+  // beads: ONLY the wide molecule history scan with its exact param set — a read
+  // carrying any extra param (rig/status/label/assignee/cursor) is a different,
+  // narrower query and must go straight upstream, never served a city-wide body.
+  return paramsMatchExactly(q, MOLECULE_HISTORY_PARAMS);
+}
+
+// searchParams.toString() PRESERVES insertion order (it does not sort), so two
+// requests with the same params in a different order would key differently. In
+// practice that never happens: each cacheable read is built from a fixed object
+// literal (runSummary.ts), so its param order is stable — a hypothetical reorder
+// is only a cache miss (a redundant upstream read), never a correctness or
+// security issue, because cacheableCityWideRead already pins the exact param set
+// and a different scope_ref / type / all value is a distinct key.
+function cacheKey(target: URL): string {
+  return `${target.pathname}?${target.searchParams.toString()}`;
+}
+
+// A non-2xx upstream must surface to the caller but NOT be pinned in the cache.
+// The cache loader throws this so getOrFetch deletes the inflight entry; the
+// proxy catch re-materializes the response from it.
+class UpstreamNon2xx extends Error {
+  constructor(private readonly cached: CachedResponse) {
+    super(`upstream responded ${cached.status}`);
+    this.name = 'UpstreamNon2xx';
+  }
+  toCached(): CachedResponse {
+    return this.cached;
+  }
+}
+
+// Headers that must never be captured into a CACHED response: a cached body is
+// replayed to every coalesced + every within-TTL caller, so a per-response
+// set-cookie from upstream would be broadcast to callers it was never issued
+// for. The cacheable reads are city-wide, auth-invariant GETs that should carry
+// no set-cookie at all — strip it defensively so a stray one can't be replayed.
+const STRIPPED_CACHED_RESPONSE_HEADERS = new Set([...HOP_BY_HOP_HEADERS, 'set-cookie']);
+
+function headerPairs(upstream: Response): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
+  upstream.headers.forEach((value, name) => {
+    if (!STRIPPED_CACHED_RESPONSE_HEADERS.has(name.toLowerCase())) {
+      pairs.push([name, value]);
+    }
+  });
+  return pairs;
+}
+
+function writeCachedResponse(cached: CachedResponse, res: ExpressResponse): void {
+  res.status(cached.status);
+  for (const [name, value] of cached.headers) {
+    res.setHeader(name, value);
+  }
+  res.end(cached.body);
+}
+
 export function supervisorTransportProxy(supervisorBaseUrl: string, readOnly = false): Router {
   const router = Router();
   const baseUrl = new URL(supervisorBaseUrl);
+  const cityWideReadCache = createTtlSingleFlightCache({ ttlMs: CITY_WIDE_READ_TTL_MS });
 
   router.use(async (req, res) => {
     if (readOnly && req.method !== 'GET' && req.method !== 'HEAD') {
@@ -64,9 +174,33 @@ export function supervisorTransportProxy(supervisorBaseUrl: string, readOnly = f
     }
 
     try {
+      if (req.method === 'GET' && cacheableCityWideRead(target)) {
+        const cached = await cityWideReadCache.getOrFetch(cacheKey(target), async () => {
+          const upstream = await fetch(target, requestInit(req, readOnly));
+          const body = Buffer.from(await upstream.arrayBuffer());
+          const response: CachedResponse = {
+            status: upstream.status,
+            headers: headerPairs(upstream),
+            body,
+          };
+          if (upstream.status < 200 || upstream.status >= 300) {
+            // Surface non-2xx to the caller but don't pin it: throw so the
+            // single-flight cache drops the entry, then re-materialize below.
+            throw new UpstreamNon2xx(response);
+          }
+          return response;
+        });
+        writeCachedResponse(cached, res);
+        return;
+      }
+
       const upstream = await fetch(target, requestInit(req, readOnly));
       await writeUpstreamResponse(upstream, res);
     } catch (err) {
+      if (err instanceof UpstreamNon2xx) {
+        writeCachedResponse(err.toCached(), res);
+        return;
+      }
       logWarn(LOG_COMPONENT.admin, `gc supervisor transport proxy failed: ${errorMessage(err)}`);
       if (!res.headersSent) {
         res.status(HTTP_STATUS.badGateway).json({

@@ -16,6 +16,7 @@ import { RunSummaryProvider } from '../runs/runSummarySubscription';
 import { MemoryRouter } from 'react-router-dom';
 import { NowProvider } from '../contexts/NowContext';
 import {
+  loadSupervisorRunSummaryActiveSource,
   loadSupervisorRunSummaryPreviewSource,
   loadSupervisorRunSummarySource,
 } from '../supervisor/runSummary';
@@ -40,6 +41,7 @@ import {
 vi.mock('../supervisor/runSummary', () => ({
   loadSupervisorRunSummaryPreviewSource: vi.fn(),
   loadSupervisorRunSummarySource: vi.fn(),
+  loadSupervisorRunSummaryActiveSource: vi.fn(),
 }));
 
 // Capture the prefixes + onMatch passed to useGcEventRefresh so each
@@ -60,6 +62,9 @@ vi.mock('../hooks/useGcEvents', () => ({
 
 const mockLoadRunSummaryPreview = loadSupervisorRunSummaryPreviewSource as Mock;
 const mockLoadRunSummary = loadSupervisorRunSummarySource as Mock;
+// gascity-dashboard: SSE-driven refreshes route through the CHEAP active source;
+// only the manual Refresh button + one-time first upgrade use the wide source.
+const mockLoadRunSummaryActive = loadSupervisorRunSummaryActiveSource as Mock;
 
 function buildRunSource(
   runsStatus: Exclude<SourceStatus, 'error'> = 'fresh',
@@ -178,11 +183,13 @@ beforeEach(() => {
   setActiveCity('racoon-city');
   mockLoadRunSummaryPreview.mockReset();
   mockLoadRunSummary.mockReset();
+  mockLoadRunSummaryActive.mockReset();
   lastHookCall.prefixes = null;
   lastHookCall.onMatch = null;
   invalidateKey('runs:summary:racoon-city');
   mockLoadRunSummaryPreview.mockResolvedValue(buildRunSource('fresh'));
   mockLoadRunSummary.mockResolvedValue(buildRunSource('fresh'));
+  mockLoadRunSummaryActive.mockResolvedValue(buildRunSource('fresh'));
 });
 
 afterEach(() => {
@@ -486,13 +493,14 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mount();
     await waitForMount();
-    mockLoadRunSummary.mockClear();
+    mockLoadRunSummaryActive.mockClear();
 
     // Simulate a busy slung pipeline: 5 onMatch calls within 1s. The
     // 10s in-component debounce floor must collapse this to a single
-    // upstream POST. (useGcEventRefresh's own 2.5s coalesce sits in
-    // front of onMatch in production; this test exercises ONLY the
-    // Runs-side debounce we added per architect H2.)
+    // upstream read. SSE bursts take the CHEAP active source.
+    // (useGcEventRefresh's own 2.5s coalesce sits in front of onMatch in
+    // production; this test exercises ONLY the Runs-side debounce per
+    // architect H2.)
     await act(async () => {
       for (let i = 0; i < 5; i++) {
         lastHookCall.onMatch?.();
@@ -504,7 +512,7 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     // `toBe(1)` rather than `toBeLessThanOrEqual(1)` so a regression
     // that suppresses the leading edge entirely (count would be 0) is
     // caught loudly.
-    expect(mockLoadRunSummary.mock.calls.length).toBe(1);
+    expect(mockLoadRunSummaryActive.mock.calls.length).toBe(1);
   });
 
   it('fires a second run-summary refresh once the debounce window elapses', async () => {
@@ -518,25 +526,25 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mount();
     await waitForMount();
-    mockLoadRunSummary.mockClear();
+    mockLoadRunSummaryActive.mockClear();
 
-    // Leading edge: one event, one POST.
+    // Leading edge: one event, one CHEAP read.
     await act(async () => {
       lastHookCall.onMatch?.();
     });
-    expect(mockLoadRunSummary.mock.calls.length).toBe(1);
+    expect(mockLoadRunSummaryActive.mock.calls.length).toBe(1);
 
     // Advance past the 10s debounce floor (REFRESH_DEBOUNCE_MS = 10_000
-    // in Runs.tsx; +100ms cushion so we're unambiguously past it).
+    // in the subscription; +100ms cushion so we're unambiguously past it).
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_100);
     });
 
-    // Second event after the window must fire a second POST.
+    // Second event after the window must fire a second CHEAP read.
     await act(async () => {
       lastHookCall.onMatch?.();
     });
-    expect(mockLoadRunSummary.mock.calls.length).toBe(2);
+    expect(mockLoadRunSummaryActive.mock.calls.length).toBe(2);
   });
 
   it('SSE callback no-ops when runs source status is not fresh', async () => {
@@ -548,12 +556,15 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     mount();
     await waitForMount();
     mockLoadRunSummary.mockClear();
+    mockLoadRunSummaryActive.mockClear();
 
     await act(async () => {
       lastHookCall.onMatch?.();
     });
 
+    // Fixture status short-circuits before any refresh — neither path fires.
     expect(mockLoadRunSummary).not.toHaveBeenCalled();
+    expect(mockLoadRunSummaryActive).not.toHaveBeenCalled();
   });
 });
 
@@ -764,19 +775,20 @@ describe('RunsPage — degraded first load recovery (gascity-dashboard-4xcv)', (
   it('SSE callback refreshes when the runs source is in error state', async () => {
     // The old guard skipped every non-fresh status, so an error first
     // load latched the page dead until a manual refresh. A bead event is
-    // exactly the cue to try live data again.
+    // exactly the cue to try live data again — via the CHEAP active source.
     mockLoadRunSummaryPreview.mockResolvedValue(errorSource);
     mockLoadRunSummary.mockResolvedValue(errorSource);
+    mockLoadRunSummaryActive.mockResolvedValue(errorSource);
 
     mount();
     await waitForMount();
-    mockLoadRunSummary.mockClear();
+    mockLoadRunSummaryActive.mockClear();
 
     await act(async () => {
       lastHookCall.onMatch?.();
     });
 
-    expect(mockLoadRunSummary).toHaveBeenCalledTimes(1);
+    expect(mockLoadRunSummaryActive).toHaveBeenCalledTimes(1);
   });
 });
 

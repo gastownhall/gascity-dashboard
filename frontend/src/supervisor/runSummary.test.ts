@@ -11,6 +11,7 @@ import { resetSupervisorApiForTests, setSupervisorApiForTests, type SupervisorAp
 import { SupervisorApiError } from './errors';
 import {
   CORE_RUN_SUMMARY_TIMEOUT_MS,
+  loadSupervisorRunSummaryActiveSource,
   loadSupervisorRunSummaryMountSource,
   loadSupervisorRunSummaryPreviewSource,
   loadSupervisorRunSummarySource,
@@ -488,10 +489,14 @@ describe('loadSupervisorRunSummarySource', () => {
     expect(source.status).toBe('fresh');
     if (source.status === 'error') throw new Error(source.error);
     expect(source.data.totalActive).toBe(9);
-    expect(source.data.lanes).toHaveLength(8); // visible window still capped
+    // gascity-dashboard: `lanes` carries the FULL active set now — the rendered
+    // 8-lane collapse is applied by RunMap, not the wire.
+    expect(source.data.lanes).toHaveLength(9);
     expect(source.data.lanes.map((lane) => lane.id)).not.toContain('gc-1920');
+    // The phantom (the 10th, session-less latch) is demoted; all 9 live runs survive.
+    expect(source.data.lanes.map((lane) => lane.id)).toEqual(liveRuns.map((_, i) => `live-${i}`));
     expect(source.data.runCounts.total).toBe(9);
-    expect(source.data.runCounts.visible).toBe(8);
+    expect(source.data.runCounts.visible).toBe(9);
   });
 
   it('keeps available lanes while marking the summary partial when a recent rig read fails', async () => {
@@ -820,6 +825,66 @@ describe('loadSupervisorRunSummarySource', () => {
     // spike; it must stay well above the old 5s budget to absorb a burst.
     expect(CORE_RUN_SUMMARY_TIMEOUT_MS).toBe(15_000);
     expect(CORE_RUN_SUMMARY_TIMEOUT_MS).toBeGreaterThan(5_000);
+  });
+});
+
+describe('loadSupervisorRunSummaryActiveSource — cheap SSE-burst path', () => {
+  beforeEach(() => {
+    setActiveCity('test-city');
+    resetSupervisorRunSummaryStateForTests();
+  });
+  afterEach(() => {
+    resetSupervisorApiForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('skips the molecule history scan, city feed, and per-rig task reads', async () => {
+    // The core active read returns ONLY the no-query (active) listBeads call —
+    // any molecule/per-rig listBeads call or formulaFeed call would mean the
+    // cheap path is still firing the expensive reads. The run carries an
+    // in-progress step in the SAME core read (no per-rig fetch on the cheap
+    // path), so the lane stays active without session enrichment.
+    const listBeads = vi.fn(async (_cityName: string, query?: Record<string, unknown>) => {
+      if (query && (query.type !== undefined || query.rig !== undefined)) {
+        throw new Error(`cheap path must not call listBeads with ${JSON.stringify(query)}`);
+      }
+      return beadList([
+        runRoot(),
+        bead({
+          id: 'run-1-step-1',
+          title: 'Implementation patch',
+          status: 'in_progress',
+          metadata: {
+            'gc.kind': 'step',
+            'gc.root_bead_id': 'run-1',
+            'gc.parent_bead_id': 'run-1',
+            'gc.step_id': 'implementation.patch',
+          },
+        }),
+      ]);
+    });
+    const formulaFeed = vi.fn(async () => feed([]));
+    const listSessions = vi.fn(async () => sessionList());
+    setSupervisorApiForTests({ ...baseApi, listBeads, formulaFeed, listSessions });
+
+    const source = await loadSupervisorRunSummaryActiveSource();
+
+    expect(source.status).toBe('fresh');
+    if (source.status === 'error') throw new Error(source.error);
+    // The active lane is present, and its rig scope resolves from the bead's own
+    // gc.root_store_ref metadata — no feed needed.
+    expect(source.data.lanes.map((lane) => lane.id)).toEqual(['run-1']);
+    expect(source.data.lanes[0]?.scope).toMatchObject({ status: 'available', kind: 'rig' });
+    // No history reads on the cheap path.
+    expect(source.data.historicalLanes).toEqual([]);
+    expect(source.data.totalHistorical).toBe(0);
+    // The expensive reads were never issued.
+    expect(formulaFeed).not.toHaveBeenCalled();
+    expect(
+      listBeads.mock.calls.every(([, query]) => query === undefined || query.limit !== undefined),
+    ).toBe(true);
+    expect(listBeads.mock.calls.some(([, query]) => query?.type === 'molecule')).toBe(false);
+    expect(listBeads.mock.calls.some(([, query]) => query?.rig !== undefined)).toBe(false);
   });
 });
 

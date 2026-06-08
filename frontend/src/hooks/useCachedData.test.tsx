@@ -171,6 +171,58 @@ describe('useCachedData', () => {
     expect(second.result.current.fetchedAt).toBe(landedAt);
   });
 
+  it('cheapRefresh routes through sseRefreshFetcher when present', async () => {
+    const primary = vi.fn(() => Promise.resolve('primary'));
+    const wide = vi.fn(() => Promise.resolve('wide'));
+    const cheap = vi.fn(() => Promise.resolve('cheap'));
+
+    const { result } = renderHook(() =>
+      useCachedData('runs:cheap', primary, {
+        refreshFetcher: wide,
+        sseRefreshFetcher: cheap,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data).toBe('primary');
+
+    await act(async () => {
+      await result.current.cheapRefresh();
+    });
+    expect(cheap).toHaveBeenCalledTimes(1);
+    expect(wide).not.toHaveBeenCalled();
+    expect(result.current.data).toBe('cheap');
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(wide).toHaveBeenCalledTimes(1);
+    expect(result.current.data).toBe('wide');
+  });
+
+  it('cheapRefresh falls back to refreshFetcher then the primary fetcher', async () => {
+    const primary = vi.fn(() => Promise.resolve('primary'));
+    const wide = vi.fn(() => Promise.resolve('wide'));
+
+    const withWide = renderHook(() =>
+      useCachedData('runs:cheap-fallback-wide', primary, { refreshFetcher: wide }),
+    );
+    await waitFor(() => expect(withWide.result.current.loading).toBe(false));
+    await act(async () => {
+      await withWide.result.current.cheapRefresh();
+    });
+    expect(wide).toHaveBeenCalledTimes(1);
+
+    const primaryOnly = vi.fn(() => Promise.resolve('primary-only'));
+    const noOpts = renderHook(() => useCachedData('runs:cheap-fallback-primary', primaryOnly));
+    await waitFor(() => expect(noOpts.result.current.loading).toBe(false));
+    primaryOnly.mockClear();
+    await act(async () => {
+      await noOpts.result.current.cheapRefresh();
+    });
+    expect(primaryOnly).toHaveBeenCalledTimes(1);
+  });
+
   it('reports the latest fetch failure through onError', async () => {
     const onError = vi.fn();
     const failure = new Error('network down');
