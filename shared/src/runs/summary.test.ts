@@ -345,6 +345,116 @@ describe('buildRunSummary — historical lanes are recency-bounded (gascity-dash
   });
 });
 
+// gascity-dashboard-km0w: live run-root beads carry gc.root_store_ref
+// ("rig:gascity-packs") plus gc.var.rig_name, but NOT gc.scope_kind /
+// gc.scope_ref. Before this fix the scope derived to unavailable for EVERY
+// run, so runDetailHref omitted the scope query and the detail fetch hit the
+// supervisor at the default city scope (12-14s full-store scan then 404).
+// The scope must be recovered from gc.root_store_ref when the explicit
+// gc.scope_ref pair is absent, while gc.scope_ref stays primary when present.
+describe('runLane scope derives from gc.root_store_ref fallback — gascity-dashboard-km0w', () => {
+  function rootOnly(id: string, metadata: Record<string, string>): RunIssue[] {
+    return [
+      runIssue({
+        id,
+        title: 'mol-focus-review',
+        issue_type: 'molecule',
+        metadata,
+      }),
+    ];
+  }
+
+  test('derives rig scope from gc.root_store_ref when gc.scope_ref is absent', () => {
+    const lane = runLane(
+      'gpk-4fyo6',
+      rootOnly('gpk-4fyo6', { 'gc.root_store_ref': 'rig:gascity-packs' }),
+      new Map(),
+    );
+
+    assert.equal(lane.scope.status, 'available');
+    if (lane.scope.status !== 'available') return;
+    assert.equal(lane.scope.kind, 'rig');
+    assert.equal(lane.scope.ref, 'gascity-packs');
+    assert.equal(lane.scope.rootStoreRef, 'rig:gascity-packs');
+  });
+
+  test('derives city scope from a city: gc.root_store_ref', () => {
+    const lane = runLane(
+      'city-run',
+      rootOnly('city-run', { 'gc.root_store_ref': 'city:ds-research' }),
+      new Map(),
+    );
+
+    assert.equal(lane.scope.status, 'available');
+    if (lane.scope.status !== 'available') return;
+    assert.equal(lane.scope.kind, 'city');
+    assert.equal(lane.scope.ref, 'ds-research');
+  });
+
+  test('explicit gc.scope_ref still wins over gc.root_store_ref', () => {
+    const lane = runLane(
+      'mixed',
+      rootOnly('mixed', {
+        'gc.scope_kind': 'rig',
+        'gc.scope_ref': 'gascity-dashboard',
+        'gc.root_store_ref': 'rig:gascity-packs',
+      }),
+      new Map(),
+    );
+
+    assert.equal(lane.scope.status, 'available');
+    if (lane.scope.status !== 'available') return;
+    assert.equal(lane.scope.kind, 'rig');
+    assert.equal(lane.scope.ref, 'gascity-dashboard');
+    // rootStoreRef is still carried through verbatim.
+    assert.equal(lane.scope.rootStoreRef, 'rig:gascity-packs');
+  });
+
+  test('an unknown-prefix gc.root_store_ref is not guessed — scope unavailable', () => {
+    const lane = runLane(
+      'bad-prefix',
+      rootOnly('bad-prefix', { 'gc.root_store_ref': 'workspace:ds-research' }),
+      new Map(),
+    );
+
+    assert.equal(lane.scope.status, 'unavailable');
+  });
+
+  test('a colon-less gc.root_store_ref is not guessed — scope unavailable', () => {
+    const lane = runLane(
+      'no-colon',
+      rootOnly('no-colon', { 'gc.root_store_ref': 'gascity-packs' }),
+      new Map(),
+    );
+
+    assert.equal(lane.scope.status, 'unavailable');
+  });
+
+  test('a malformed parsed ref (fails SCOPE_REF_RE) is rejected — scope unavailable', () => {
+    const lane = runLane(
+      'malformed',
+      // leading '-' violates SCOPE_REF_RE (must start alnum).
+      rootOnly('malformed', { 'gc.root_store_ref': 'rig:-bad ref' }),
+      new Map(),
+    );
+
+    assert.equal(lane.scope.status, 'unavailable');
+  });
+
+  test('a control sequence in the derived ref fails SCOPE_REF_RE — scope unavailable', () => {
+    // The fallback validates the parsed ref against SCOPE_REF_RE BEFORE the DTO
+    // edge, so an injected ESC byte (which the pattern rejects) yields
+    // unavailable rather than a sanitised-but-spoofed ref.
+    const lane = runLane(
+      'sanitise',
+      rootOnly('sanitise', { 'gc.root_store_ref': 'rig:gascity-packs\x1b[31m' }),
+      new Map(),
+    );
+
+    assert.equal(lane.scope.status, 'unavailable');
+  });
+});
+
 describe('runLane scope sanitisation — gascity-dashboard-5e5v', () => {
   test('strips ANSI/OSC from rootStoreRef on the metadata path', () => {
     const lane = runLane(

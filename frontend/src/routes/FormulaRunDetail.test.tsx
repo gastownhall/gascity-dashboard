@@ -645,7 +645,9 @@ describe('FormulaRunDetailPage', () => {
 
     renderPage();
 
-    await screen.findByText(/detailed step view isn’t available for v1 \(wisp\) runs yet/i);
+    await screen.findByText(
+      /detailed step view isn’t available for this run \(v1\/wisp runs and runs without a retained snapshot are list-only\)/i,
+    );
     expect(screen.getByText(/appears in the run list only/i)).toBeTruthy();
     // Not the generic dead-end, and not an error alert.
     expect(screen.queryByText(/^formula run unavailable\.$/i)).toBeNull();

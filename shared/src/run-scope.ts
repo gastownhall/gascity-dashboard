@@ -72,16 +72,31 @@ export function fromFeedScope(feed: FeedScopeFields): RunScopeWithStoreRef | nul
 export function fromRootMetadataScope(
   metadata: Record<string, string> | undefined,
 ): RunScopeWithStoreRef | null {
+  const rootStoreRef = stringValue(metadata?.['gc.root_store_ref']);
+
+  // Primary source: the explicit gc.scope_kind / gc.scope_ref pair. When
+  // present and valid it wins, and the existing behaviour is unchanged.
   const scopeKind = parseRunScopeKind(metadata?.['gc.scope_kind']);
   const scopeRef = stringValue(metadata?.['gc.scope_ref']);
-  if (scopeKind === null || scopeRef === null || !SCOPE_REF_RE.test(scopeRef)) {
+  if (scopeKind !== null && scopeRef !== null && SCOPE_REF_RE.test(scopeRef)) {
+    return {
+      scopeKind,
+      scopeRef,
+      rootStoreRef: rootStoreRef ?? `${scopeKind}:${scopeRef}`,
+    };
+  }
+
+  // Fallback (gascity-dashboard-km0w): live run-root beads carry only
+  // gc.root_store_ref ("<kind>:<ref>") — never the gc.scope_ref pair. Recover
+  // the lane scope from it. fromStoreRef rejects any prefix that is not exactly
+  // 'rig'/'city' and any colon-less value (no guessing); the parsed ref is then
+  // validated against the same SCOPE_REF_RE the explicit path uses.
+  if (rootStoreRef === null) return null;
+  const parsed = fromStoreRef(rootStoreRef);
+  if (parsed === null || !SCOPE_REF_RE.test(parsed.scopeRef)) {
     return null;
   }
-  return {
-    scopeKind,
-    scopeRef,
-    rootStoreRef: stringValue(metadata?.['gc.root_store_ref']) ?? `${scopeKind}:${scopeRef}`,
-  };
+  return { ...parsed, rootStoreRef };
 }
 
 export function fromStoreRef(rootStoreRef: unknown): RunScope | null {
