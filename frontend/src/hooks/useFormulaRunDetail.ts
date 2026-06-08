@@ -2,6 +2,7 @@ import type { FormulaRunDetail, RunScopeKind } from 'gas-city-dashboard-shared';
 import { errorMessage, UnsupportedRunError } from 'gas-city-dashboard-shared';
 import { reportClientError } from '../lib/clientErrorReporting';
 import { loadSupervisorFormulaRunDetail } from '../supervisor/runDetail';
+import { SupervisorApiError } from '../supervisor/errors';
 import { useCachedData } from './useCachedData';
 
 interface FormulaRunDetailState {
@@ -82,11 +83,18 @@ async function loadFormulaRunDetail(
     const detail = await loadSupervisorFormulaRunDetail(runId, params.scopeKind, params.scopeRef);
     return { kind: 'loaded', detail };
   } catch (err) {
-    // gascity-dashboard-9w3k: a v1 / wisp run has no graph.v2 detail view. Map
-    // that one expected case to an 'unsupported' payload so the page renders the
-    // list-only message; a malformed graph.v2 snapshot ('invalid_snapshot') and
-    // any transport failure still propagate as a generic load error.
-    if (err instanceof UnsupportedRunError && err.reason === 'not_run_view') {
+    // gascity-dashboard-9w3k: a v1 / wisp run has no graph.v2 detail view. Two
+    // expected shapes for that case, both mapped to the 'unsupported' payload so
+    // the page renders the honest list-only message instead of a raw error:
+    //   1. the snapshot loads but isn't graph.v2 -> UnsupportedRunError('not_run_view');
+    //   2. the supervisor's workflow endpoint 404s the wisp id outright (it only
+    //      knows graph.v2 workflows) -> SupervisorApiError status 404.
+    // A malformed graph.v2 snapshot ('invalid_snapshot') and any other transport
+    // failure still propagate as a generic load error.
+    if (
+      (err instanceof UnsupportedRunError && err.reason === 'not_run_view') ||
+      (err instanceof SupervisorApiError && err.status === 404)
+    ) {
       return { kind: 'unsupported' };
     }
     throw err;

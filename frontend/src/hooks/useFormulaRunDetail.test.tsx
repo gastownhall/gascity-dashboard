@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import { invalidate } from '../api/cache';
 import { reportClientError } from '../lib/clientErrorReporting';
 import { supervisorApi } from '../supervisor/client';
+import { SupervisorApiError } from '../supervisor/errors';
 import { useFormulaRunDetail } from './useFormulaRunDetail';
 
 vi.mock('../api/cityBase', () => ({
@@ -141,6 +142,20 @@ describe('useFormulaRunDetail', () => {
     );
 
     const { result } = renderHook(() => useFormulaRunDetail('wf-1', 'city', 'test-city'));
+
+    await waitFor(() => expect(result.current.kind).toBe('unsupported'));
+    expect(mockReportClientError).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a 404 from the workflow endpoint (v1 wisp id) as unsupported', async () => {
+    // The supervisor only knows graph.v2 workflows; a v1/wisp run id 404s the
+    // workflow endpoint outright, before any snapshot is returned. That must map
+    // to the list-only 'unsupported' state, not the generic load failure.
+    supervisor.workflowRun.mockRejectedValue(
+      new SupervisorApiError(404, 'workflow gc-p7yf1m not found', undefined),
+    );
+
+    const { result } = renderHook(() => useFormulaRunDetail('gc-p7yf1m', 'city', 'test-city'));
 
     await waitFor(() => expect(result.current.kind).toBe('unsupported'));
     expect(mockReportClientError).not.toHaveBeenCalled();
