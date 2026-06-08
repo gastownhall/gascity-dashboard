@@ -552,6 +552,65 @@ describe('loadSupervisorRunSummarySource', () => {
     expect(source.data.lanesPartial).toBe(true);
   });
 
+  it('keeps active lanes and marks partial when the molecule-history read rejects (gascity-dashboard-9rk2)', async () => {
+    // The molecule(all=true) scan surfaces historical run roots only; it is
+    // best-effort. A rejection must fold to `partial` with the active lanes still
+    // present — never escalate to a whole-view error/"Run data unavailable".
+    const listBeads = vi.fn(async (_cityName: string, query?: Record<string, unknown>) => {
+      if (query?.type === 'molecule') throw new Error('molecule history unavailable');
+      if (query?.rig === 'rig-a') return beadList([]);
+      return beadList([runRoot()]);
+    });
+    setSupervisorApiForTests({
+      ...baseApi,
+      listBeads,
+      formulaFeed: vi.fn(async () => feed([feedRun()])),
+      listSessions: vi.fn(async () => sessionList()),
+    });
+
+    const source = await loadSupervisorRunSummarySource();
+
+    expect(source.status).toBe('fresh');
+    if (source.status === 'error') throw new Error(source.error);
+    expect(source.data.totalActive).toBe(1);
+    expect(source.data.lanes.map((lane) => lane.id)).toEqual(['run-1']);
+    expect(source.data.lanesPartial).toBe(true);
+  });
+
+  it('bounds a slow molecule-history read to its own timeout and folds it to partial (gascity-dashboard-9rk2)', async () => {
+    // Live the molecule scan runs ~6.8s — past the 5s required-fetch budget. On
+    // the wide 30s refresh it would otherwise stall the whole refresh; its own
+    // 3s bound caps it so the active set still paints and only the historical
+    // lanes degrade to partial.
+    const listBeads = vi.fn(async (_cityName: string, query?: Record<string, unknown>) => {
+      if (query?.type === 'molecule') {
+        return new Promise<ListBodyBead>((resolve) => {
+          setTimeout(() => resolve(beadList([])), 6_800);
+        });
+      }
+      if (query?.rig === 'rig-a') return beadList([]);
+      return beadList([runRoot()]);
+    });
+    setSupervisorApiForTests({
+      ...baseApi,
+      listBeads,
+      formulaFeed: vi.fn(async () => feed([feedRun()])),
+      listSessions: vi.fn(async () => sessionList()),
+    });
+
+    const pending = loadSupervisorRunSummarySource();
+    // Advance past the molecule's own 3s bound but well short of its 6.8s
+    // completion: the bound fires, the active set still resolves.
+    await vi.advanceTimersByTimeAsync(3_000);
+    const source = await pending;
+
+    expect(source.status).toBe('fresh');
+    if (source.status === 'error') throw new Error(source.error);
+    expect(source.data.totalActive).toBe(1);
+    expect(source.data.lanes.map((lane) => lane.id)).toEqual(['run-1']);
+    expect(source.data.lanesPartial).toBe(true);
+  });
+
   it('returns an error source when the active bead list fails', async () => {
     setSupervisorApiForTests({
       ...baseApi,

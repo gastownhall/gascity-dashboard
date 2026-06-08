@@ -57,6 +57,18 @@ const REQUIRED_RUN_SUMMARY_TIMEOUT_MS = 5_000;
 // first-paint spinner a single global raise would cause.
 const PREVIEW_ENRICHMENT_TIMEOUT_MS = 2_500;
 const REFRESH_ENRICHMENT_TIMEOUT_MS = 30_000;
+// gascity-dashboard-9rk2: the molecule(all=true) read scans the full (large,
+// ~340k-row) molecule history purely to surface HISTORICAL run roots, which the
+// view already caps at MAX_HISTORICAL_LANES (50). Live it runs ~6.8s — past the
+// 5s required-fetch budget — and the supervisor exposes no recency-ordered or
+// bounded molecule query, so it cannot be made cheaper server-side without a new
+// endpoint. It is therefore the FIRST optional read to dominate the wider refresh
+// budget. Bound it well under REQUIRED_RUN_SUMMARY_TIMEOUT_MS so a slow scan
+// degrades the historical lanes to "partial" fast instead of holding the refresh
+// (and so it can never out-wait the active set, which paints from the fast
+// open/active read). It still rides the surrounding enrichment budget too via the
+// min() at the call site, so the tight first-paint path is never loosened.
+const MOLECULE_HISTORY_TIMEOUT_MS = 3_000;
 
 interface LoadedRunBeads {
   beads: DashboardBead[];
@@ -182,6 +194,9 @@ async function loadRunBeads(
   limit: number,
   enrichmentBudgetMs: number,
 ): Promise<LoadedRunBeads> {
+  // The molecule-history read gets its own tight bound (gascity-dashboard-9rk2),
+  // capped to the surrounding enrichment budget so the first-paint path is never
+  // loosened: a slow scan folds to `partial` instead of dominating the refresh.
   const moleculeFetch = settledRecentFetch(
     cityName,
     {
@@ -189,7 +204,7 @@ async function loadRunBeads(
       type: 'molecule',
       all: true,
     },
-    enrichmentBudgetMs,
+    Math.min(MOLECULE_HISTORY_TIMEOUT_MS, enrichmentBudgetMs),
   );
   const [activeList, feedDiscovery] = await Promise.all([
     requiredRunSummaryApi().listBeads(cityName, { limit }),
