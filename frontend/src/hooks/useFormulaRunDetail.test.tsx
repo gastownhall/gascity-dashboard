@@ -2,9 +2,10 @@ import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { invalidate } from '../api/cache';
 import { reportClientError } from '../lib/clientErrorReporting';
-import { supervisorApi } from '../supervisor/client';
+import { supervisorApi, supervisorApiForRequestBudget } from '../supervisor/client';
+import type * as SupervisorClient from '../supervisor/client';
 import { SupervisorApiError } from '../supervisor/errors';
-import { useFormulaRunDetail } from './useFormulaRunDetail';
+import { formulaRunDetailCacheKey, useFormulaRunDetail } from './useFormulaRunDetail';
 
 vi.mock('../api/cityBase', () => ({
   getActiveCity: () => 'test-city',
@@ -15,12 +16,20 @@ vi.mock('../lib/clientErrorReporting', () => ({
   reportClientError: vi.fn(() => Promise.resolve({ status: 'reported' })),
 }));
 
-vi.mock('../supervisor/client', () => ({
-  supervisorApi: vi.fn(),
-}));
+vi.mock('../supervisor/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof SupervisorClient>();
+  return {
+    // Keep the real SupervisorApiError so runDetail's `instanceof` checks work,
+    // and route the request-budget client to the same mock as the default one.
+    ...actual,
+    supervisorApi: vi.fn(),
+    supervisorApiForRequestBudget: vi.fn(),
+  };
+});
 
 const mockReportClientError = reportClientError as Mock;
 const mockSupervisorApi = supervisorApi as Mock;
+const mockSupervisorApiForRequestBudget = supervisorApiForRequestBudget as Mock;
 const supervisor = {
   workflowRun: vi.fn(),
   listSessions: vi.fn(),
@@ -35,11 +44,13 @@ afterEach(() => {
   supervisor.listSessions.mockReset();
   supervisor.formulaDetail.mockReset();
   mockSupervisorApi.mockReturnValue(supervisor);
+  mockSupervisorApiForRequestBudget.mockReturnValue(supervisor);
 });
 
 describe('useFormulaRunDetail', () => {
   beforeEach(() => {
     mockSupervisorApi.mockReturnValue(supervisor);
+    mockSupervisorApiForRequestBudget.mockReturnValue(supervisor);
     supervisor.workflowRun.mockResolvedValue(workflowSnapshot());
     supervisor.listSessions.mockResolvedValue({ items: [], total: 0 });
     supervisor.formulaDetail.mockResolvedValue(formulaDetail());
@@ -164,6 +175,26 @@ describe('useFormulaRunDetail', () => {
     expect(result.current.kind).not.toBe('unsupported');
     expect(result.current.kind).not.toBe('failed');
     expect(mockReportClientError).not.toHaveBeenCalled();
+  });
+});
+
+describe('formulaRunDetailCacheKey (bvu4)', () => {
+  // SCOPE_REF_RE permits ':' in scopeRef (and run ids can carry it), so a bare
+  // ':'-join let two distinct (runId, scopeKind, scopeRef) tuples collapse to the
+  // same key — a refresh for one run then served/overwrote another run's detail.
+  it('does not collide when a colon-bearing part shifts the join boundary', () => {
+    // Both tuples produced the SAME key under the old un-escaped ':'-join
+    // ('formula-run:a:rig:rig:y'): runId 'a' + scopeRef 'rig:y' vs runId 'a:rig'
+    // + scopeRef 'y'. Distinct runs must map to distinct cache slots.
+    const a = formulaRunDetailCacheKey('a', 'rig', 'rig:y');
+    const b = formulaRunDetailCacheKey('a:rig', 'rig', 'y');
+    expect(a).not.toBe(b);
+  });
+
+  it('keeps distinct scopes on the same run apart', () => {
+    expect(formulaRunDetailCacheKey('run', 'rig', 'app')).not.toBe(
+      formulaRunDetailCacheKey('run', 'city', 'app'),
+    );
   });
 });
 

@@ -209,6 +209,42 @@ describe('loadSupervisorFormulaRunDetail', () => {
       reasons: ['formula_detail_fetch_failed'],
     });
   });
+
+  // Fix A: the workflow snapshot is the run-detail core read; a transient
+  // timeout/5xx is retried once before it blanks the view, mirroring the runs
+  // list core read. A 4xx is the caller's fault and is never retried.
+  it('retries the workflow core read once on a transient timeout', async () => {
+    let attempts = 0;
+    workflowRun.mockImplementation(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new SupervisorApiError(
+          undefined,
+          'gc supervisor request timed out after 15000ms',
+          undefined,
+        );
+      }
+      return workflowSnapshot();
+    });
+
+    const detail = await loadSupervisorFormulaRunDetail('wf-1', 'rig', 'app');
+
+    expect(attempts).toBe(2);
+    expect(detail.completeness).toEqual({ kind: 'complete' });
+  });
+
+  it('does not retry the workflow core read on a non-transient (4xx) failure', async () => {
+    let attempts = 0;
+    workflowRun.mockImplementation(async () => {
+      attempts += 1;
+      throw new SupervisorApiError(400, 'bad request', undefined);
+    });
+
+    await expect(loadSupervisorFormulaRunDetail('wf-1', 'rig', 'app')).rejects.toThrow(
+      'bad request',
+    );
+    expect(attempts).toBe(1);
+  });
 });
 
 function workflowSnapshot(

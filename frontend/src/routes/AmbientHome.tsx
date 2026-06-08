@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { laneNeedsOperator } from 'gas-city-dashboard-shared';
 import type { DashboardMetric, RunLane, RunSummary, SourceState } from 'gas-city-dashboard-shared';
 import { getActiveCity } from '../api/cityBase';
 import { AttentionSummaryPanel } from '../attention/AttentionSummaryPanel';
@@ -61,23 +62,26 @@ function buildConcernRows(
   // double-surfacing.
   //
   // Note (Phase 4 code-review M5): needsOperator INTENTIONALLY bypasses
-  // the phaseConfidence gate. The backend at health.ts:175 derives
-  // needsOperator from lane.phase ∈ {'approval','blocked'} — a structural
-  // bead-state fact, not a phase-resolution conclusion. A human-gate
-  // decision must surface even when the engine can't confidently classify
-  // the lane's stage, because the decision is exactly what the operator
-  // is being asked to make. The R2 maroon-on-inferred constraint applies
-  // only to the One Mark Rule (which ConcernRegion does not paint), not
-  // to surfacing the row.
+  // the phaseConfidence gate AND the health.status === 'available' gate.
+  // needsOperator is a STRUCTURAL signal derived from lane.phase ∈
+  // {'approval','blocked'} (laneNeedsOperator) — a bead-state fact, not a
+  // session-derived phase-resolution conclusion. A human-gate decision must
+  // surface even when the session list is unavailable (health degrades to
+  // status:'unavailable') and the engine can't confidently classify the
+  // lane's stage, because the decision is exactly what the operator is being
+  // asked to make. The thrashing/stalled branch IS legitimately
+  // session-derived, so it keeps the health-available + phaseConfidence
+  // gate. The R2 maroon-on-inferred constraint applies only to the One Mark
+  // Rule (which ConcernRegion does not paint), not to surfacing the row.
   const rows: ConcernRow[] = [];
   for (const lane of lanes) {
     if (lane.id === topConcernId) continue;
-    if (lane.health.status !== 'available') continue;
-    const health = lane.health.data;
-    if (health.needsOperator) {
+    if (laneNeedsOperator(lane)) {
       rows.push({ lane, reason: 'needsOperator' });
       continue;
     }
+    if (lane.health.status !== 'available') continue;
+    const health = lane.health.data;
     if (health.phaseConfidence !== 'known') continue;
     if (health.thrashingDetected || staleness.byLane.get(lane.id)?.isStalled) {
       rows.push({ lane, reason: 'stalled' });
@@ -90,7 +94,7 @@ function countWaiting(lanes: readonly RunLane[]): number {
   // "waiting" census-vocab (Phase 1 architect M4) — operator-decision-pending.
   let count = 0;
   for (const lane of lanes) {
-    if (lane.health.status === 'available' && lane.health.data.needsOperator) count += 1;
+    if (laneNeedsOperator(lane)) count += 1;
   }
   return count;
 }

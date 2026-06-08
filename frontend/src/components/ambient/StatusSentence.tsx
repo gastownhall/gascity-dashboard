@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { laneNeedsOperator } from 'gas-city-dashboard-shared';
 import type { RunLane } from 'gas-city-dashboard-shared';
 
 // gascity-dashboard-kb3 PRD §4 line 2 — "the lean-in read".
@@ -70,7 +71,7 @@ function laneToken(lane: RunLane): string {
 }
 
 function pickConcernPhrasing(lane: RunLane): string {
-  if (lane.health.status === 'available' && lane.health.data.needsOperator) {
+  if (laneNeedsOperator(lane)) {
     // Grammatically-extensible: the duration clause "for N min" attaches
     // cleanly to "has been waiting on your decision". The earlier
     // present-tense form left "22 min" stranded. (Phase 4 LOW.)

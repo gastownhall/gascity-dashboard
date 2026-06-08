@@ -225,6 +225,101 @@ describe('loadSupervisorRunSummarySource', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('derives a rig lane scope from the feed root_store_ref even when the feed scope_kind is city (q89b detail scope leak)', async () => {
+    // The formula feed's top-level scope_kind is always 'city'; the rig identity
+    // lives only in root_store_ref. When the root bead carries no scope metadata
+    // (scope must come from the feed map), the lane must still resolve to its rig
+    // scope so the detail href carries it and the workflow fetch hits the fast
+    // single-store path — not the city-wide full-store scan.
+    const rootNoScope = runRoot({
+      id: 'run-2',
+      metadata: {
+        'gc.kind': 'run',
+        'gc.formula': 'mol-adopt-pr-v2',
+        'gc.formula_contract': 'graph.v2',
+      },
+    });
+    const listBeads = vi.fn(async (_cityName: string, query?: Record<string, unknown>) => {
+      if (query?.type === 'molecule') return beadList([]);
+      if (query?.rig !== undefined) return beadList([]);
+      return beadList([rootNoScope]);
+    });
+    const cityScopedFeedRun = feedRun({
+      id: 'run-2',
+      root_bead_id: 'run-2',
+      workflow_id: 'run-2',
+      root_store_ref: 'rig:rig-b',
+      scope_kind: 'city',
+      scope_ref: 'test-city',
+    });
+    setSupervisorApiForTests({
+      ...baseApi,
+      listBeads,
+      formulaFeed: vi.fn(async () => feed([cityScopedFeedRun])),
+      listSessions: vi.fn(async () => sessionList()),
+    });
+
+    const source = await loadSupervisorRunSummarySource();
+
+    expect(source.status).toBe('fresh');
+    if (source.status === 'error') throw new Error(source.error);
+    const lane = source.data.lanes.find((l) => l.id === 'run-2');
+    expect(lane?.scope).toEqual({
+      status: 'available',
+      kind: 'rig',
+      ref: 'rig-b',
+      rootStoreRef: 'rig:rig-b',
+    });
+  });
+
+  it('does not emit a malformed feed root_store_ref as the lane scope (validates against SCOPE_REF_RE)', async () => {
+    // The store-ref-first branch in discoverFromFeed must validate the parsed
+    // ref against SCOPE_REF_RE before using it — fromStoreRef does not validate,
+    // so a malformed root_store_ref like 'rig:bad ref@!' would otherwise become a
+    // scope_ref the detail route rejects. It must fall back to the feed scope.
+    const rootNoScope = runRoot({
+      id: 'run-3',
+      metadata: {
+        'gc.kind': 'run',
+        'gc.formula': 'mol-adopt-pr-v2',
+        'gc.formula_contract': 'graph.v2',
+      },
+    });
+    const listBeads = vi.fn(async (_cityName: string, query?: Record<string, unknown>) => {
+      if (query?.type === 'molecule') return beadList([]);
+      if (query?.rig !== undefined) return beadList([]);
+      return beadList([rootNoScope]);
+    });
+    const malformedFeedRun = feedRun({
+      id: 'run-3',
+      root_bead_id: 'run-3',
+      workflow_id: 'run-3',
+      root_store_ref: 'rig:bad ref@!',
+      scope_kind: 'city',
+      scope_ref: 'test-city',
+    });
+    setSupervisorApiForTests({
+      ...baseApi,
+      listBeads,
+      formulaFeed: vi.fn(async () => feed([malformedFeedRun])),
+      listSessions: vi.fn(async () => sessionList()),
+    });
+
+    const source = await loadSupervisorRunSummarySource();
+
+    expect(source.status).toBe('fresh');
+    if (source.status === 'error') throw new Error(source.error);
+    const lane = source.data.lanes.find((l) => l.id === 'run-3');
+    expect(lane?.scope).toMatchObject({
+      status: 'available',
+      kind: 'city',
+      ref: 'test-city',
+    });
+    if (lane?.scope.status === 'available') {
+      expect(lane.scope.ref).not.toBe('bad ref@!');
+    }
+  });
+
   it('enriches blocked lanes with health and keeps them out of the active set (gascity-dashboard-4xcv)', async () => {
     // gc-1920 repro: a stale blocked formula latch must land in
     // blockedLanes (with derived health, so attention still sees it),

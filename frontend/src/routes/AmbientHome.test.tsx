@@ -89,10 +89,18 @@ interface LaneFixture {
   scopeKind?: 'city' | 'rig';
   scopeRef?: string;
   updatedAt?: string;
-  health: RunLaneHealth;
+  phase?: RunLane['phase'];
+  /** When set, the lane's health is the genuine 'unavailable' shell (no
+   *  session list), exercising the structural-needsOperator path. */
+  healthUnavailable?: boolean;
+  health?: RunLaneHealth;
 }
 
 function lane(f: LaneFixture): RunLane {
+  const phase = f.phase ?? 'implementation';
+  const health: RunLane['health'] = f.healthUnavailable
+    ? { status: 'unavailable', error: 'run session list unavailable' }
+    : { status: 'available', data: f.health ?? knownHealth() };
   return {
     id: f.id,
     title: f.title ?? f.id,
@@ -114,8 +122,8 @@ function lane(f: LaneFixture): RunLane {
             url: `https://example.com/${f.externalLabel}`,
           }
         : { status: 'unavailable', error: 'unused' },
-    phase: 'implementation',
-    phaseLabel: 'implementation',
+    phase,
+    phaseLabel: phase,
     statusCounts: { in_progress: 1 },
     activeAssignees: [],
     updatedAt:
@@ -125,7 +133,7 @@ function lane(f: LaneFixture): RunLane {
     stages: [],
     progress: { status: 'unavailable', error: 'unused' },
     formulaStageResolved: false,
-    health: { status: 'available', data: f.health },
+    health,
   };
 }
 
@@ -412,23 +420,25 @@ describe('AmbientHomePage', () => {
 
   it('shows a needsOperator concern row even when no lane is failing', async () => {
     // R10 boundary: healthy-in-flight stays withheld; needsOperator
-    // surfaces. No maroon on either.
+    // surfaces. needsOperator is STRUCTURAL — derived from the lane's phase
+    // (approval/blocked), not from health.data — so the approval-phase lane
+    // surfaces while the implementation-phase calm lane is withheld. No
+    // maroon on either.
     const decisionLane = lane({
       id: 'decide-me',
       externalLabel: 'issue-99',
       updatedAt: '2026-05-29T19:59:00.000Z',
-      health: knownHealth({ needsOperator: true }),
+      phase: 'approval',
     });
     const calmLane = lane({
       id: 'calm',
       updatedAt: '2026-05-29T19:59:30.000Z',
-      health: knownHealth(),
     });
     const census: RunCensus = {
       ...DEFAULT_CENSUS,
       totalInFlight: 2,
       knownDenominator: 2,
-      byPhase: { ...DEFAULT_CENSUS.byPhase, implementation: 2 },
+      byPhase: { ...DEFAULT_CENSUS.byPhase, approval: 1, implementation: 1 },
     };
     mockLoadRunSummary.mockResolvedValue(runSource({ lanes: [decisionLane, calmLane], census }));
 
@@ -443,6 +453,40 @@ describe('AmbientHomePage', () => {
     // (the mark fires only on the maroon run-id token); the helper
     // pins <=1, the status-sentence absence pins that it's zero.
     assertAtMostOneMark(container);
+  });
+
+  it('surfaces a needsOperator lane (and counts it as waiting) even when its health is unavailable (0gww)', async () => {
+    // Regression (Codex Fix #3): needsOperator is a STRUCTURAL signal
+    // (lane.phase ∈ {approval, blocked}), not session-derived. During a
+    // session-list outage deriveRunHealth returns health.status:'unavailable'
+    // for every lane; a blocked/approval lane that needs an operator decision
+    // must STILL appear in the concern region AND be counted in the waiting
+    // census, instead of vanishing behind a health.status==='available' gate.
+    const blockedUnavailable = lane({
+      id: 'blocked-no-sessions',
+      externalLabel: 'pr-77',
+      updatedAt: '2026-05-29T19:59:00.000Z',
+      phase: 'blocked',
+      healthUnavailable: true,
+    });
+    const census: RunCensus = {
+      ...DEFAULT_CENSUS,
+      totalInFlight: 1,
+      // sessions unavailable ⇒ health is not 'known' ⇒ unverifiable, not in
+      // the known denominator. The structural waiting count is independent.
+      unverifiable: 1,
+      knownDenominator: 0,
+      byPhase: { ...DEFAULT_CENSUS.byPhase, blocked: 1 },
+    };
+    mockLoadRunSummary.mockResolvedValue(runSource({ lanes: [blockedUnavailable], census }));
+
+    mount();
+    await waitFor(() => expect(screen.getByTestId('phase-census')).toBeTruthy());
+
+    // The row survives the health-unavailable state.
+    expect(screen.getByTestId('concern-row-blocked-no-sessions')).toBeTruthy();
+    // And it is counted in the waiting census (synopsis "1 waiting").
+    expect(screen.getByTestId('phase-census').textContent).toContain('1 waiting');
   });
 
   it('renders a clear error when the runs source is in error state', async () => {

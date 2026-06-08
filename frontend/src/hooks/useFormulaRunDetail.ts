@@ -130,11 +130,16 @@ function reportRunDetailError(operation: string, runId: string, err: unknown): v
   });
 }
 
-function formulaRunDetailCacheKey(
+export function formulaRunDetailCacheKey(
   runId: string | undefined,
   scopeKind?: RunScopeKind,
   scopeRef?: string,
 ): string {
+  // gascity-dashboard (bvu4): runId and scopeRef can both contain ':'
+  // (SCOPE_REF_RE permits it, e.g. 'rig:foo'), so a bare ':'-join lets two
+  // distinct (runId, scopeKind, scopeRef) tuples collapse to one key — a refresh
+  // for run B then serves or overwrites run A's cached detail. Percent-encode
+  // each part so the delimiter can never shift a boundary.
   const parts = ['formula-run', runId ?? 'missing', scopeKind ?? 'default', scopeRef ?? 'default'];
-  return parts.join(':');
+  return parts.map(encodeURIComponent).join(':');
 }

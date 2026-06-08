@@ -18,8 +18,20 @@ import type {
   FormulaDetailResponse,
   WorkflowSnapshotResponse,
 } from 'gas-city-dashboard-shared/gc-supervisor';
-import { SupervisorApiError, supervisorApi, type SupervisorApi } from './client';
+import { SupervisorApiError, supervisorApi, supervisorApiForRequestBudget } from './client';
+import type { SupervisorApi } from './client';
+import { fetchCoreRead } from './coreRead';
 import { normalizeSessions } from './sessionReads';
+
+// The workflow snapshot is the run-detail core read — the one fetch whose
+// failure blanks the whole detail view (sessions and formula detail degrade to
+// 'partial'). It gets the same treatment as the runs-list core read
+// (runSummary.ts): a burst-tolerant budget so a CPU spike doesn't time it out,
+// and one retry on a transient timeout/5xx. A city-scoped (no-rig) fetch hits
+// the supervisor's full-store scan (~12-14s, upstream gascity-dashboard#88), so
+// the wider budget is what lets that path complete instead of timing out; the
+// rig-scoped fetch (the common case once scope is passed) is sub-second.
+const RUN_DETAIL_CORE_TIMEOUT_MS = 15_000;
 
 export async function loadSupervisorFormulaRunDetail(
   runId: string,
@@ -28,9 +40,10 @@ export async function loadSupervisorFormulaRunDetail(
 ): Promise<FormulaRunDetail> {
   const cityName = activeCityOrThrow('load supervisor formula run detail');
   const query = runScopeQuery(scopeKind, scopeRef);
+  const coreApi = supervisorApiForRequestBudget(RUN_DETAIL_CORE_TIMEOUT_MS);
   const api = supervisorApi();
   const [raw, sessionsLookup] = await Promise.all([
-    api.workflowRun(cityName, runId, query),
+    fetchCoreRead(() => coreApi.workflowRun(cityName, runId, query)),
     loadRunSessions(cityName),
   ]);
   const snapshot = toRunSnapshot(raw);

@@ -20,11 +20,13 @@ import {
   MAX_VISIBLE_ACTIVE_LANES,
   runBeadFilter,
   runCounts,
+  SCOPE_REF_RE,
   type LaneProgressMark,
 } from 'gas-city-dashboard-shared';
 import { activeCityOrThrow } from '../api/cityBase';
 import type { Bead, FormulaFeedBody, ListBodyBead } from 'gas-city-dashboard-shared/gc-supervisor';
-import { SupervisorApiError, supervisorApiForRequestBudget } from './client';
+import { supervisorApiForRequestBudget } from './client';
+import { fetchCoreRead } from './coreRead';
 import { listIsIncomplete, listIsPartial } from './listPartial';
 import { normalizeSessions } from './sessionReads';
 
@@ -53,11 +55,6 @@ const RUNS_STALE_AFTER_MS = 60 * 1000;
 // error after the retries are spent — the resilience only hides a brief spike,
 // never a sustained failure (upstream gascity-dashboard#88).
 const REQUIRED_RUN_SUMMARY_TIMEOUT_MS = 15_000;
-// One retry on a transient core-read failure, after a short fixed backoff. The
-// common (fast) path never reaches the retry, so first-paint stays prompt; the
-// retry only adds latency when a burst already made the first attempt fail.
-const CORE_FETCH_RETRIES = 1;
-const CORE_FETCH_RETRY_BACKOFF_MS = 250;
 // Optional run-summary enrichment (recent-bead / formula-feed / session reads)
 // is best-effort: a miss degrades the lanes to "partial" rather than failing the
 // load. The budget is split by call site (gascity-dashboard-4bol). The preview
@@ -203,36 +200,14 @@ function requiredRunSummaryApi() {
   return supervisorApiForRequestBudget(REQUIRED_RUN_SUMMARY_TIMEOUT_MS);
 }
 
-// The core active-bead read, with a bounded retry on a transient failure. This
-// is the one read whose rejection blanks the whole runs view, so a brief CPU
-// burst that times out the first attempt should not lose the load; a sustained
-// failure still propagates after the retries are spent. Optional enrichment
-// reads keep their own degrade-to-partial handling and are NOT retried here.
+// The core active-bead read, with a bounded retry on a transient failure
+// (fetchCoreRead). This is the one read whose rejection blanks the whole runs
+// view, so a brief CPU burst that times out the first attempt should not lose
+// the load; a sustained failure still propagates after the retry is spent.
+// Optional enrichment reads keep their own degrade-to-partial handling and are
+// NOT routed here.
 async function fetchCoreActiveBeads(cityName: string, limit: number): Promise<ListBodyBead> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= CORE_FETCH_RETRIES; attempt += 1) {
-    try {
-      return await requiredRunSummaryApi().listBeads(cityName, { limit });
-    } catch (err) {
-      lastError = err;
-      if (attempt === CORE_FETCH_RETRIES || !isTransientSupervisorError(err)) throw err;
-      await delay(CORE_FETCH_RETRY_BACKOFF_MS);
-    }
-  }
-  throw lastError;
-}
-
-// A timeout (status undefined, "timed out after Nms") or a 5xx is transient: the
-// supervisor is briefly overloaded, not reporting a stable failure. A 4xx is the
-// caller's fault and must not be retried.
-function isTransientSupervisorError(err: unknown): boolean {
-  if (!(err instanceof SupervisorApiError)) return false;
-  if (err.status === undefined) return /timed out after \d+ms/.test(err.message);
-  return err.status >= 500;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return fetchCoreRead(() => requiredRunSummaryApi().listBeads(cityName, { limit }));
 }
 
 function optionalRunSummaryApi(budgetMs: number) {
@@ -344,12 +319,28 @@ async function discoverFromFeed(cityName: string, budgetMs: number): Promise<Fee
         rigNames.add(storeScope.scopeRef);
       }
       const rootId = run.root_bead_id ?? run.workflow_id ?? null;
-      const scope = fromFeedScope(run);
+      // gascity-dashboard-q89b (detail scope leak): the feed's top-level
+      // scope_kind is always 'city', so fromFeedScope alone makes a rig lane's
+      // detail href drop to city scope — and a city-scoped workflow fetch hits
+      // the supervisor's full-store scan (~12-14s, upstream #88) instead of the
+      // sub-second single-store rig fetch. Recover the rig from root_store_ref
+      // first (store-ref-first — deliberately the inverse of
+      // fromRootMetadataScope's pair-first rule: the metadata edge trusts its
+      // explicit pair, but the feed's pair is unreliable here, always 'city').
+      // Fall back to the feed (city) scope only when the store ref names no rig.
+      // The store ref is validated against SCOPE_REF_RE before it is emitted as
+      // a lane scope: unlike fromFeedScope/fromRootMetadataScope, fromStoreRef
+      // does not validate, so a malformed root_store_ref must fall back rather
+      // than emit a scope_ref the detail route would reject.
+      const scope =
+        storeScope?.scopeKind === 'rig' && SCOPE_REF_RE.test(storeScope.scopeRef)
+          ? storeScope
+          : fromFeedScope(run);
       if (rootId !== null && scope !== null) {
         scopes.set(rootId, {
           scopeKind: scope.scopeKind,
           scopeRef: scope.scopeRef,
-          rootStoreRef: scope.rootStoreRef,
+          rootStoreRef: run.root_store_ref ?? `${scope.scopeKind}:${scope.scopeRef}`,
         });
       }
     }

@@ -45,6 +45,20 @@ export interface DeriveRunHealthResult {
   census: RunCensus;
 }
 
+/**
+ * Structural needs-operator signal for a lane: true when the lane's phase is a
+ * human-gate phase ('approval' or 'blocked'). This is derived from lane.phase
+ * alone — a structural bead-state fact, NOT a session-derived health
+ * conclusion. It therefore stays valid even when the session list is
+ * unavailable and per-lane health degrades to status:'unavailable'. Consumers
+ * must read needsOperator through this accessor rather than gating it behind
+ * health.status === 'available', or a human-gate decision vanishes from the
+ * home concern region during a session-list outage.
+ */
+export function laneNeedsOperator(lane: RunLane): boolean {
+  return lane.phase === 'approval' || lane.phase === 'blocked';
+}
+
 export function advanceProgressMarks(
   previous: ReadonlyMap<string, LaneProgressMark>,
   lanes: readonly RunLane[],
@@ -83,10 +97,21 @@ export function advanceProgressMarks(
 export function deriveRunHealth(input: DeriveRunHealthInput): DeriveRunHealthResult {
   const { thrashDetectedStreak } = { ...DEFAULT_THRESHOLDS, ...input.thresholds };
 
-  const lanes = input.lanes.map((lane) => {
-    const session = input.sessionsAvailable
-      ? resolveLaneSession(lane, input.sessions)
-      : { status: 'unresolved' as const, error: 'run session list unavailable' };
+  const lanes = input.lanes.map((lane): RunLane => {
+    // gascity-dashboard (0gww): without the session list, health cannot be
+    // derived — phaseConfidence collapses to 'inferred' and the session-trust
+    // signals (needsOperator/thrash) lose their grounding. Report the lane's
+    // health as genuinely 'unavailable' rather than wrapping a degraded shell in
+    // status:'available'. That degraded-but-'available' shell is what made the
+    // attention emitter's `health.status === 'available'` guard
+    // (attention/registry.ts) skip every lane, so the per-lane
+    // health-unavailable signal never fired. Consumers already gate every
+    // .health.data read on status === 'available', so they degrade cleanly here.
+    if (!input.sessionsAvailable) {
+      return { ...lane, health: { status: 'unavailable', error: 'run session list unavailable' } };
+    }
+
+    const session = resolveLaneSession(lane, input.sessions);
     const sessionResolved = session.status === 'resolved';
 
     const phaseConfidence: RunLaneHealth['phaseConfidence'] =
@@ -96,7 +121,7 @@ export function deriveRunHealth(input: DeriveRunHealthInput): DeriveRunHealthRes
 
     const health: RunLaneHealth = {
       phaseConfidence,
-      needsOperator: lane.phase === 'approval' || lane.phase === 'blocked',
+      needsOperator: laneNeedsOperator(lane),
       stuckNode: stuckNode(lane),
       thrashingDetected: thrashStreak >= thrashDetectedStreak,
       session:
