@@ -7,9 +7,13 @@
 // classifier behavior so the React translation of RunMap inherits a
 // consistent phase grammar.
 //
-// Parent keyword scans read DashboardBead.parent first and fall back to the
-// older metadata['gc.parent_bead_id'] marker when present. When neither exists,
-// classification falls back to title + description + metadata text scans.
+// Phase is derived structurally — from the run's CURRENT step (gc.step_id)
+// classified into a generic RunPhase (see structuredPhase / stepIdPhase). Only
+// when no step carries a gc.step_id does it fall back to a tightened keyword
+// scan scoped to step-identity signals (titles + gc.step_id), never the full
+// description+metadata dump (see fallbackPhase). Parent keyword scans read
+// DashboardBead.parent first and fall back to the older
+// metadata['gc.parent_bead_id'] marker when present.
 
 import type { DashboardBead } from '../dashboard-beads.js';
 import type { RunPhase as SharedRunPhase, RunStage } from '../snapshot/types.js';
@@ -34,6 +38,7 @@ export interface PhaseMapping {
 }
 
 export function mapRunPhase(issues: RunIssue[]): PhaseMapping {
+  // Status-based branches first — these are authoritative and correct.
   if (issues.some((i) => i.status === 'blocked' || textForIssue(i).includes('blocked'))) {
     return { phase: 'blocked', label: 'blocked', reviewRound: null };
   }
@@ -42,41 +47,167 @@ export function mapRunPhase(issues: RunIssue[]): PhaseMapping {
     return { phase: 'complete', label: 'complete', reviewRound: null };
   }
 
-  if (containsAny(issues, ['approval', 'approved', 'gate', 'human', 'finalize-scope'])) {
+  // gascity-dashboard-q3p1: structured-first phase derivation. When the run has
+  // step beads carrying gc.step_id, the run's phase is the phase of its CURRENT
+  // step (the in_progress primary step, else the latest-advanced primary step) —
+  // a real progress signal that tracks the run forward as steps advance. The old
+  // keyword scan over title+description+metadata collapsed almost every formula
+  // run to 'approval' because needles like 'gate' (order:gate-sweep, "ship gate")
+  // and 'human' (the ubiquitous summary_for_human metadata key) matched incidental
+  // text in some bead of the group. Step-id is a structural identifier, not free
+  // text, so it does not suffer that false-positive class.
+  const structured = structuredPhase(issues);
+  if (structured !== null) {
+    return structured;
+  }
+
+  // Fallback (no resolvable step identity): a tightened keyword scan scoped to
+  // step-identity signals only (titles + gc.step_id), with the incidental-match
+  // needles removed. Conservative — returns 'active' when genuinely ambiguous.
+  return fallbackPhase(issues);
+}
+
+/**
+ * gascity-dashboard-q3p1: derive the phase from the run's current step.
+ *
+ * The active step is the latest in_progress primary step; if none is in_progress
+ * (e.g. between steps) it is the latest primary step that carries a gc.step_id.
+ * The step-id is classified into a generic RunPhase by stepIdPhase. Returns null
+ * when no primary step carries a gc.step_id (no structured signal to use).
+ */
+function structuredPhase(issues: RunIssue[]): PhaseMapping | null {
+  const primary = issues.filter(isPrimaryStepIssue);
+  const inProgressStep = latestStepId(primary.filter((i) => i.status === 'in_progress'));
+  const activeStepId = inProgressStep ?? latestStepId(primary);
+  if (activeStepId === null) {
+    return null;
+  }
+
+  const phase = stepIdPhase(activeStepId);
+  if (phase === 'review') {
+    const resolved = reviewRoundForIssues(issues) ?? fallbackReviewRound(issues);
+    return { phase: 'review', label: `review round ${resolved}`, reviewRound: resolved };
+  }
+  return { phase, label: phase, reviewRound: null };
+}
+
+/**
+ * Classify a single gc.step_id into a generic RunPhase. Matches against the
+ * structural step identifier only (not free description text). Approval is
+ * checked before finalization so an approval gate that mentions its successor
+ * (`approve-merge`, `verify-merge-approval`) resolves to approval, not
+ * finalization, while a pure finalization step (`merge-and-finalize`, which
+ * contains no approval marker) still resolves to finalization. Returns 'active'
+ * when the step name carries no recognizable stage marker — deliberately
+ * conservative, so an unknown step never invents a specific late phase.
+ */
+export function stepIdPhase(stepId: string): SharedRunPhase {
+  const id = stepId.toLowerCase();
+  if (matchesStepNeedle(id, APPROVAL_STEP_NEEDLES)) return 'approval';
+  if (matchesStepNeedle(id, FINALIZATION_STEP_NEEDLES)) return 'finalization';
+  if (matchesStepNeedle(id, REVIEW_STEP_NEEDLES)) return 'review';
+  if (matchesStepNeedle(id, IMPLEMENTATION_STEP_NEEDLES)) return 'implementation';
+  if (matchesStepNeedle(id, INTAKE_STEP_NEEDLES)) return 'intake';
+  return 'active';
+}
+
+function matchesStepNeedle(id: string, needles: readonly string[]): boolean {
+  return needles.some((n) => id.includes(n));
+}
+
+// Step-identity needles, matched against gc.step_id values only. Ordered by
+// caller (stepIdPhase) latest-stage-first. Drawn from the declared step ids in
+// stagesForFormula plus the v1/wisp step names (do-work, load-context, …).
+const FINALIZATION_STEP_NEEDLES = [
+  'finalize',
+  'merge',
+  'cleanup',
+  'publish',
+  'open-or-update-pr',
+  'open-pr',
+  'dispatch-implementation',
+] as const;
+const APPROVAL_STEP_NEEDLES = ['approval', 'approve'] as const;
+const REVIEW_STEP_NEEDLES = [
+  'review',
+  'scorecard',
+  'persona',
+  'audit',
+  'repro',
+  'baseline',
+  'investigation',
+  'classify',
+  'classification',
+] as const;
+const IMPLEMENTATION_STEP_NEEDLES = [
+  'implement',
+  'implementation',
+  'patch',
+  'apply-fixes',
+  'apply-code-fixes',
+  'apply-design-changes',
+  'do-work',
+  'design',
+] as const;
+const INTAKE_STEP_NEEDLES = [
+  'intake',
+  'bootstrap',
+  'load-context',
+  'router',
+  'request',
+  'preflight',
+  'setup',
+  'rebase',
+] as const;
+
+/**
+ * Keyword fallback used only when no step carries a gc.step_id. Scans
+ * step-identity signals (issue titles + any gc.step_id present) rather than the
+ * full description+metadata dump, and drops the incidental-matching needles
+ * ('gate', 'human', 'merge', 'close', 'report', 'work', 'fix', 'code') that
+ * collapsed real runs onto late phases. Conservative: 'active' when ambiguous.
+ */
+function fallbackPhase(issues: RunIssue[]): PhaseMapping {
+  if (stepSignalContainsAny(issues, ['approval', 'approved', 'finalize-scope'])) {
     return { phase: 'approval', label: 'approval', reviewRound: null };
   }
 
-  if (containsAny(issues, ['post-merge', 'merge', 'close', 'report', 'finalization', 'finalize'])) {
-    return {
-      phase: 'finalization',
-      label: 'finalization',
-      reviewRound: null,
-    };
+  if (stepSignalContainsAny(issues, ['post-merge', 'finalization', 'finalize'])) {
+    return { phase: 'finalization', label: 'finalization', reviewRound: null };
   }
 
   const round = reviewRoundForIssues(issues);
-  if (round !== null || containsAny(issues, ['review', 'reviewer', 'scorecard'])) {
+  if (round !== null || stepSignalContainsAny(issues, ['review', 'reviewer', 'scorecard'])) {
     const resolved = round ?? fallbackReviewRound(issues);
-    return {
-      phase: 'review',
-      label: `review round ${resolved}`,
-      reviewRound: resolved,
-    };
+    return { phase: 'review', label: `review round ${resolved}`, reviewRound: resolved };
   }
 
-  if (containsAny(issues, ['implementation', 'work', 'patch', 'code', 'fix', 'do-work'])) {
-    return {
-      phase: 'implementation',
-      label: 'implementation',
-      reviewRound: null,
-    };
+  if (stepSignalContainsAny(issues, ['implementation', 'patch', 'do-work'])) {
+    return { phase: 'implementation', label: 'implementation', reviewRound: null };
   }
 
-  if (containsAny(issues, ['intake', 'load-context', 'router', 'request'])) {
+  if (stepSignalContainsAny(issues, ['intake', 'load-context', 'router', 'request'])) {
     return { phase: 'intake', label: 'intake', reviewRound: null };
   }
 
   return { phase: 'active', label: 'active', reviewRound: null };
+}
+
+/**
+ * Step-identity text for fallback scanning: the issue title plus any gc.step_id.
+ * Excludes description and the metadata dump so incidental words (e.g. a
+ * summary_for_human value, a "ship gate" mention) never drive the phase.
+ */
+function stepSignalText(issue: RunIssue): string {
+  const stepId = stringValue(issue.metadata?.['gc.step_id']);
+  return [issue.title, stepId].filter(Boolean).join(' ').toLowerCase();
+}
+
+function stepSignalContainsAny(issues: RunIssue[], needles: string[]): boolean {
+  return issues.some((i) => {
+    const text = stepSignalText(i);
+    return needles.some((n) => text.includes(n));
+  });
 }
 
 /**
@@ -155,13 +286,6 @@ export function textForIssue(issue: RunIssue): string {
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
-}
-
-export function containsAny(issues: RunIssue[], needles: string[]): boolean {
-  return issues.some((i) => {
-    const text = textForIssue(i);
-    return needles.some((n) => text.includes(n));
-  });
 }
 
 export function stringValue(value: unknown): string {

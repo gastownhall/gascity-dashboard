@@ -325,12 +325,12 @@ describe('loadSupervisorRunSummarySource', () => {
     expect(source.data.runCounts.total).toBe(1);
   });
 
-  it('keeps a session-less approval gate that is still recent (gascity-dashboard-s4rp)', async () => {
+  it('keeps a session-less recent latch in the Active set (gascity-dashboard-s4rp)', async () => {
     const listBeads = vi.fn(async (_cityName: string, query?: Record<string, unknown>) => {
       if (query?.type === 'molecule') return beadList([]);
       if (query?.rig === 'rig-a') return beadList([]);
-      // Same shape as the stale latch but written 30 minutes ago — a real
-      // approval gate waiting on a human must still appear as Active.
+      // Same shape as the stale latch but written 30 minutes ago — a recent
+      // session-less latch must still appear as Active (not demoted by liveness).
       return beadList([{ ...staleLatch(), updated_at: '2026-06-01T11:30:00.000Z' }]);
     });
     setSupervisorApiForTests({
@@ -346,7 +346,14 @@ describe('loadSupervisorRunSummarySource', () => {
     if (source.status === 'error') throw new Error(source.error);
     expect(source.data.totalActive).toBe(1);
     expect(source.data.lanes.map((lane) => lane.id)).toEqual(['gc-1920']);
-    expect(source.data.lanes[0]?.phase).toBe('approval');
+    // gascity-dashboard-q3p1: this latch is a bare root with NO step beads, so
+    // phase comes from the tightened keyword fallback. Its title
+    // ('mol-focus-review') carries a 'review' signal → 'review'. The old
+    // assertion was 'approval', which was the bug itself: the OLD scan read
+    // 'approval'/'gate' out of the run's DESCRIPTION ("Approval gate, review.")
+    // even though no approval-gate step exists. The lane staying Active — the
+    // actual subject of this test — is unchanged.
+    expect(source.data.lanes[0]?.phase).toBe('review');
   });
 
   it('demotes a phantom exactly even when active runs exceed the visible cap (gascity-dashboard-s4rp)', async () => {
