@@ -320,7 +320,17 @@ describe('RunsPage — SSE wiring (gascity-dashboard-bqn)', () => {
     expect(calmLink.closest('li')?.getAttribute('data-attention-severity')).toBeNull();
   });
 
-  it('does not flatten an unavailable run count into zero', async () => {
+  it('does not flatten an unavailable run count into zero (first load, no prior data)', async () => {
+    // A GENUINE first-load failure — both the preview paint and the full refresh
+    // error with no prior good snapshot to retain — still surfaces the error, so
+    // an empty view never lies about the store. (A refresh that errors AFTER a
+    // good paint is covered by the last-good-retention test in
+    // runSummarySubscription.test.tsx: it keeps the good lanes as stale.)
+    mockLoadRunSummaryPreview.mockResolvedValue({
+      source: 'runs',
+      status: 'error',
+      error: 'run collector unavailable in test',
+    } satisfies SourceState<RunSummary>);
     mockLoadRunSummary.mockResolvedValue({
       source: 'runs',
       status: 'error',

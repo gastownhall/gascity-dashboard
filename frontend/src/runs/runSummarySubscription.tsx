@@ -1,6 +1,7 @@
 import {
   GC_EVENT_PREFIX,
   type RunSummary,
+  type SourceAvailableState,
   type SourceState,
   type SourceStatus,
 } from 'gas-city-dashboard-shared';
@@ -56,11 +57,41 @@ export interface RunSummarySubscription {
  */
 export function useRunSummarySubscription(): RunSummarySubscription {
   const cityName = getActiveCity();
+
+  // Last-good retention (the /runs blank-on-transient-timeout bug): a background
+  // refresh that resolves to status:'error' — or throws — under city load used
+  // to OVERWRITE the already-rendered lanes with the full "Run data unavailable"
+  // page. A transient refresh failure must not blank a good view: if a prior
+  // available snapshot exists, keep serving it, re-published as 'stale' (which
+  // RunMap and Runs.tsx already render as data, with a subtle stale hint). The
+  // error state is only published when there is NO prior good snapshot — a
+  // genuine first-load failure, where an empty view would lie about the store.
+  const lastGoodRef = useRef<SourceAvailableState<RunSummary> | null>(null);
+  const refreshWithLastGoodRetention = useCallback(async (): Promise<SourceState<RunSummary>> => {
+    const result = await loadSupervisorRunSummarySource().catch(
+      (err): SourceState<RunSummary> => ({
+        source: 'runs',
+        status: 'error',
+        error: err instanceof Error ? err.message : 'formula runs unavailable',
+      }),
+    );
+    if (result.status !== 'error') return result;
+    const lastGood = lastGoodRef.current;
+    if (lastGood === null) return result;
+    return { ...lastGood, status: 'stale' };
+  }, []);
+
   const { data, loading, error, refresh } = useCachedData(
     `runs:summary:${cityName ?? 'no-city'}`,
     loadSupervisorRunSummaryPreviewSource,
-    { refreshFetcher: loadSupervisorRunSummarySource },
+    { refreshFetcher: refreshWithLastGoodRetention },
   );
+  // Capture the latest available snapshot so the next failed refresh can fall
+  // back to it. A re-published 'stale' snapshot stays good data, so it keeps
+  // being retained across a run of consecutive failures.
+  if (data !== undefined && data.status !== 'error') {
+    lastGoodRef.current = data;
+  }
   const runs = data ?? null;
   const runsStatusRef = useRef<SourceStatus | null>(null);
   runsStatusRef.current = runs?.status ?? null;
