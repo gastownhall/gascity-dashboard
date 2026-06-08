@@ -114,10 +114,12 @@ function structuredPhase(issues: RunIssue[]): PhaseMapping | null {
  * `verify-merge-approval`) resolves to approval, not finalization, while a pure
  * finalization step (`merge-and-finalize`) still resolves to finalization.
  *
- * The gate stages (approval, finalization) additionally reject a stage token
- * that is immediately preceded by a NEGATING prefix token (`pre`, `prepare`,
- * `wait`) — those are steps that LEAD UP TO the gate, not the gate itself
- * (`pre-approval-ci`). Implementation/review/intake do not apply the negating
+ * The gate stages (approval, finalization) additionally reject the stage token
+ * when ANY lead-up qualifier token (`pre`, `prepare`, `wait`, `await`,
+ * `pending`, `before`, `for`, `to`) appears anywhere in the step-id tokens —
+ * not only immediately before the stage token. Those are steps that LEAD UP TO
+ * the gate, not the gate itself (`pre-approval-ci`, `wait-for-approval`,
+ * `prepare-for-merge`). Implementation/review/intake do not apply the qualifier
  * rule: a real stage token there is a reliable signal regardless of qualifier.
  *
  * Returns 'active' when no token names a recognizable stage — deliberately
@@ -125,10 +127,10 @@ function structuredPhase(issues: RunIssue[]): PhaseMapping | null {
  */
 export function stepIdPhase(stepId: string): SharedRunPhase {
   const tokens = tokenizeStepId(stepId);
-  if (hasStageToken(tokens, APPROVAL_STAGE_TOKENS, { rejectAfterNegatingPrefix: true })) {
+  if (hasStageToken(tokens, APPROVAL_STAGE_TOKENS, { rejectWithLeadUpQualifier: true })) {
     return 'approval';
   }
-  if (hasStageToken(tokens, FINALIZATION_STAGE_TOKENS, { rejectAfterNegatingPrefix: true })) {
+  if (hasStageToken(tokens, FINALIZATION_STAGE_TOKENS, { rejectWithLeadUpQualifier: true })) {
     return 'finalization';
   }
   if (hasStageToken(tokens, REVIEW_STAGE_TOKENS)) return 'review';
@@ -143,21 +145,32 @@ function tokenizeStepId(stepId: string): string[] {
   return stepId.toLowerCase().split(STEP_ID_DELIMITERS).filter(Boolean);
 }
 
-// Prefix tokens that mark a step as LEADING UP TO a gate rather than being the
-// gate itself: `pre-approval-ci`, `prepare-merge`, `wait-for-approval`.
-const NEGATING_PREFIX_TOKENS: ReadonlySet<string> = new Set(['pre', 'prepare', 'wait']);
+// Qualifier tokens that mark a step as LEADING UP TO a gate rather than being
+// the gate itself, wherever they appear in the step id: `pre-approval-ci`,
+// `wait-for-approval`, `prepare-for-merge`, `before-merge`, `pending-approval`.
+const LEAD_UP_QUALIFIER_TOKENS: ReadonlySet<string> = new Set([
+  'pre',
+  'prepare',
+  'wait',
+  'await',
+  'pending',
+  'before',
+  'for',
+  'to',
+]);
 
 function hasStageToken(
   tokens: readonly string[],
   stageTokens: ReadonlySet<string>,
-  options: { rejectAfterNegatingPrefix?: boolean } = {},
+  options: { rejectWithLeadUpQualifier?: boolean } = {},
 ): boolean {
-  return tokens.some((token, index) => {
-    if (!stageTokens.has(token)) return false;
-    if (!options.rejectAfterNegatingPrefix) return true;
-    const prev = index > 0 ? tokens[index - 1] : undefined;
-    return prev === undefined || !NEGATING_PREFIX_TOKENS.has(prev);
-  });
+  if (!tokens.some((token) => stageTokens.has(token))) return false;
+  // Gate stages: a stage token is the gate only when no lead-up qualifier token
+  // appears anywhere in the step id (a step that LEADS UP TO the gate is not it).
+  if (options.rejectWithLeadUpQualifier) {
+    return !tokens.some((token) => LEAD_UP_QUALIFIER_TOKENS.has(token));
+  }
+  return true;
 }
 
 // Whole-token stage vocabularies, matched against tokenized gc.step_id values.
@@ -635,21 +648,32 @@ function furthestStageStepId(issues: RunIssue[]): string | null {
   })[0]!;
 }
 
-// Stage ladder rank (higher = further along). Mirrors the latest-stage-first
-// precedence in stepIdPhase / runStages; 'active' is the conservative floor.
-const STAGE_RANK: Record<SharedRunPhase, number> = {
+// Lifecycle rank (higher = further along the run lifecycle), used ONLY to pick
+// the furthest-reached stage among steps (furthestStageStepId, and the latest-
+// step stage tiebreak in byMostRecentThenStage). The lifecycle order is
+// intake → implementation → review → approval → finalization, so finalization
+// is the FURTHEST stage. 'active' is the conservative floor.
+//
+// NOTE: this is deliberately decoupled from the CURRENT-phase precedence in
+// stepIdPhase, which checks approval BEFORE finalization so an approval gate
+// that names its successor (`approve-merge`) resolves to approval. That
+// precedence is encoded in the if-order of stepIdPhase, not here — the two
+// concerns must not be conflated (a closed approval + closed finalization run
+// has its furthest stage = finalization, while a single `approve-merge` step
+// is classified as the approval phase).
+const LIFECYCLE_RANK: Record<SharedRunPhase, number> = {
   active: 0,
   intake: 1,
   implementation: 2,
   review: 3,
-  finalization: 4,
-  approval: 5,
+  approval: 4,
+  finalization: 5,
   blocked: 6,
   complete: 7,
 };
 
 function stageRank(phase: SharedRunPhase): number {
-  return STAGE_RANK[phase];
+  return LIFECYCLE_RANK[phase];
 }
 
 /**

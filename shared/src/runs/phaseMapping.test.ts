@@ -324,4 +324,88 @@ describe('stepIdPhase — step-identity classification', () => {
     // is gone.
     assert.equal(stepIdPhase('disapproval-note'), 'active');
   });
+
+  // gascity-dashboard (Residual A): the gate stages (approval, finalization)
+  // reject the stage token when ANY lead-up qualifier token appears anywhere in
+  // the step-id tokens — not only when the qualifier immediately precedes the
+  // stage token. `wait-for-approval` ([wait,for,approval]) and `prepare-for-merge`
+  // ([prepare,for,merge]) are steps that LEAD UP TO the gate, so they must not
+  // classify as the gate even though the token before the stage token is `for`.
+  describe('gate stages reject any lead-up qualifier token anywhere (Residual A)', () => {
+    test('pre-approval-ci is NOT approval (qualifier `pre` anywhere)', () => {
+      assert.notEqual(stepIdPhase('pre-approval-ci'), 'approval');
+    });
+
+    test('wait-for-approval is NOT approval (qualifier `wait`/`for`, not adjacent)', () => {
+      assert.notEqual(stepIdPhase('wait-for-approval'), 'approval');
+    });
+
+    test('prepare-for-merge is NOT finalization (qualifier `prepare`/`for`, not adjacent)', () => {
+      assert.notEqual(stepIdPhase('prepare-for-merge'), 'finalization');
+    });
+
+    test('true gates still classify: approval/approve → approval', () => {
+      assert.equal(stepIdPhase('approval'), 'approval');
+      assert.equal(stepIdPhase('approve'), 'approval');
+    });
+
+    test('true gates still classify: finalize/finalization → finalization', () => {
+      assert.equal(stepIdPhase('finalize'), 'finalization');
+      assert.equal(stepIdPhase('finalization'), 'finalization');
+    });
+
+    test('approve-merge is approval — it IS the approval step, no lead-up qualifier', () => {
+      assert.equal(stepIdPhase('approve-merge'), 'approval');
+    });
+
+    test('non-gate stages keep classifying on a whole stage token (no qualifier rejection)', () => {
+      assert.equal(stepIdPhase('review'), 'review');
+      assert.equal(stepIdPhase('do-work'), 'implementation');
+      assert.equal(stepIdPhase('implementation'), 'implementation');
+      assert.equal(stepIdPhase('load-context'), 'intake');
+    });
+  });
+});
+
+// gascity-dashboard (Residual B): furthestStageStepId / latestStepId stage
+// tiebreak rank the lifecycle order intake → implementation → review → approval
+// → finalization, so finalization is the FURTHEST stage. A no-in_progress run
+// whose furthest closed step is finalization must read as finalization, not
+// approval. The mapRunPhase CURRENT-phase precedence (approval before
+// finalization) is a separate concern and stays as-is.
+describe('mapRunPhase — finalization is the furthest lifecycle stage (Residual B)', () => {
+  function snapshotStep(stepId: string, status: string): RunIssue {
+    return {
+      id: `step-${stepId}`,
+      title: 'step',
+      status,
+      issue_type: 'task',
+      updated_at: '',
+      metadata: { 'gc.kind': 'step', 'gc.step_id': stepId },
+    };
+  }
+
+  test('no in_progress, closed approve-merge + closed merge-and-finalize → finalization (NOT approval)', () => {
+    const forward = mapRunPhase([
+      root({ id: 'fb1', updated_at: '' }),
+      snapshotStep('approve-merge', 'closed'),
+      snapshotStep('merge-and-finalize', 'closed'),
+    ]);
+    const reversed = mapRunPhase([
+      root({ id: 'fb1', updated_at: '' }),
+      snapshotStep('merge-and-finalize', 'closed'),
+      snapshotStep('approve-merge', 'closed'),
+    ]);
+    assert.equal(forward.phase, 'finalization');
+    assert.equal(reversed.phase, forward.phase);
+  });
+
+  test('no in_progress, closed review + closed approval → approval (approval furthest of the two)', () => {
+    const phase = mapRunPhase([
+      root({ id: 'fb2', updated_at: '' }),
+      snapshotStep('code-review-loop', 'closed'),
+      snapshotStep('human-approval', 'closed'),
+    ]);
+    assert.equal(phase.phase, 'approval');
+  });
 });
