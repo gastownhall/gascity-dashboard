@@ -63,6 +63,11 @@ export function FormulaRunDetailPage() {
   // 'unsupported' state (not a generic load failure) so we can render an honest
   // list-only message instead of the opaque "Formula run unavailable." dead-end.
   const unsupported = runDetail.kind === 'unsupported';
+  // gascity-dashboard (Major 2): a raw 404 from the workflow endpoint (no
+  // snapshot at all) is ambiguous — distinct from the reliable v1 'unsupported'
+  // signal and from a generic transport failure. We surface it as its own honest
+  // "detail snapshot not found" state instead of mislabeling it as v1.
+  const notFound = runDetail.kind === 'not_found';
   const runDiff = useRunDiff(
     routeError || detail === null ? undefined : runId,
     detail?.executionPath,
@@ -132,7 +137,7 @@ export function FormulaRunDetailPage() {
 
   const synopsis = detail
     ? `${detail.progress.visibleNodeCount} nodes. ${summarizeNodeStatuses(detail.progress)}. Local changes are shown for the run execution folder.`
-    : (initialLoading && !routeError) || unsupported
+    : (initialLoading && !routeError) || unsupported || notFound
       ? undefined
       : 'Formula run unavailable.';
 
@@ -194,8 +199,13 @@ export function FormulaRunDetailPage() {
         )
       ) : unsupported ? (
         <p className="text-body text-fg-muted" role="status">
-          Detailed step view isn&rsquo;t available for this run (v1/wisp runs and runs without a
-          retained snapshot are list-only) — this run appears in the run list only.
+          Detailed step view isn&rsquo;t available for this run (v1/wisp runs are list-only) — this
+          run appears in the run list only.
+        </p>
+      ) : notFound ? (
+        <p className="text-body text-fg-muted" role="status">
+          This run&rsquo;s detail snapshot was not found. It may be a v1/wisp run, a completed run
+          whose snapshot wasn&rsquo;t retained, or no longer available.
         </p>
       ) : pageError && !detail ? (
         <p className="text-body text-accent" role="alert">

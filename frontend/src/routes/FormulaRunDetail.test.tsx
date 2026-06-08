@@ -18,6 +18,7 @@ import {
   type SourceState,
   UnsupportedRunError,
 } from 'gas-city-dashboard-shared';
+import { SupervisorApiError } from '../supervisor/errors';
 import rawFormulaRunDetailFixture from '../test/fixtures/formula-run-detail.json';
 
 const loadSupervisorFormulaRunDetail = vi.hoisted(() => vi.fn());
@@ -646,9 +647,29 @@ describe('FormulaRunDetailPage', () => {
     renderPage();
 
     await screen.findByText(
-      /detailed step view isn’t available for this run \(v1\/wisp runs and runs without a retained snapshot are list-only\)/i,
+      /detailed step view isn’t available for this run \(v1\/wisp runs are list-only\)/i,
     );
     expect(screen.getByText(/appears in the run list only/i)).toBeTruthy();
+    // Not the generic dead-end, and not an error alert.
+    expect(screen.queryByText(/^formula run unavailable\.$/i)).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('renders an honest not-found message for a raw 404 (ambiguous), not the v1 over-claim or the generic failure (Major 2)', async () => {
+    // gascity-dashboard (Major 2): a raw SupervisorApiError 404 (no snapshot at
+    // all) is ambiguous — it can be a v1/wisp id, a completed run whose snapshot
+    // wasn't retained, a pruned run, or a stale/wrong derived scope. The page
+    // must NOT assert it is definitively v1 (the 'unsupported' copy) and must NOT
+    // fall to the generic "Formula run unavailable." dead-end either.
+    loadSupervisorFormulaRunDetail.mockImplementation(async () => {
+      throw new SupervisorApiError(404, 'workflow gc-p7yf1m not found', undefined);
+    });
+
+    renderPage();
+
+    await screen.findByText(/this run’s detail snapshot was not found/i);
+    // Does not over-claim v1.
+    expect(screen.queryByText(/v1\/wisp runs are list-only/i)).toBeNull();
     // Not the generic dead-end, and not an error alert.
     expect(screen.queryByText(/^formula run unavailable\.$/i)).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();

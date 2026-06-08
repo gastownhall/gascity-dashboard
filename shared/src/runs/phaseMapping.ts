@@ -78,7 +78,15 @@ export function mapRunPhase(issues: RunIssue[]): PhaseMapping {
 function structuredPhase(issues: RunIssue[]): PhaseMapping | null {
   const primary = issues.filter(isPrimaryStepIssue);
   const inProgressStep = latestStepId(primary.filter((i) => i.status === 'in_progress'));
-  const activeStepId = inProgressStep ?? latestStepId(primary);
+  // gascity-dashboard (Major 3): when no step is in_progress, the current step
+  // is the FURTHEST-ADVANCED step by stage rank — a deterministic, order- and
+  // timestamp-independent signal. The run-detail snapshot adapter sets every
+  // bead updated_at='' (the snapshot carries no per-bead timestamp), so a
+  // timestamp-based pick there is input-order-dependent and can drift from the
+  // summary lane. Stage rank is derived from gc.step_id alone, so the summary
+  // context (real timestamps) and the detail context (empty timestamps) resolve
+  // the same run to the same phase.
+  const activeStepId = inProgressStep ?? furthestStageStepId(primary);
   if (activeStepId === null) {
     return null;
   }
@@ -92,73 +100,114 @@ function structuredPhase(issues: RunIssue[]): PhaseMapping | null {
 }
 
 /**
- * Classify a single gc.step_id into a generic RunPhase. Matches against the
- * structural step identifier only (not free description text). Approval is
- * checked before finalization so an approval gate that mentions its successor
- * (`approve-merge`, `verify-merge-approval`) resolves to approval, not
- * finalization, while a pure finalization step (`merge-and-finalize`, which
- * contains no approval marker) still resolves to finalization. Returns 'active'
- * when the step name carries no recognizable stage marker — deliberately
+ * Classify a single gc.step_id into a generic RunPhase. The step id is split on
+ * its structural delimiters (`-`, `.`, `_`, `:`, `/`) into TOKENS and matched
+ * WHOLE-TOKEN against per-stage keyword sets — never as raw substrings. Whole-
+ * token matching is what stops a CI/leading step from being misbucketed onto a
+ * late stage: `pre-approval-ci` is not approval, `dispatch-implementation` is
+ * implementation (not finalization), `prepare-review-context` is review (not
+ * approval/finalization).
+ *
+ * Precedence is latest-stage-first (approval > finalization > review >
+ * implementation > intake), preserving the approval-before-finalization rule so
+ * an approval gate that names its successor (`approve-merge`,
+ * `verify-merge-approval`) resolves to approval, not finalization, while a pure
+ * finalization step (`merge-and-finalize`) still resolves to finalization.
+ *
+ * The gate stages (approval, finalization) additionally reject a stage token
+ * that is immediately preceded by a NEGATING prefix token (`pre`, `prepare`,
+ * `wait`) — those are steps that LEAD UP TO the gate, not the gate itself
+ * (`pre-approval-ci`). Implementation/review/intake do not apply the negating
+ * rule: a real stage token there is a reliable signal regardless of qualifier.
+ *
+ * Returns 'active' when no token names a recognizable stage — deliberately
  * conservative, so an unknown step never invents a specific late phase.
  */
 export function stepIdPhase(stepId: string): SharedRunPhase {
-  const id = stepId.toLowerCase();
-  if (matchesStepNeedle(id, APPROVAL_STEP_NEEDLES)) return 'approval';
-  if (matchesStepNeedle(id, FINALIZATION_STEP_NEEDLES)) return 'finalization';
-  if (matchesStepNeedle(id, REVIEW_STEP_NEEDLES)) return 'review';
-  if (matchesStepNeedle(id, IMPLEMENTATION_STEP_NEEDLES)) return 'implementation';
-  if (matchesStepNeedle(id, INTAKE_STEP_NEEDLES)) return 'intake';
+  const tokens = tokenizeStepId(stepId);
+  if (hasStageToken(tokens, APPROVAL_STAGE_TOKENS, { rejectAfterNegatingPrefix: true })) {
+    return 'approval';
+  }
+  if (hasStageToken(tokens, FINALIZATION_STAGE_TOKENS, { rejectAfterNegatingPrefix: true })) {
+    return 'finalization';
+  }
+  if (hasStageToken(tokens, REVIEW_STAGE_TOKENS)) return 'review';
+  if (hasStageToken(tokens, IMPLEMENTATION_STAGE_TOKENS)) return 'implementation';
+  if (hasStageToken(tokens, INTAKE_STAGE_TOKENS)) return 'intake';
   return 'active';
 }
 
-function matchesStepNeedle(id: string, needles: readonly string[]): boolean {
-  return needles.some((n) => id.includes(n));
+const STEP_ID_DELIMITERS = /[-._:/]+/;
+
+function tokenizeStepId(stepId: string): string[] {
+  return stepId.toLowerCase().split(STEP_ID_DELIMITERS).filter(Boolean);
 }
 
-// Step-identity needles, matched against gc.step_id values only. Ordered by
-// caller (stepIdPhase) latest-stage-first. Drawn from the declared step ids in
-// stagesForFormula plus the v1/wisp step names (do-work, load-context, …).
-const FINALIZATION_STEP_NEEDLES = [
+// Prefix tokens that mark a step as LEADING UP TO a gate rather than being the
+// gate itself: `pre-approval-ci`, `prepare-merge`, `wait-for-approval`.
+const NEGATING_PREFIX_TOKENS: ReadonlySet<string> = new Set(['pre', 'prepare', 'wait']);
+
+function hasStageToken(
+  tokens: readonly string[],
+  stageTokens: ReadonlySet<string>,
+  options: { rejectAfterNegatingPrefix?: boolean } = {},
+): boolean {
+  return tokens.some((token, index) => {
+    if (!stageTokens.has(token)) return false;
+    if (!options.rejectAfterNegatingPrefix) return true;
+    const prev = index > 0 ? tokens[index - 1] : undefined;
+    return prev === undefined || !NEGATING_PREFIX_TOKENS.has(prev);
+  });
+}
+
+// Whole-token stage vocabularies, matched against tokenized gc.step_id values.
+// Drawn from the declared step ids in stagesForFormula plus the v1/wisp step
+// names (do-work, load-context, …). Multi-word step ids contribute each of
+// their tokens (e.g. `merge-and-finalize` → merge, finalize).
+const APPROVAL_STAGE_TOKENS: ReadonlySet<string> = new Set([
+  'approval',
+  'approve',
+  'approved',
+  'gate',
+]);
+const FINALIZATION_STAGE_TOKENS: ReadonlySet<string> = new Set([
   'finalize',
+  'finalization',
   'merge',
   'cleanup',
   'publish',
-  'open-or-update-pr',
-  'open-pr',
-  'dispatch-implementation',
-] as const;
-const APPROVAL_STEP_NEEDLES = ['approval', 'approve'] as const;
-const REVIEW_STEP_NEEDLES = [
+]);
+const REVIEW_STAGE_TOKENS: ReadonlySet<string> = new Set([
   'review',
+  'reviewer',
   'scorecard',
   'persona',
+  'personas',
   'audit',
   'repro',
   'baseline',
   'investigation',
   'classify',
   'classification',
-] as const;
-const IMPLEMENTATION_STEP_NEEDLES = [
+]);
+const IMPLEMENTATION_STAGE_TOKENS: ReadonlySet<string> = new Set([
   'implement',
   'implementation',
   'patch',
-  'apply-fixes',
-  'apply-code-fixes',
-  'apply-design-changes',
-  'do-work',
+  'fixes',
+  'work',
   'design',
-] as const;
-const INTAKE_STEP_NEEDLES = [
+]);
+const INTAKE_STAGE_TOKENS: ReadonlySet<string> = new Set([
   'intake',
   'bootstrap',
-  'load-context',
+  'context',
   'router',
   'request',
   'preflight',
   'setup',
   'rebase',
-] as const;
+]);
 
 /**
  * Keyword fallback used only when no step carries a gc.step_id. Scans
@@ -558,10 +607,71 @@ function furthestClosedStageIndex(stages: Array<{ steps: string[] }>, issues: Ru
 export function latestStepId(issues: RunIssue[]): string | null {
   return (
     [...issues]
-      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
+      .sort(byMostRecentThenStage)
       .map((i) => stringValue(i.metadata?.['gc.step_id']))
       .find(Boolean) ?? null
   );
+}
+
+/**
+ * gascity-dashboard (Major 3): the deterministic current-step pick for the
+ * "no step in_progress" fallback. Among the steps that carry a gc.step_id,
+ * select the one whose stage is furthest along the ladder (approval >
+ * finalization > review > implementation > intake > active). This depends only
+ * on gc.step_id — never on updated_at — so it is stable regardless of input
+ * order and identical whether the beads come from the summary projection (real
+ * timestamps) or the run-detail snapshot adapter (updated_at=''). Ties on stage
+ * rank break on the step id string for total determinism.
+ */
+function furthestStageStepId(issues: RunIssue[]): string | null {
+  const stepIds = issues
+    .map((i) => stringValue(i.metadata?.['gc.step_id']))
+    .filter((id): id is string => id.length > 0);
+  if (stepIds.length === 0) return null;
+  return [...stepIds].sort((a, b) => {
+    const rankDelta = stageRank(stepIdPhase(b)) - stageRank(stepIdPhase(a));
+    if (rankDelta !== 0) return rankDelta;
+    return a < b ? -1 : a > b ? 1 : 0;
+  })[0]!;
+}
+
+// Stage ladder rank (higher = further along). Mirrors the latest-stage-first
+// precedence in stepIdPhase / runStages; 'active' is the conservative floor.
+const STAGE_RANK: Record<SharedRunPhase, number> = {
+  active: 0,
+  intake: 1,
+  implementation: 2,
+  review: 3,
+  finalization: 4,
+  approval: 5,
+  blocked: 6,
+  complete: 7,
+};
+
+function stageRank(phase: SharedRunPhase): number {
+  return STAGE_RANK[phase];
+}
+
+/**
+ * Deterministic step ordering: most-recently-updated first, then furthest stage,
+ * then step id. Date.parse('') is NaN, so when the run-detail snapshot adapter
+ * leaves every updated_at empty the timestamp comparison collapses to 0 and the
+ * stage / step-id tiebreakers make the pick deterministic instead of leaving it
+ * to the engine's NaN-comparator behavior (input-order-dependent).
+ */
+function byMostRecentThenStage(a: RunIssue, b: RunIssue): number {
+  const timeDelta = parseTimestamp(b.updated_at) - parseTimestamp(a.updated_at);
+  if (timeDelta !== 0) return timeDelta;
+  const aStep = stringValue(a.metadata?.['gc.step_id']);
+  const bStep = stringValue(b.metadata?.['gc.step_id']);
+  const rankDelta = stageRank(stepIdPhase(bStep)) - stageRank(stepIdPhase(aStep));
+  if (rankDelta !== 0) return rankDelta;
+  return aStep < bStep ? -1 : aStep > bStep ? 1 : 0;
+}
+
+function parseTimestamp(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 export function stepIssues(issues: RunIssue[], step: string): RunIssue[] {

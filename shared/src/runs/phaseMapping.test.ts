@@ -170,6 +170,57 @@ describe('mapRunPhase — incidental text never forces approval (the core regres
   });
 });
 
+describe('mapRunPhase — deterministic current-step pick without updated_at (gascity-dashboard Major 3)', () => {
+  // The run-detail snapshot adapter (formula-run.ts fromRunSnapshotBead) sets
+  // every bead updated_at=''. With no in_progress step the old timestamp-based
+  // pick was input-ORDER-dependent (Date.parse('') === NaN). The fallback must
+  // be deterministic and pick the furthest-advanced stage, and a summary-context
+  // version of the same run (real timestamps) must agree with the detail context.
+
+  function snapshotStep(stepId: string, status: string): RunIssue {
+    // Detail-snapshot shape: no per-bead timestamp.
+    return {
+      id: `step-${stepId}`,
+      title: 'step',
+      status,
+      issue_type: 'task',
+      updated_at: '',
+      metadata: { 'gc.kind': 'step', 'gc.step_id': stepId },
+    };
+  }
+
+  test('no in_progress step + empty updated_at → deterministic furthest stage, order-independent', () => {
+    const forward = mapRunPhase([
+      root({ id: 'd1', updated_at: '' }),
+      snapshotStep('implement-change', 'closed'),
+      snapshotStep('code-review-loop', 'closed'),
+    ]);
+    const reversed = mapRunPhase([
+      root({ id: 'd1', updated_at: '' }),
+      snapshotStep('code-review-loop', 'closed'),
+      snapshotStep('implement-change', 'closed'),
+    ]);
+    // Furthest advanced of the two closed steps is the review loop.
+    assert.equal(forward.phase, 'review');
+    // Input order must not change the result.
+    assert.equal(reversed.phase, forward.phase);
+  });
+
+  test('summary-context (real timestamps) and detail-context (empty) of the same run agree', () => {
+    const detail = mapRunPhase([
+      root({ id: 'd2', updated_at: '' }),
+      snapshotStep('implement-change', 'closed'),
+      snapshotStep('code-review-loop', 'closed'),
+    ]);
+    const summary = mapRunPhase([
+      root({ id: 'd2' }),
+      step('d2-s1', 'implement-change', 'closed', { updated_at: '2026-06-06T00:01:00.000Z' }),
+      step('d2-s2', 'code-review-loop', 'closed', { updated_at: '2026-06-06T02:00:00.000Z' }),
+    ]);
+    assert.equal(detail.phase, summary.phase);
+  });
+});
+
 describe('mapRunPhase — status branches remain authoritative', () => {
   test('any blocked bead → blocked, regardless of step identity', () => {
     const phase = mapRunPhase([root({ id: 'b1' }), step('b1-s1', 'implement-change', 'blocked')]);
@@ -235,5 +286,42 @@ describe('stepIdPhase — step-identity classification', () => {
 
   test('unknown step id is conservative (active), never invents a late phase', () => {
     assert.equal(stepIdPhase('totally-unknown-step'), 'active');
+  });
+
+  // gascity-dashboard (Major 1): tokenized whole-token matching, not raw
+  // substring includes(). A leading/CI step that merely CONTAINS a late-stage
+  // word as a substring (or as a token behind a negating prefix) must not be
+  // misbucketed onto the late stage — that falsely surfaces a CI step as
+  // "waiting on human" through needsOperator (health.ts keys on phase==='approval').
+  test('pre-approval-ci is NOT approval (negating `pre` prefix on the gate token)', () => {
+    assert.notEqual(stepIdPhase('pre-approval-ci'), 'approval');
+  });
+
+  test('dispatch-implementation is implementation, not finalization', () => {
+    assert.equal(stepIdPhase('dispatch-implementation'), 'implementation');
+  });
+
+  test('prepare-review-context is review, never approval or finalization', () => {
+    const phase = stepIdPhase('prepare-review-context');
+    assert.notEqual(phase, 'approval');
+    assert.notEqual(phase, 'finalization');
+    assert.equal(phase, 'review');
+  });
+
+  test('whole real step ids still classify correctly after tokenization', () => {
+    assert.equal(stepIdPhase('review'), 'review');
+    assert.equal(stepIdPhase('approval'), 'approval');
+    assert.equal(stepIdPhase('approve'), 'approval');
+    assert.equal(stepIdPhase('implementation'), 'implementation');
+    assert.equal(stepIdPhase('do-work'), 'implementation');
+    assert.equal(stepIdPhase('load-context'), 'intake');
+    assert.equal(stepIdPhase('finalize'), 'finalization');
+  });
+
+  test('a substring that is not a whole token does not match (e.g. `approval` inside a longer token)', () => {
+    // `disapproval-note` tokenizes to [disapproval, note]; neither token is a
+    // recognized stage word, so the old includes('approval') false positive
+    // is gone.
+    assert.equal(stepIdPhase('disapproval-note'), 'active');
   });
 });
