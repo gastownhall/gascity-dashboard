@@ -67,6 +67,15 @@ export function useRunSummarySubscription(): RunSummarySubscription {
   // error state is only published when there is NO prior good snapshot — a
   // genuine first-load failure, where an empty view would lie about the store.
   const lastGoodRef = useRef<SourceAvailableState<RunSummary> | null>(null);
+  // The recovery signal, kept distinct from the PUBLISHED status. When a refresh
+  // fails but we serve last-good as 'stale', the view shows data — but a 'stale'
+  // status is indistinguishable from a healthy snapshot to the retry effect, so
+  // it would treat the failure as resolved and stop trying. That latches the
+  // preview-grade snapshot until an unrelated SSE event happens to fire. This
+  // flag records "the last refresh failed; the displayed data is stale BECAUSE
+  // of a failure" so recovery keeps driving regardless of what we display, and
+  // is cleared the moment a genuine fresh/full result lands.
+  const staleDueToFailureRef = useRef(false);
   const refreshWithLastGoodRetention = useCallback(async (): Promise<SourceState<RunSummary>> => {
     const result = await loadSupervisorRunSummarySource().catch(
       (err): SourceState<RunSummary> => ({
@@ -75,9 +84,13 @@ export function useRunSummarySubscription(): RunSummarySubscription {
         error: err instanceof Error ? err.message : 'formula runs unavailable',
       }),
     );
-    if (result.status !== 'error') return result;
+    if (result.status !== 'error') {
+      staleDueToFailureRef.current = false;
+      return result;
+    }
     const lastGood = lastGoodRef.current;
     if (lastGood === null) return result;
+    staleDueToFailureRef.current = true;
     return { ...lastGood, status: 'stale' };
   }, []);
 
@@ -115,15 +128,25 @@ export function useRunSummarySubscription(): RunSummarySubscription {
   // gascity-dashboard-4xcv: bounded auto-retry on a degraded load. An error
   // source (or a partial fetch with zero lanes) used to latch the page dead;
   // retry a few times with backoff and reset once a healthy load lands.
+  //
+  // A stale-due-to-failure snapshot is degraded too, even though it RENDERS as
+  // healthy data: the displayed lanes are last-good (possibly preview-grade),
+  // and the refresh that should have upgraded them failed. We must keep
+  // attempting recovery off `staleDueToFailureRef` — NOT off the published
+  // status — so the view self-recovers to fresh/full data without depending on
+  // an unrelated SSE event ever firing. The same backoff budget bounds it; once
+  // a genuine fresh result lands, the failure flag is cleared (in
+  // refreshWithLastGoodRetention) and the next effect run resets the attempt.
   const retryAttemptRef = useRef(0);
   useEffect(() => {
     if (runs === null) return;
     const degraded =
       runs.status === 'error'
         ? true
-        : runs.data.lanesPartial === true &&
-          runs.data.lanes.length === 0 &&
-          runs.data.blockedLanes.length === 0;
+        : staleDueToFailureRef.current ||
+          (runs.data.lanesPartial === true &&
+            runs.data.lanes.length === 0 &&
+            runs.data.blockedLanes.length === 0);
     if (!degraded) {
       retryAttemptRef.current = 0;
       return;

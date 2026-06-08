@@ -238,6 +238,72 @@ describe('useRunSummarySubscription / RunSummaryProvider (gascity-dashboard-2j8e
     await waitFor(() => expect(screen.getByTestId('page').textContent).toBe('stale:3'));
   });
 
+  it('self-recovers from a stale-retention: schedules a re-refresh that lands fresh with no SSE event', async () => {
+    // The latch bug: a good preview paints, then the one-time full refresh times
+    // out ONCE. Last-good retention keeps the view as 'stale' (good UX, never
+    // blanks) — but because the masked failure looked like a healthy snapshot to
+    // the retry path, nothing re-attempted, and the view stayed stuck on the
+    // preview-grade snapshot until some unrelated SSE event happened to fire.
+    // The fix decouples what we DISPLAY (stale, not blank) from whether we keep
+    // RETRYING (yes, with backoff). Here the full refresh fails once, then the
+    // backed-off re-refresh succeeds with full data — all driven by timers, with
+    // no SSE event in the test.
+    vi.useFakeTimers();
+    // Preview paints good data (blocked=4 stands in for preview-grade).
+    mockPreview.mockResolvedValue(buildRunSource('fresh', 4));
+    // The one-time full upgrade times out the FIRST time it is called...
+    mockFull.mockRejectedValueOnce(new Error('gc supervisor request timed out after 5000ms'));
+    // ...and every later attempt lands the full session-enriched snapshot.
+    mockFull.mockResolvedValue(buildRunSource('fresh', 7));
+
+    render(
+      <RunSummaryProvider>
+        <Consumer label="page" />
+      </RunSummaryProvider>,
+    );
+
+    // Preview lands, then the full refresh fails and is retained as 'stale' over
+    // the preview-grade data — the view shows data, never blanks.
+    await vi.waitFor(() => expect(screen.getByTestId('page').textContent).toBe('stale:4'));
+    // No SSE event has fired; the only thing that can recover us is the scheduled
+    // backoff re-refresh (first delay = 2_000ms).
+    expect(lastHookCall.onMatch).toBeTypeOf('function');
+
+    // Advance past the first backoff delay to fire the scheduled re-refresh,
+    // which now succeeds with the full snapshot.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    // The view self-recovered to fresh, full data — no external SSE event.
+    await vi.waitFor(() => expect(screen.getByTestId('page').textContent).toBe('fresh:7'));
+  });
+
+  it('does not leak the recovery timer on unmount', async () => {
+    vi.useFakeTimers();
+    mockPreview.mockResolvedValue(buildRunSource('fresh', 4));
+    mockFull.mockRejectedValue(new Error('gc supervisor request timed out after 5000ms'));
+
+    const { unmount } = render(
+      <RunSummaryProvider>
+        <Consumer label="page" />
+      </RunSummaryProvider>,
+    );
+
+    // A stale-retention is published and a recovery timer is armed.
+    await vi.waitFor(() => expect(screen.getByTestId('page').textContent).toBe('stale:4'));
+    const fullCallsBeforeUnmount = mockFull.mock.calls.length;
+
+    unmount();
+
+    // After unmount, advancing well past the whole backoff budget must not fire
+    // any further refresh — the timer was cleaned up.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(mockFull.mock.calls.length).toBe(fullCallsBeforeUnmount);
+  });
+
   it('surfaces error when the FIRST load fails with no prior good data', async () => {
     // The genuine first-load failure is unchanged: with no prior snapshot to
     // retain, the error state still surfaces so the operator is not shown an
