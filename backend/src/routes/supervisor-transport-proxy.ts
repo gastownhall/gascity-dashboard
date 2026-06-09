@@ -72,14 +72,20 @@ function paramsMatchExactly(
   return expected.every(([key, value]) => q.get(key) === value);
 }
 
-// 3s: single-flight collapses the SIMULTANEOUS duplicate reads within one SSE
-// burst; the short ready-window absorbs the closely-spaced re-fires that arrive
-// just after the first ~7-10s scan resolves. Kept well under the SPA's own
-// enrichment budgets (MOLECULE_HISTORY_TIMEOUT_MS=3s,
-// REQUIRED_RUN_SUMMARY_TIMEOUT_MS=15s) and far below the 60s status sampler, so
-// the historical-root discovery never visibly trails the live SSE-driven active
-// view (which is not cached). Do not exceed 5s.
-const CITY_WIDE_READ_TTL_MS = 3_000;
+// 45s (gascity-dashboard-i60u): a CONSCIOUS reversal of the former "do not
+// exceed 5s" cap. That cap assumed gastownhall/gascity#3253 would make the
+// server-side molecule+feed build cheap (~80ms→22ms); #3253 is blocked, so the
+// cold read stays 7-11s and a 3s TTL almost never survives long enough to serve
+// a warm hit — every fresh detail load paid the full cold scan and queued the
+// page's own fast reads behind it (the browser's ~6-conn/host cap). At 45s a
+// single cold scan amortizes across the operator's whole detail-viewing session.
+// SAFETY: only the two city-wide, auth-invariant HISTORICAL reads
+// (molecule(all=true) history + city formula feed) are cached — cacheableCityWideRead
+// pins their exact param sets — while the active/live lanes are SSE-driven and
+// UNCACHED, so a longer TTL only lets an already-closed run root lag up to the
+// TTL before it surfaces in History (acceptable). The longer TTL changes only
+// HOW LONG the same set is cached, never WHAT is cached.
+export const CITY_WIDE_READ_TTL_MS = 45_000;
 
 export function cacheableCityWideRead(target: URL): boolean {
   if (!CACHEABLE_CITY_WIDE_READS.some((p) => p.test(target.pathname))) return false;

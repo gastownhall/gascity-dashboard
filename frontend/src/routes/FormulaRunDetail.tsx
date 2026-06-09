@@ -7,6 +7,8 @@ import type {
   RunNodeStatus,
   FormulaRunPartialReason,
   RunScopeKind,
+  RunSummary,
+  SourceState,
 } from 'gas-city-dashboard-shared';
 import { Button } from '../components/Button';
 import { PageHeader } from '../components/PageHeader';
@@ -22,9 +24,8 @@ import { useRunNodeSelection } from '../hooks/useRunNodeSelection';
 import { useFormulaRunDetail } from '../hooks/useFormulaRunDetail';
 import { useRunDiff } from '../hooks/useRunDiff';
 import { useEntityLinks } from '../hooks/useEntityLinks';
-import { useCachedData } from '../hooks/useCachedData';
+import { getCached } from '../api/cache';
 import { getActiveCity } from '../api/cityBase';
-import { loadSupervisorRunSummaryMountSource } from '../supervisor/runSummary';
 import { NEEDS_YOU_VIEW_PARAM } from '../views/modules/maintainer/needsYou';
 
 const RUN_DETAIL_EVENT_PREFIXES = [GC_EVENT_PREFIX.bead, GC_EVENT_PREFIX.session] as const;
@@ -116,24 +117,28 @@ export function FormulaRunDetailPage() {
   const now = useNow();
   const cityName = getActiveCity();
 
-  // Optimistic skeleton (gascity-dashboard-wqsk): the first load of a run is
-  // bounded by the supervisor's all-store scan (seconds). The direct run
-  // summary cache — already warm when the operator arrives from /runs —
-  // carries this run's lane (title + phase stages), so render that instantly
-  // instead of a blank spinner while the full detail assembles.
-  const runSummary = useCachedData(
-    `runs:summary:${cityName ?? 'no-city'}`,
-    loadSupervisorRunSummaryMountSource,
+  // Optimistic skeleton (gascity-dashboard-wqsk, gascity-dashboard-i60u): when
+  // the operator arrives from /runs the shared run-summary subscription has
+  // already warmed this cache key with this run's lane (title + phase stages),
+  // so paint that instantly instead of a blank spinner while the full detail
+  // assembles. We CONSUME the cache directly and fire NO mount read of our own:
+  // on a cold direct/refresh load the key is empty, so the skeleton is simply
+  // absent and the lightweight loading state renders — the page no longer spends
+  // a browser connection on a duplicate molecule(all=true)+feed cold scan (7-11s)
+  // that would queue behind, and starve, the detail's own fast reads. The
+  // always-mounted RunSummaryProvider remains the sole owner of this key's fetch.
+  const [warmRunSummary] = useState<SourceState<RunSummary> | undefined>(() =>
+    getCached(`runs:summary:${cityName ?? 'no-city'}`),
   );
   const skeletonLane = useMemo(() => {
     if (!runId) return null;
-    const runs = runSummary.data;
-    const runsData = runs && runs.status !== 'error' ? runs.data : null;
+    const runsData =
+      warmRunSummary && warmRunSummary.status !== 'error' ? warmRunSummary.data : null;
     if (runsData === null || runsData === undefined) return null;
     // gascity-dashboard-4xcv: blocked lanes live in their own bucket now, and
     // a blocked run is the most likely one the operator clicks into.
     return [...runsData.lanes, ...runsData.blockedLanes].find((lane) => lane.id === runId) ?? null;
-  }, [runSummary.data, runId]);
+  }, [warmRunSummary, runId]);
 
   const synopsis = detail
     ? `${detail.progress.visibleNodeCount} nodes. ${summarizeNodeStatuses(detail.progress)}. Local changes are shown for the run execution folder.`

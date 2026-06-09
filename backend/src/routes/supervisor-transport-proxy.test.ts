@@ -4,7 +4,11 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
 
-import { cacheableCityWideRead, supervisorTransportProxy } from './supervisor-transport-proxy.js';
+import {
+  CITY_WIDE_READ_TTL_MS,
+  cacheableCityWideRead,
+  supervisorTransportProxy,
+} from './supervisor-transport-proxy.js';
 
 describe('cacheableCityWideRead — only the two expensive city-wide reads match', () => {
   const base = 'http://127.0.0.1:9999';
@@ -59,6 +63,20 @@ describe('cacheableCityWideRead — only the two expensive city-wide reads match
 
   test('does NOT match an unrelated path', () => {
     assert.equal(matches('/v0/city/ds-research/sessions'), false);
+  });
+});
+
+describe('CITY_WIDE_READ_TTL_MS — the i60u cold-load stopgap band', () => {
+  test('sits in the 30-60s stopgap band, well above the 7-11s cold scan', () => {
+    // gascity-dashboard-i60u: the TTL must outlast a cold molecule+feed scan
+    // (7-11s) so a fresh detail load can actually serve a warm hit, and stay
+    // capped so an already-closed run root never lags more than ~a minute before
+    // it surfaces in History. A drift back toward the retired "do not exceed 5s"
+    // cap would silently reinstate the contention this stopgap fixes.
+    assert.ok(
+      CITY_WIDE_READ_TTL_MS >= 30_000 && CITY_WIDE_READ_TTL_MS <= 60_000,
+      `expected the city-wide read TTL in the 30-60s band, got ${CITY_WIDE_READ_TTL_MS}ms`,
+    );
   });
 });
 
@@ -121,5 +139,23 @@ describe('supervisorTransportProxy — single-flight coalescing for the cacheabl
       null,
       'cached response must not replay a set-cookie',
     );
+  });
+
+  test('serves a SEQUENTIAL within-TTL re-read from cache without re-hitting upstream', async () => {
+    // gascity-dashboard-i60u: the long TTL (45s) must let a SECOND, fully
+    // sequential read — fired after the first has already resolved, i.e. NOT
+    // coalesced by single-flight — be served from cache. Under the retired 3s
+    // cap a fresh detail load almost always missed; this asserts the warm-hit
+    // window the stopgap depends on.
+    upstreamCalls = 0;
+    // A city key the other tests in this block never touch: the proxy (and its
+    // cache) is created once in before(), and the 45s TTL outlives the whole
+    // suite, so reusing a warmed key would read 0 upstream calls and prove
+    // nothing. A fresh key gives a true cold-then-warm sequence.
+    const path = '/gc-supervisor/v0/city/ttl-probe-city/beads?type=molecule&all=true&limit=500';
+    const first = await fetch(proxyUrl + path).then((r) => r.json());
+    const second = await fetch(proxyUrl + path).then((r) => r.json());
+    assert.equal(upstreamCalls, 1, 'the within-TTL re-read is served from cache, not upstream');
+    assert.deepEqual(first, second);
   });
 });

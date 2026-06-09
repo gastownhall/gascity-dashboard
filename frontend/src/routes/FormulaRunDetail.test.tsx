@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FormulaRunDetailPage } from './FormulaRunDetail';
-import { invalidate } from '../api/cache';
+import { invalidate, setCached } from '../api/cache';
 import { setActiveCity } from '../api/cityBase';
 import { NowProvider } from '../contexts/NowContext';
 import { resetSupervisorApiForTests } from '../supervisor/client';
@@ -22,14 +22,9 @@ import { SupervisorApiError } from '../supervisor/errors';
 import rawFormulaRunDetailFixture from '../test/fixtures/formula-run-detail.json';
 
 const loadSupervisorFormulaRunDetail = vi.hoisted(() => vi.fn());
-const loadSupervisorRunSummaryMountSource = vi.hoisted(() => vi.fn());
 
 vi.mock('../supervisor/runDetail', () => ({
   loadSupervisorFormulaRunDetail,
-}));
-
-vi.mock('../supervisor/runSummary', () => ({
-  loadSupervisorRunSummaryMountSource,
 }));
 
 vi.mock('../hooks/useEntityLinks', () => ({
@@ -63,9 +58,7 @@ beforeEach(() => {
   invalidate('formula-run');
   invalidate('runs:summary:test-city');
   loadSupervisorFormulaRunDetail.mockReset();
-  loadSupervisorRunSummaryMountSource.mockReset();
   loadSupervisorFormulaRunDetail.mockImplementation(async () => currentDetail);
-  loadSupervisorRunSummaryMountSource.mockResolvedValue(runSummarySource());
   currentDetail = detail;
   currentDiff = diff;
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -125,9 +118,8 @@ describe('FormulaRunDetailPage', () => {
     // (gascity-dashboard-wqsk). When the operator arrives from /runs the
     // run-summary cache already holds this run's lane, so the page shows its
     // title + phase stages instantly instead of a blank spinner. Here the
-    // detail (and diff) fetch hangs while the summary resolves with a lane.
-    invalidate('runs:summary:test-city');
-    loadSupervisorRunSummaryMountSource.mockResolvedValue(runSummarySourceWithActiveLane());
+    // detail (and diff) fetch hangs while the warm summary supplies the lane.
+    setCached('runs:summary:test-city', runSummarySourceWithActiveLane());
     vi.stubGlobal(
       'fetch',
       vi.fn(() => new Promise<Response>(() => {})),
@@ -154,13 +146,12 @@ describe('FormulaRunDetailPage', () => {
     // Blocked lanes moved out of summary.lanes into blockedLanes; a blocked
     // run is the most likely one the operator clicks into, so the skeleton
     // lookup must search both buckets.
-    invalidate('runs:summary:test-city');
     const source = runSummarySourceWithActiveLane();
     if (source.status === 'error') throw new Error(source.error);
     source.data.blockedLanes = source.data.lanes;
     source.data.lanes = [];
     source.data.totalActive = 0;
-    loadSupervisorRunSummaryMountSource.mockResolvedValue(source);
+    setCached('runs:summary:test-city', source);
     vi.stubGlobal(
       'fetch',
       vi.fn(() => new Promise<Response>(() => {})),
@@ -173,6 +164,38 @@ describe('FormulaRunDetailPage', () => {
 
     expect(await screen.findByRole('list', { name: /pending adoption run stages/i })).toBeTruthy();
     expect(screen.queryByText(/^Loading formula run\.$/i)).toBeNull();
+  });
+
+  it('fires NO run-summary mount read on a cold cache, consuming a warm hit only (gascity-dashboard-i60u)', async () => {
+    // i60u cold-load stopgap: a direct/refresh load arrives with the run-summary
+    // cache cold. The detail page must NOT fire its own heavy molecule(all=true)
+    // + city-feed scan just to paint an optimistic skeleton — that read saturates
+    // the browser's ~6-conn/host pool and queues the detail's own fast reads
+    // behind it. With the cache cold (beforeEach invalidated it) the skeleton is
+    // absent and the lightweight loading state renders; no run-summary fetch is
+    // issued. The always-mounted RunSummaryProvider stays the sole owner of that
+    // key's fetch — exercised separately in runSummarySubscription.test.tsx.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        fetchUrls.push(requestUrl(input));
+        return new Promise<Response>(() => {});
+      }),
+    );
+    loadSupervisorFormulaRunDetail.mockImplementationOnce(
+      () => new Promise<FormulaRunDetail>(() => {}),
+    );
+
+    renderPage();
+
+    // Lightweight loading state, NOT the optimistic skeleton ladder.
+    expect(await screen.findByText(/^Loading formula run\.$/i)).toBeTruthy();
+    expect(screen.queryByRole('list', { name: /pending adoption run stages/i })).toBeNull();
+    // No heavy city-wide mount read (molecule history scan / city formula feed).
+    const heavyReads = fetchUrls.filter(
+      (url) => /[?&]type=molecule(&|$)/.test(url) || url.includes('/formulas/feed'),
+    );
+    expect(heavyReads).toEqual([]);
   });
 
   it('does not repeat missing formula metadata as formula detail and a partial banner', async () => {
