@@ -1,5 +1,6 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildRunSummary } from 'gas-city-dashboard-shared';
 import type { RunSummary, SourceState } from 'gas-city-dashboard-shared';
 import { invalidate } from '../api/cache';
 import { setActiveCity } from '../api/cityBase';
@@ -377,6 +378,40 @@ describe('useLiveAttentionContributors', () => {
     expect(freshFacts?.summary).toBe(fresh.status === 'error' ? undefined : fresh.data);
     expect(freshFacts?.provenance).toBe('fresh');
     expect(freshFacts?.fetchedAt).toBe('2026-06-01T00:00:00.000Z');
+  });
+
+  it('emits runs:partial through the live wiring when the run-summary source is partial (gascity-dashboard-0gww)', async () => {
+    // PR #91 MAJOR-2: the runs:partial emitter was dead in the live pipeline —
+    // it could only fire in synthetic registry tests because the live hook never
+    // carried `summary`. Post-#101/#108 the shared run-summary subscription IS
+    // the badge's source and runsFactsFromSource carries summary.lanesPartial
+    // through, so a partial live read now reaches the emitter. Drive the REAL
+    // production builder (buildRunSummary's `partial` flag, set live on a
+    // truncated/timed-out read) through the REAL projection so this path cannot
+    // silently go dead again.
+    const summary = buildRunSummary([], new Map(), true);
+    expect(summary.lanesPartial).toBe(true);
+    const partialSource: SourceState<RunSummary> = {
+      source: 'runs',
+      status: 'fresh',
+      fetchedAt: '2026-06-01T00:00:00.000Z',
+      staleAt: '2026-06-01T00:01:00.000Z',
+      error: { kind: 'none' },
+      data: summary,
+    };
+
+    const { result } = renderHook(() =>
+      useLiveAttentionContributors([], testOperator, partialSource),
+    );
+
+    await waitFor(() => {
+      const runs = composeAttention(result.current).byDomain.runs;
+      // A partial read is data degradation, not an operator-actionable signal: it
+      // lands in the unavailable tier and never inflates the badge count.
+      expect(runs.attention).toBe(0);
+      expect(runs.unavailable).toBeGreaterThanOrEqual(1);
+      expect(runs.items.map((item) => item.id)).toContain('runs:partial');
+    });
   });
 
   it('does not fetch maintainer triage before the enabled module config is loaded', async () => {
