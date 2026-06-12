@@ -300,7 +300,7 @@ function RunMetadata({ detail }: { detail: FormulaRunDetailData }) {
     <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
       <FormulaMeta formula={detail.formula} />
       {formulaDetail !== null && <Meta label="Formula Detail" value={formulaDetail} />}
-      <Meta label="Root" value={detail.rootBeadId} />
+      <RootMeta rootBeadId={detail.rootBeadId} />
       <Meta label="Scope" value={`${detail.scopeKind}:${detail.scopeRef}`} />
       <Meta label="Store" value={detail.resolvedRootStore || detail.rootStoreRef || 'unknown'} />
     </dl>
@@ -312,6 +312,25 @@ function Meta({ label, value }: { label: string; value: string }) {
     <div>
       <dt className="text-label uppercase tracking-wider text-fg-faint">{label}</dt>
       <dd className="text-body text-fg break-all tnum">{value}</dd>
+    </div>
+  );
+}
+
+// The run's root bead is also the convoy key (gascity-dashboard-caag): link it
+// to the /convoy/:rootBead page so the operator can step up from this single
+// run to the end-to-end picture of the work it belongs to.
+function RootMeta({ rootBeadId }: { rootBeadId: string }) {
+  return (
+    <div>
+      <dt className="text-label uppercase tracking-wider text-fg-faint">Root</dt>
+      <dd className="text-body break-all tnum">
+        <Link
+          to={`/convoy/${encodeURIComponent(rootBeadId)}`}
+          className="focus-mark text-fg hover:text-accent"
+        >
+          {rootBeadId}
+        </Link>
+      </dd>
     </div>
   );
 }

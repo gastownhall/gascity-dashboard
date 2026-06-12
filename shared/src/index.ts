@@ -40,6 +40,7 @@ export * from './links/build-link-view.js';
 export * from './links/instrumentation.js';
 export * from './links/node-ref.js';
 export * from './links/relation-index.js';
+export * from './convoy/projection.js';
 export * from './city.js';
 export * from './operator.js';
 export * from './operator-mail.js';

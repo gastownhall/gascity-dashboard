@@ -1,9 +1,9 @@
-import type { EntityLinkView, DashboardBead, DashboardSession } from 'gas-city-dashboard-shared';
+import type { EntityLinkView, DashboardSession } from 'gas-city-dashboard-shared';
 import { buildLinkView, buildRelationIndex, parseRef } from 'gas-city-dashboard-shared';
 import { activeCityOrThrow } from '../api/cityBase';
-import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
 import { supervisorApi } from './client';
 import { listIsIncomplete } from './listPartial';
+import { normalizeBeads } from './normalizeBead';
 import { normalizeSessions, type SupervisorSessionList } from './sessionReads';
 
 // Pre-exposure load bound (gascity-dashboard-q89b): this fetch runs once per
@@ -37,33 +37,6 @@ export async function loadSupervisorEntityLinks(ref: string): Promise<EntityLink
     supervisorFetchedAt,
     githubFetchedAt: null,
   });
-}
-
-function normalizeBeads(beads: readonly Bead[]): DashboardBead[] {
-  return beads.map(normalizeBead);
-}
-
-function normalizeBead(bead: Bead): DashboardBead {
-  const normalized: DashboardBead = {
-    id: bead.id,
-    title: bead.title,
-    status: bead.status,
-    issue_type: bead.issue_type,
-    priority: bead.priority ?? null,
-    created_at: bead.created_at,
-  };
-  if (bead.description !== undefined) normalized.description = bead.description;
-  if (bead.assignee !== undefined) normalized.assignee = bead.assignee;
-  if (Array.isArray(bead.labels)) normalized.labels = bead.labels;
-  if (bead.metadata !== undefined) normalized.metadata = bead.metadata;
-  if (bead.ref !== undefined) normalized.ref = bead.ref;
-  if (bead.parent !== undefined) normalized.parent = bead.parent;
-  if (bead.from !== undefined) normalized.from = bead.from;
-  if (bead.ephemeral !== undefined) normalized.ephemeral = bead.ephemeral;
-  if (bead.needs !== undefined) normalized.needs = bead.needs;
-  if (bead.dependencies !== undefined) normalized.dependencies = bead.dependencies;
-  if (bead.updated_at !== undefined) normalized.updated_at = bead.updated_at;
-  return normalized;
 }
 
 function sessionListIsPartial(list: SupervisorSessionList): boolean {
