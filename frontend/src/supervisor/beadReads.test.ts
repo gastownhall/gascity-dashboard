@@ -8,7 +8,11 @@ import {
   SupervisorApiError,
   type SupervisorApi,
 } from './client';
-import { fetchSupervisorBead, listSupervisorBeads } from './beadReads';
+import {
+  fetchSupervisorBead,
+  listSupervisorBeads,
+  listSupervisorBeadsAssignedTo,
+} from './beadReads';
 
 const baseApi: SupervisorApi = {
   baseUrl: '/gc-supervisor',
@@ -178,6 +182,33 @@ describe('supervisor bead reads', () => {
 
     await expect(fetchSupervisorBead('rc-decision')).rejects.toMatchObject({ status: 503 });
     expect(listBeads).not.toHaveBeenCalled();
+  });
+
+  it('does not flag the assigned-bead union partial when assignees merely share a bead', async () => {
+    // Each leg is complete (total === its own page) but both legs return the
+    // same bead. The union dedups to one item; a summed-total-vs-deduped-count
+    // check would false-trip partial. Per-leg incompleteness must not.
+    const shared = bead({ id: 'td-shared' });
+    const listBeads = vi.fn(async () => ({ items: [shared], total: 1 }));
+    setSupervisorApiForTests({ ...baseApi, listBeads });
+
+    const result = await listSupervisorBeadsAssignedTo(['a', 'b']);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.partial).toBe(false);
+  });
+
+  it('flags the assigned-bead union partial when any single leg was truncated', async () => {
+    const listBeads = vi.fn(async (_city: string, query?: { assignee?: string }) =>
+      query?.assignee === 'a'
+        ? { items: [bead({ id: 'td-a' })], total: 9 }
+        : { items: [bead({ id: 'td-b' })], total: 1 },
+    );
+    setSupervisorApiForTests({ ...baseApi, listBeads });
+
+    const result = await listSupervisorBeadsAssignedTo(['a', 'b']);
+
+    expect(result.partial).toBe(true);
   });
 });
 

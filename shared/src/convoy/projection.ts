@@ -1,8 +1,6 @@
 import type { DashboardBead } from '../dashboard-beads.js';
-import {
-  resolveRunFormulaIdentity,
-  type ResolvedRunFormulaIdentity,
-} from '../runs/formula-name.js';
+import type { RunFormulaSource } from '../run-detail.js';
+import { resolveRunFormulaIdentity } from '../runs/formula-name.js';
 
 // Dashboard-owned projection of a convoy (an end-to-end unit of work keyed by a
 // root bead) into the shape the /convoy/:rootBead route renders. It composes a
@@ -13,6 +11,8 @@ import {
 
 const CLOSED_STATUS = 'closed';
 const GRAPH_V2_CONTRACT = 'graph.v2';
+const FORMULA_CONTRACT_KEY = 'gc.formula_contract';
+const RUN_TARGET_KEY = 'gc.run_target';
 
 export interface ConvoyStep {
   bead: DashboardBead;
@@ -27,6 +27,19 @@ export interface ConvoyStep {
  * hole (the supervisor collapses graph.v2 run snapshots to the root bead, so
  * step nodes are not reconstructable — tracked by gascity-dashboard-jl3c);
  * `no_children` is a genuine leaf with nothing below it.
+ *
+ * The graph.v2 classification requires BOTH `gc.formula_contract=graph.v2` AND
+ * `gc.run_target` — the same contract+target gate `resolveRunFormulaName` uses
+ * (formula-name.ts): only a fully-instantiated runnable root carries both.
+ * A childless bead that has the contract label but no target (e.g. a stray
+ * label on a non-run bead) is a genuine leaf, so it reports `no_children`
+ * rather than the misleading "supervisor does not expose this run's step graph".
+ *
+ * Unlike the name fallback there, this gate intentionally does NOT also exclude
+ * terminal-status roots: a completed graph.v2 run's steps are just as unexposed
+ * as a running one's, so `graph_v2_root_only` stays the honest reason for it.
+ * (The name fallback excludes terminal roots only to avoid trusting a retitled
+ * closed root's title as a formula name — a different concern.)
  */
 export type ConvoyCollapseReason = 'graph_v2_root_only' | 'no_children';
 
@@ -44,7 +57,13 @@ export interface ConvoyView {
   root: DashboardBead;
   /** Formula driving the convoy, when the root carries it. */
   formulaName: string | null;
-  formulaNameProvenance: ResolvedRunFormulaIdentity['source'];
+  /**
+   * Provenance of `formulaName`. Route-mode resolution only ever yields
+   * `metadata` (explicit `gc.formula`) or `title_fallback` (graph.v2 gate) —
+   * the `formula_detail` source is unreachable without a detail fetch — so the
+   * type is the narrower `RunFormulaSource`, not the full identity source.
+   */
+  formulaNameProvenance: RunFormulaSource | null;
   /** Live worker session name while the root is in flight, else null. */
   sessionName: string | null;
   /** Step completion. Supervisor count when available, else derived from the graph. */
@@ -73,7 +92,9 @@ export function projectConvoyView(
     rootBeadId: root.id,
     root,
     formulaName: identity.name,
-    formulaNameProvenance: identity.source,
+    // `formula_detail` is unreachable in route mode (see the field doc); the
+    // guard narrows the type to `RunFormulaSource | null` without a cast.
+    formulaNameProvenance: identity.source === 'formula_detail' ? null : identity.source,
     sessionName: metaString(root, 'gc.session_name') ?? null,
     progress,
     exposure,
@@ -85,11 +106,10 @@ function computeExposure(
   children: readonly DashboardBead[],
 ): ConvoyStepExposure {
   if (children.length === 0) {
-    const reason: ConvoyCollapseReason =
-      metaString(root, 'gc.formula_contract') === GRAPH_V2_CONTRACT
-        ? 'graph_v2_root_only'
-        : 'no_children';
-    return { kind: 'collapsed', reason };
+    const isGraphV2Run =
+      metaString(root, FORMULA_CONTRACT_KEY) === GRAPH_V2_CONTRACT &&
+      metaString(root, RUN_TARGET_KEY) !== undefined;
+    return { kind: 'collapsed', reason: isGraphV2Run ? 'graph_v2_root_only' : 'no_children' };
   }
   const statusById = new Map<string, string>([[root.id, root.status]]);
   for (const child of children) statusById.set(child.id, child.status);

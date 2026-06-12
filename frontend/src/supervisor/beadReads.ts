@@ -6,6 +6,7 @@ import type {
 import { isResolvedStatus } from 'gas-city-dashboard-shared';
 import { activeCityOrThrow } from '../api/cityBase';
 import { SupervisorApiError, supervisorApi } from './client';
+import { listIsIncomplete } from './listPartial';
 
 export type SupervisorBead = Bead;
 
@@ -15,6 +16,13 @@ export interface SupervisorBeadList extends Omit<ListBodyBead, 'items' | 'total'
   upstream_total?: number;
   upstream_fetched: number;
   fetch_limit: number;
+  /**
+   * The bounded read did not return the full result set — the supervisor
+   * flagged it partial, reported a `next_cursor`, or its total outran the page.
+   * Derived once here via the shared `listIsIncomplete` predicate so every
+   * caller sees cursor-based truncation, not just the total-vs-fetched case.
+   */
+  partial: boolean;
 }
 
 export interface ListSupervisorBeadsOptions {
@@ -71,6 +79,7 @@ export async function listSupervisorBeads(
     ...(upstreamTotal === undefined ? {} : { upstream_total: upstreamTotal }),
     upstream_fetched: items.length,
     fetch_limit: limit,
+    partial: listIsIncomplete(list, items.length),
   };
 }
 
@@ -88,6 +97,7 @@ export async function listSupervisorBeadsAssignedTo(
       total: 0,
       upstream_fetched: 0,
       fetch_limit: limit,
+      partial: false,
     };
   }
   const lists = await Promise.all(
@@ -107,6 +117,11 @@ export async function listSupervisorBeadsAssignedTo(
     ...(upstreamTotal === undefined ? {} : { upstream_total: upstreamTotal }),
     upstream_fetched: items.length,
     fetch_limit: limit,
+    // Truncation is per-leg: each assignee query is its own bounded read, so the
+    // union is incomplete iff any leg is. Checking legs individually avoids
+    // comparing a SUMMED total against the DEDUPED `items.length`, which would
+    // false-trip whenever assignees share a bead.
+    partial: lists.some((leg) => listIsIncomplete(leg, (leg.items ?? []).length)),
   };
 }
 

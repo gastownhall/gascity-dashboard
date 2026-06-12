@@ -29,6 +29,7 @@ function list(items: Bead[], extra: Partial<SupervisorBeadList> = {}): Superviso
     total: items.length,
     upstream_fetched: items.length,
     fetch_limit: 1000,
+    partial: false,
     ...extra,
   };
 }
@@ -85,11 +86,12 @@ describe('loadConvoyView', () => {
     expect(load.view.exposure).toEqual({ kind: 'collapsed', reason: 'graph_v2_root_only' });
   });
 
-  it('flags partial when the upstream total exceeds the bounded fetch window', async () => {
+  it('propagates the list read partial flag (cursor- or total-based truncation)', async () => {
     mockFetchSupervisorBead.mockResolvedValue(bead('root'));
-    mockListSupervisorBeads.mockResolvedValue(
-      list([bead('root')], { upstream_total: 5000, upstream_fetched: 1000 }),
-    );
+    // listSupervisorBeads folds next_cursor / partial / total>fetched into one
+    // `partial` flag (listIsIncomplete); the loader trusts it rather than
+    // re-deriving from upstream_total, so cursor truncation is not missed.
+    mockListSupervisorBeads.mockResolvedValue(list([bead('root')], { partial: true }));
 
     const load = await loadConvoyView('root');
 

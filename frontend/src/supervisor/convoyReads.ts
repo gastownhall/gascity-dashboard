@@ -7,16 +7,34 @@ import { normalizeBead, normalizeBeads } from './normalizeBead';
 //
 // It COMPOSES the generated supervisor client — the root bead plus a bounded
 // city bead read — and derives the convoy's step graph client-side from the
-// `parent` chain, exactly as the Beads board inverts `needs`. The dashboard's
-// generated client exposes no convoy/{id} or beads/graph/{root} endpoint, so
-// there is no supervisor progress count to prefer: `projectConvoyView` derives
-// progress from the materialized children, and a graph.v2 root with no exposed
-// children collapses to the honest "steps not exposed" state in the projection.
+// `parent` chain, exactly as the Beads board inverts `needs`.
+//
+// Why the derived path, not the supervisor's convoy/{id} or beads/graph/{root}
+// endpoints (both DO exist on the generated client — gascity-dashboard-y6v3):
+// neither yields usable data for the graph.v2 workflow roots this route is
+// reached with (linked only from a run's RootMeta, i.e. a run root bead).
+// Verified against a live city:
+//   * convoy/{id} is keyed by a convoy ENTITY id, not a root bead id — calling
+//     it with a run root returns the workflow-snapshot case, which carries no
+//     `progress` field (and the generated `ConvoyGetResponse` does not model
+//     that case); a plain bead 404s "is not a convoy". Convoy progress is only
+//     populated for non-workflow convoy entities the /convoy/:rootBead route
+//     never addresses.
+//   * beads/graph/{root} collapses graph.v2 snapshots to the root bead alone
+//     (the same upstream hole tracked by gascity-dashboard-jl3c), so it returns
+//     no step children the parent-chain scan does not — and it is slow.
+// So there is no supervisor progress count to prefer: `projectConvoyView`
+// derives progress from the materialized children, and a graph.v2 root with no
+// exposed children collapses to the honest "steps not exposed" state. The
+// authoritative graph.v2 step graph lives in the workflow snapshot
+// (WorkflowSnapshotResponse) — wiring it here is the jl3c redesign, out of
+// scope for this loader. Because the route composes only the already-allowed
+// `beads` and `bead/{id}` reads, it works under DASHBOARD_READONLY=1 as-is.
 //
 // Truncation is honest: a busy city's closed beads can exceed one bounded page,
-// so `partial` trips when the supervisor's reported total outruns the bounded
-// read and the route renders a partial notice rather than silently dropping
-// steps.
+// so `partial` trips when the bounded read is incomplete (the supervisor flags
+// it, returns a `next_cursor`, or its total outruns the page) and the route
+// renders a partial notice rather than silently dropping steps.
 
 // Convoy step beads are bookkeeping-typed and frequently closed, so the read
 // must include both — unlike the board's default open/engineering view.
@@ -25,11 +43,9 @@ const CONVOY_FETCH_LIMIT = 1_000;
 export interface ConvoyLoad {
   view: ConvoyView;
   partial: boolean;
-  fetchedAt: string;
 }
 
 export async function loadConvoyView(rootBeadId: string): Promise<ConvoyLoad> {
-  const fetchedAt = new Date().toISOString();
   const root = normalizeBead(await fetchSupervisorBead(rootBeadId));
   const list = await listSupervisorBeads({
     includeClosed: true,
@@ -38,16 +54,9 @@ export async function loadConvoyView(rootBeadId: string): Promise<ConvoyLoad> {
   });
   const beads = normalizeBeads(list.items);
   const children = descendantsOf(root.id, beads);
-  // Truncation signal: the supervisor reported more beads than the bounded read
-  // returned. This caller applies no post-fetch filtering (includeClosed +
-  // includeBookkeeping), so upstream_fetched is the full wire page and the
-  // comparison cleanly reflects a cut-off fetch window — a descendant could sit
-  // past it, so the route shows a partial notice rather than implying coverage.
-  const partial = list.upstream_total !== undefined && list.upstream_total > list.upstream_fetched;
   return {
     view: projectConvoyView(root, children, null),
-    partial,
-    fetchedAt,
+    partial: list.partial,
   };
 }
 

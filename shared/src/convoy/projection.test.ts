@@ -98,6 +98,20 @@ describe('projectConvoyView', () => {
     assert.equal(view.progress, null);
   });
 
+  test('reports no_children for a graph.v2-labelled root that lacks gc.run_target', () => {
+    // Same gate as resolveRunFormulaName (formula-name.ts): the contract label
+    // without a target is not a runnable root (e.g. an operator-retitled closed
+    // root), so a childless one is a genuine leaf — not the misleading
+    // "supervisor does not expose this run's step graph" collapse.
+    const root = bead('root', {
+      status: 'closed',
+      title: 'investigation: some bug',
+      metadata: { 'gc.formula_contract': 'graph.v2' },
+    });
+    const view = projectConvoyView(root, [], null);
+    assert.deepEqual(view.exposure, { kind: 'collapsed', reason: 'no_children' });
+  });
+
   test('resolves the formula name and its provenance from the root', () => {
     const view = projectConvoyView(
       bead('root', { metadata: { 'gc.formula': 'mol-pr-start' } }),

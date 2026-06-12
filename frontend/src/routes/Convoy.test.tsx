@@ -60,7 +60,6 @@ function loadFixture(
   return {
     view: projectConvoyView(root, children, null),
     partial,
-    fetchedAt: '2026-06-12T00:00:00Z',
   };
 }
 
@@ -149,6 +148,34 @@ describe('ConvoyPage', () => {
     renderConvoy();
 
     expect(await screen.findByText('inferred from bead title')).toBeTruthy();
+  });
+
+  it('shows the partial-convoy notice when the bounded city read was truncated', async () => {
+    const root = bead('root', {
+      status: 'in_progress',
+      metadata: { 'gc.formula': 'mol-pr-start' },
+    });
+    const children = [bead('a', { title: 'plan', status: 'closed', parent: 'root' })];
+    mockLoadConvoyView.mockResolvedValue(loadFixture(root, children, true));
+
+    renderConvoy();
+
+    // Steps still render; the notice warns coverage may be incomplete rather
+    // than implying the truncated read is the whole graph.
+    expect(await screen.findByText('plan')).toBeTruthy();
+    expect(screen.getByText(/Partial convoy: the city bead read was truncated/i)).toBeTruthy();
+  });
+
+  it('omits the partial notice when the read was complete', async () => {
+    const root = bead('root', { metadata: { 'gc.formula': 'mol-pr-start' } });
+    mockLoadConvoyView.mockResolvedValue(
+      loadFixture(root, [bead('a', { title: 'plan', parent: 'root' })], false),
+    );
+
+    renderConvoy();
+
+    expect(await screen.findByText('plan')).toBeTruthy();
+    expect(screen.queryByText(/Partial convoy/i)).toBeNull();
   });
 
   it('renders an honest not-found state for a missing root bead', async () => {

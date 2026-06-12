@@ -265,6 +265,16 @@ describe('FormulaRunDetailPage', () => {
     ]);
   });
 
+  it('links the run Root bead to its /convoy/:rootBead page', async () => {
+    // gascity-dashboard-caag: the run root is also the convoy key, so the Root
+    // meta cell steps up from this single run to the end-to-end convoy page.
+    renderPage();
+    await screen.findByRole('heading', { name: /adopt pr #42/i });
+
+    const rootLink = screen.getByRole('link', { name: detail.rootBeadId });
+    expect(rootLink.getAttribute('href')).toBe(`/convoy/${encodeURIComponent(detail.rootBeadId)}`);
+  });
+
   it('starts with no selected node and toggles exactly one selected node', async () => {
     renderPage();
     await screen.findByRole('heading', { name: /adopt pr #42/i });
