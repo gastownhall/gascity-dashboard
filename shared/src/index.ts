@@ -33,6 +33,7 @@ export * from './runs/runtime-state.js';
 export * from './runs/session-link.js';
 export * from './runs/summary.js';
 export * from './runs/status.js';
+export * from './runs/stranded.js';
 export * from './bead-id.js';
 export * from './links.js';
 export * from './links/build-link-view.js';

@@ -633,10 +633,15 @@ function enrichRunSummary(
   source: SourceAvailableState<RunSummary>,
   sessionsLookup: RunSessionsLookup,
 ): RunSummary {
-  // gascity-dashboard-4xcv: blocked lanes are enriched alongside active
-  // ones so they carry derived health (needsOperator) for the attention
-  // layer, then split back out — they are not part of the Active set.
-  const inFlight = [...source.data.lanes, ...source.data.blockedLanes];
+  // gascity-dashboard-4xcv / -pxvb: blocked AND stranded lanes are enriched
+  // alongside active ones so they carry derived health (needsOperator,
+  // health.status for the attention layer), then split back out — neither is
+  // part of the Active set.
+  const inFlight = [
+    ...source.data.lanes,
+    ...source.data.blockedLanes,
+    ...source.data.strandedLanes,
+  ];
   const state = progressStateByCity.get(cityName);
   const generationMs = Date.parse(source.fetchedAt);
   let marks = state?.marks ?? new Map<string, LaneProgressMark>();
@@ -653,8 +658,19 @@ function enrichRunSummary(
     marks,
   });
 
-  const blockedLanes = lanes.filter((lane) => lane.phase === 'blocked');
-  const activeEnriched = lanes.filter((lane) => lane.phase !== 'blocked');
+  // gascity-dashboard-pxvb: re-split with stranded precedence so every lane
+  // lands in exactly one partition. Stranded is keyed on `registration`, not
+  // `phase` (an orphan's all-open steps map it to phase 'intake'), so it must be
+  // filtered out of both the blocked and active sets here.
+  const strandedEnriched = lanes.filter(
+    (lane) => lane.registration === 'stranded' && lane.phase !== 'complete',
+  );
+  const blockedLanes = lanes.filter(
+    (lane) => lane.phase === 'blocked' && lane.registration !== 'stranded',
+  );
+  const activeEnriched = lanes.filter(
+    (lane) => lane.phase !== 'blocked' && lane.registration !== 'stranded',
+  );
 
   // gascity-dashboard-s4rp: sessions only resolve here at enrichment, so this is
   // the earliest seam with enough information to demote stale session-less
@@ -667,6 +683,16 @@ function enrichRunSummary(
   const liveActive = activeEnriched.filter(
     (lane) => !isStaleSessionlessLatch(lane, generationMs, sessionsAvailable),
   );
+  // gascity-dashboard-pxvb: a stranded lane is sessionless with no in_progress
+  // step, so the same stale-latch demotion applies — documented precedence on
+  // isStrandedRun: a day-old orphan leaves the board with the rest of the stale
+  // latches rather than accumulating in the Stranded section forever.
+  const liveStranded = strandedEnriched.filter(
+    (lane) => !isStaleSessionlessLatch(lane, generationMs, sessionsAvailable),
+  );
+  // Stranded runs never executed and never will, so they are excluded from the
+  // in-flight census entirely (byPhase / totalInFlight) — the bug pxvb fixes was
+  // exactly the orphan counting as live work. Only liveActive + blocked count.
   const census = buildCensus([...liveActive, ...blockedLanes]);
 
   // gascity-dashboard: `lanes` carries the FULL active set; RunMap owns the
@@ -677,7 +703,8 @@ function enrichRunSummary(
     totalActive: liveActive.length,
     lanes: liveActive,
     blockedLanes,
-    runCounts: runCounts(liveActive, liveActive.length, blockedLanes.length),
+    strandedLanes: liveStranded,
+    runCounts: runCounts(liveActive, liveActive.length, blockedLanes.length, liveStranded.length),
     census: { status: 'available', data: census },
   };
 }

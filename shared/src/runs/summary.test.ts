@@ -770,13 +770,37 @@ describe('buildRunSummary — orphaned molecules carry a stranded registration (
 
   test('absent from a complete feed observation → registration stranded', () => {
     const summary = buildRunSummary(orphanGroup('gc-odssky'), new Map(), false, observation([]));
-    const lane = summary.lanes.find((l) => l.id === 'gc-odssky');
+    // gascity-dashboard-pxvb: a stranded lane is partitioned out of Active into
+    // its own bucket — it must NOT appear in `lanes` or count as live work.
+    const lane = summary.strandedLanes.find((l) => l.id === 'gc-odssky');
     assert.ok(lane);
     assert.equal(lane.registration, 'stranded');
+    assert.equal(
+      summary.lanes.some((l) => l.id === 'gc-odssky'),
+      false,
+    );
     // The false-alive part of the repro: the orphan must never read as a
     // mid-run stage.
     assert.equal(lane.phase, 'intake');
     assert.notEqual(lane.phaseLabel.toLowerCase(), 'implementation');
+  });
+
+  // gascity-dashboard-pxvb: the orphan never executed, so it must stop counting
+  // as live work in the Active set and surface in its own partition + count.
+  test('stranded lane is excluded from Active and counted separately', () => {
+    const summary = buildRunSummary(
+      [...orphanGroup('gc-odssky'), ...activeRun('run-1')],
+      new Map(),
+      false,
+      observation([]),
+    );
+    assert.equal(summary.totalActive, 1);
+    assert.equal(summary.lanes.length, 1);
+    assert.equal(summary.lanes[0]?.id, 'run-1');
+    assert.equal(summary.strandedLanes.length, 1);
+    assert.equal(summary.strandedLanes[0]?.id, 'gc-odssky');
+    assert.equal(summary.runCounts.stranded, 1);
+    assert.equal(summary.runCounts.total, 1);
   });
 
   test('present in the feed observation → registered', () => {

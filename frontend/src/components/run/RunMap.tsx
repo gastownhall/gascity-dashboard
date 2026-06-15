@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   MAX_VISIBLE_ACTIVE_LANES,
   selectBlockedRuns,
+  selectStrandedRuns,
   type RunHistory,
   type RunLane,
   type RunSummary,
@@ -105,6 +106,11 @@ export function RunMap({
         now={now}
         {...(attentionSeverity === undefined ? {} : { attentionSeverity })}
       />
+      <StrandedSection
+        summary={summary}
+        now={now}
+        {...(attentionSeverity === undefined ? {} : { attentionSeverity })}
+      />
       {showHistory && (
         <HistoricalSection
           history={reconciledHistory}
@@ -133,10 +139,17 @@ export function RunMap({
  * pre-split single summary maintained continuously.
  */
 function reconcileHistory(history: RunHistory, summary: RunSummary): RunHistory {
-  if (summary.lanes.length === 0 && summary.blockedLanes.length === 0) return history;
+  if (
+    summary.lanes.length === 0 &&
+    summary.blockedLanes.length === 0 &&
+    summary.strandedLanes.length === 0
+  ) {
+    return history;
+  }
   const liveIds = new Set<string>();
   for (const lane of summary.lanes) liveIds.add(lane.id);
   for (const lane of summary.blockedLanes) liveIds.add(lane.id);
+  for (const lane of summary.strandedLanes) liveIds.add(lane.id);
   const lanes = history.lanes.filter((lane) => !liveIds.has(lane.id));
   if (lanes.length === history.lanes.length) return history;
   return {
@@ -327,6 +340,52 @@ function BlockedSection({
   );
 }
 
+/** Stranded runs (gascity-dashboard-pxvb). An orphaned molecule that never
+ *  executed and never will — partitioned out of Active alongside Blocked so it
+ *  stops reading as live work, but kept on the page in its own labeled section
+ *  because it is the state most needing an operator action (clean up /
+ *  re-dispatch). Hidden entirely when nothing is stranded: the calm room does
+ *  not announce the absence of trouble. Mirrors BlockedSection. */
+function StrandedSection({
+  summary,
+  now,
+  attentionSeverity,
+}: {
+  summary: RunSummary;
+  now: number;
+  attentionSeverity?: (lane: RunLane) => BadgeSeverity | null;
+}) {
+  // gascity-dashboard-pxvb: selectStrandedRuns is the SAME selector the nav
+  // badge counts, so the header count here and the badge number are one number.
+  // Each row carries why-stranded + how-to-resolve (LaneCard `stranded`), so the
+  // destination is a path to action, not just a list.
+  const detailById = new Map(selectStrandedRuns(summary.strandedLanes).map((run) => [run.id, run]));
+  if (detailById.size === 0) return null;
+  return (
+    <section aria-label="Stranded runs" className="mt-12">
+      <h2 className="text-label uppercase tracking-wider text-fg-faint tnum">
+        Stranded ({detailById.size})
+      </h2>
+      <ol className="mt-3 divide-y divide-rule">
+        {summary.strandedLanes.map((lane) => {
+          const detail = detailById.get(lane.id);
+          return (
+            <LaneCard
+              key={lane.id}
+              lane={lane}
+              now={now}
+              {...(attentionSeverity === undefined
+                ? {}
+                : { attentionSeverity: attentionSeverity(lane) })}
+              {...(detail === undefined ? {} : { stranded: detail })}
+            />
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 // Header-first: the historical section renders from the lazy history source,
 // with explicit loading / unavailable / partial states of its own. The summary's
 // lanesPartial never speaks for history, and vice versa — each signal flags only
@@ -467,6 +526,7 @@ function CountsHeader({ summary }: { summary: RunSummary | null }) {
   // surface via the toggle button in the page header, not here.
   const total = summary?.runCounts.total ?? 0;
   const blocked = summary?.runCounts.blocked ?? 0;
+  const stranded = summary?.runCounts.stranded ?? 0;
   return (
     <header className="space-y-2">
       <div className="flex items-baseline gap-x-6 gap-y-2 flex-wrap">
@@ -475,6 +535,7 @@ function CountsHeader({ summary }: { summary: RunSummary | null }) {
           <CountTile key={key} label={label} value={summary?.runCounts[key] ?? 0} tone="muted" />
         ))}
         {blocked > 0 && <CountTile label="Blocked" value={blocked} tone="muted" />}
+        {stranded > 0 && <CountTile label="Stranded" value={stranded} tone="muted" />}
       </div>
     </header>
   );

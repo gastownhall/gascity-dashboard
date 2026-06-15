@@ -153,6 +153,31 @@ function blockedLane(id: string): RunLane {
   return { ...activeLane(id), title: `Blocked run ${id}`, phase: 'blocked', phaseLabel: 'blocked' };
 }
 
+function strandedLane(id: string): RunLane {
+  return {
+    ...activeLane(id),
+    title: `Stranded run ${id}`,
+    phase: 'intake',
+    phaseLabel: 'intake',
+    registration: 'stranded',
+  };
+}
+
+function strandedSummarySource(strandedLanes: RunLane[]): SourceState<RunSummary> {
+  return {
+    source: 'runs',
+    status: 'fresh',
+    fetchedAt: '2026-05-24T12:00:00Z',
+    staleAt: '2026-05-24T12:01:00Z',
+    error: { kind: 'none' },
+    data: {
+      ...emptyRunSummary(),
+      strandedLanes,
+      runCounts: { ...emptyRunSummary().runCounts, stranded: strandedLanes.length },
+    },
+  };
+}
+
 function makeActiveLanes(count: number): RunLane[] {
   return Array.from({ length: count }, (_, i) => activeLane(`gc-active-${i}`));
 }
@@ -203,6 +228,40 @@ function renderActive(lanes: RunLane[]) {
     </MemoryRouter>,
   );
 }
+
+describe('RunMap stranded section (gascity-dashboard-pxvb)', () => {
+  it('renders stranded lanes in their own labeled section with a count and remedy', () => {
+    renderRunMap(strandedSummarySource([strandedLane('gc-odssky')]), undefined);
+
+    const section = screen.getByRole('region', { name: /stranded runs/i });
+    expect(within(section).getByText(/Stranded \(1\)/)).toBeTruthy();
+    expect(within(section).getByText(/Stranded run gc-odssky/)).toBeTruthy();
+    // The operator remedy (selectStrandedRuns) makes the row actionable.
+    expect(within(section).getByText(/re-dispatch/i)).toBeTruthy();
+  });
+
+  it('shows a Stranded count tile in the header and omits the section when empty', () => {
+    const { rerender } = renderRunMap(
+      strandedSummarySource([strandedLane('gc-odssky')]),
+      undefined,
+    );
+    expect(screen.getByText('Stranded')).toBeTruthy();
+
+    rerender(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <RunMap
+          source={strandedSummarySource([])}
+          now={Date.parse('2026-05-24T12:01:00Z')}
+          showHistory={true}
+          history={undefined}
+          historyLoading={false}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('region', { name: /stranded runs/i })).toBeNull();
+    expect(screen.queryByText('Stranded')).toBeNull();
+  });
+});
 
 describe('RunMap active expand-in-place (lane-cap expander)', () => {
   it('collapses to MAX_VISIBLE_ACTIVE_LANES with a Show-more toggle, no static footnote', () => {

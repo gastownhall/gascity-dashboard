@@ -23,6 +23,14 @@ interface LaneCardProps {
    * do) rather than just "blocked". Derived by selectBlockedRuns.
    */
   blocked?: { reason: string; remedy: string };
+  /**
+   * gascity-dashboard-pxvb: the operator's next step for an orphaned run, shown
+   * only in the Stranded section. The why-stranded line is already part of every
+   * stranded lane's body (below); this adds the how-to-resolve remedy so the
+   * Stranded section reads as actionable, mirroring the Blocked section. Derived
+   * by selectStrandedRuns.
+   */
+  stranded?: { reason: string; remedy: string };
 }
 
 /**
@@ -44,12 +52,18 @@ function phaseLabelTone(phase: RunLane['phase']): 'text-accent' | 'text-fg-muted
   return 'text-fg';
 }
 
-export function LaneCard({ lane, now, attentionSeverity = null, blocked }: LaneCardProps) {
+export function LaneCard({
+  lane,
+  now,
+  attentionSeverity = null,
+  blocked,
+  stranded,
+}: LaneCardProps) {
   // gascity-dashboard-uxvk: an orphaned molecule (no supervisor workflow
   // record, never executed) must not read as a live run. Stranded lanes swap
   // the phase label for a glyph + word and the stage ladder for an
   // explanation — a run that never started has no live stage to show.
-  const stranded = lane.registration === 'stranded';
+  const isStranded = lane.registration === 'stranded';
   const statusEntries = Object.entries(lane.statusCounts).sort((a, b) =>
     statusSortKey(a[0]).localeCompare(statusSortKey(b[0])),
   );
@@ -63,7 +77,7 @@ export function LaneCard({ lane, now, attentionSeverity = null, blocked }: LaneC
     >
       <div className="flex items-baseline justify-between gap-4">
         <span className={`text-label uppercase tracking-wider ${phaseLabelTone(lane.phase)}`}>
-          {stranded ? (
+          {isStranded ? (
             <>
               <span aria-hidden="true">(!)</span> stranded
             </>
@@ -107,7 +121,7 @@ export function LaneCard({ lane, now, attentionSeverity = null, blocked }: LaneC
         </div>
       )}
 
-      {stranded ? (
+      {isStranded ? (
         <p className="mt-2 text-body text-fg-muted leading-snug">
           Dispatched but never registered with the supervisor, likely a supervisor restart or crash
           at dispatch time. This run never executed.
@@ -145,6 +159,13 @@ export function LaneCard({ lane, now, attentionSeverity = null, blocked }: LaneC
           </p>
           <p className="mt-1 text-body text-fg-muted leading-snug">{blocked.remedy}</p>
         </div>
+      )}
+
+      {/* gascity-dashboard-pxvb: the why-stranded line is already rendered above
+          (the orphan explanation replaces the stage ladder); the Stranded
+          section adds only the operator remedy so the row reads as actionable. */}
+      {stranded !== undefined && (
+        <p className="mt-2 text-body text-fg-muted leading-snug">{stranded.remedy}</p>
       )}
     </li>
   );

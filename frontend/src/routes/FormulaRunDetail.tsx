@@ -136,9 +136,14 @@ export function FormulaRunDetailPage() {
     const runsData =
       warmRunSummary && warmRunSummary.status !== 'error' ? warmRunSummary.data : null;
     if (runsData === null || runsData === undefined) return null;
-    // gascity-dashboard-4xcv: blocked lanes live in their own bucket now, and
-    // a blocked run is the most likely one the operator clicks into.
-    return [...runsData.lanes, ...runsData.blockedLanes].find((lane) => lane.id === runId) ?? null;
+    // gascity-dashboard-4xcv / -pxvb: blocked and stranded lanes live in their
+    // own buckets now; a blocked or stranded run is a likely click target (the
+    // operator opens a stranded run to clean it up), so search all three sets.
+    return (
+      [...runsData.lanes, ...runsData.blockedLanes, ...runsData.strandedLanes].find(
+        (lane) => lane.id === runId,
+      ) ?? null
+    );
   }, [warmRunSummary, runId]);
 
   const synopsis = detail

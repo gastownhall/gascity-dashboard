@@ -72,10 +72,24 @@ export function buildRunSummary(
   // Header-first restructure: completed lanes are DROPPED here, not carried.
   // They are the lazy history read's payload (buildRunHistory) so the default
   // refresh never pays the closed-history fan-out for them.
-  const activeLanes = sortedLanes.filter(
-    (lane) => lane.phase !== 'complete' && lane.phase !== 'blocked',
+  // gascity-dashboard-pxvb: stranded lanes (orphaned molecules that never
+  // executed) are partitioned out of Active alongside blocked. Stranded is
+  // keyed on `registration`, not `phase` — an orphan's steps are all open, so
+  // it maps to phase 'intake' and would otherwise count as live work. It takes
+  // precedence over the blocked/active phase split so every lane lands in
+  // exactly one partition (a stranded run has all-open steps, so it is never
+  // also blocked — but the explicit precedence keeps the partition disjoint
+  // regardless of how mapRunPhase classifies a degenerate group).
+  const strandedLanes = sortedLanes.filter(
+    (lane) => lane.registration === 'stranded' && lane.phase !== 'complete',
   );
-  const blockedLanes = sortedLanes.filter((lane) => lane.phase === 'blocked');
+  const activeLanes = sortedLanes.filter(
+    (lane) =>
+      lane.phase !== 'complete' && lane.phase !== 'blocked' && lane.registration !== 'stranded',
+  );
+  const blockedLanes = sortedLanes.filter(
+    (lane) => lane.phase === 'blocked' && lane.registration !== 'stranded',
+  );
 
   // gascity-dashboard-s4rp: `lanes` carries the FULL active set, not a capped
   // window. Session-less-latch demotion (enrichRunSummary) is session-aware and
@@ -86,9 +100,15 @@ export function buildRunSummary(
   // mirroring the historical section — so the wire is never pre-capped.
   const summary: RunSummary = {
     totalActive: activeLanes.length,
-    runCounts: runCounts(activeLanes, activeLanes.length, blockedLanes.length),
+    runCounts: runCounts(
+      activeLanes,
+      activeLanes.length,
+      blockedLanes.length,
+      strandedLanes.length,
+    ),
     lanes: activeLanes,
     blockedLanes,
+    strandedLanes,
     recentChanges: recentChanges(laneIssues),
     census: runCensusUnavailable(),
   };
@@ -172,7 +192,12 @@ function isRunGroup(rootId: string, issues: RunIssue[]): boolean {
   );
 }
 
-export function runCounts(lanes: RunLane[], visible: number, blocked: number): RunCounts {
+export function runCounts(
+  lanes: RunLane[],
+  visible: number,
+  blocked: number,
+  stranded: number,
+): RunCounts {
   const counts: RunCounts = {
     total: lanes.length,
     visible,
@@ -180,6 +205,7 @@ export function runCounts(lanes: RunLane[], visible: number, blocked: number): R
     designReview: 0,
     bugfix: 0,
     blocked,
+    stranded,
     other: 0,
   };
 
@@ -499,10 +525,12 @@ export function emptyRunSummary(): RunSummary {
       designReview: 0,
       bugfix: 0,
       blocked: 0,
+      stranded: 0,
       other: 0,
     },
     lanes: [],
     blockedLanes: [],
+    strandedLanes: [],
     recentChanges: [],
     census: runCensusUnavailable(),
   };

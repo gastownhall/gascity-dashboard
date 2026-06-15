@@ -173,6 +173,7 @@ function runSource({
     data: {
       totalActive: lanes.length,
       blockedLanes: [],
+      strandedLanes: [],
       runCounts: {
         total: lanes.length,
         visible: lanes.length,
@@ -180,6 +181,7 @@ function runSource({
         designReview: 0,
         bugfix: 0,
         blocked: 0,
+        stranded: 0,
         other: 0,
       },
       lanes,

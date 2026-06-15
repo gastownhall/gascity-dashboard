@@ -16,7 +16,11 @@ import type {
   Message,
   TypedEventStreamEnvelope,
 } from 'gas-city-dashboard-shared/gc-supervisor';
-import { selectAgentsNeedingYou, selectBlockedRuns } from 'gas-city-dashboard-shared';
+import {
+  selectAgentsNeedingYou,
+  selectBlockedRuns,
+  selectStrandedRuns,
+} from 'gas-city-dashboard-shared';
 import { ATTENTION_DOMAINS, composeAttention } from './compose';
 import { createAttentionContributors, type AgentsAttentionFacts } from './registry';
 
@@ -218,6 +222,35 @@ describe('createAttentionContributors', () => {
     expect(model.byDomain.runs.watch).toBe(0);
     expect(model.byDomain.runs.items.map((item) => item.id)).toEqual(['runs:blocked-1:blocked']);
     expect(model.byDomain.runs.items[0]?.href).toBe('/runs/blocked-1');
+  });
+
+  it('emits a counting attention item for a stranded run (gascity-dashboard-pxvb)', () => {
+    const summary = runSummary([
+      runLane({
+        id: 'gc-odssky',
+        title: 'mol-pr-start: gascity issue #3192',
+        phase: 'intake',
+        registration: 'stranded',
+        health: { phaseConfidence: 'known', needsOperator: false, thrashingDetected: false },
+      }),
+      runLane({
+        id: 'active-1',
+        title: 'Healthy active run',
+        phase: 'implementation',
+        health: { phaseConfidence: 'known', needsOperator: false, thrashingDetected: false },
+      }),
+    ]);
+
+    const model = composeAttention(createAttentionContributors({ runs: { summary } }));
+
+    // The stranded run is the only operator-actionable runs item — a healthy
+    // active lane never counts. The badge number, the page Stranded CountTile,
+    // and the Stranded section header read one selector and must agree.
+    expect(model.byDomain.runs.attention).toBe(1);
+    expect(model.byDomain.runs.items.map((item) => item.id)).toEqual(['runs:gc-odssky:stranded']);
+    expect(model.byDomain.runs.items[0]?.href).toBe('/runs/gc-odssky');
+    expect(summary.runCounts.stranded).toBe(1);
+    expect(selectStrandedRuns(summary.strandedLanes).length).toBe(1);
   });
 
   it('nav badge count equals the page Blocked count for a mixed summary (gascity-dashboard-2j8e.6)', () => {
@@ -1008,11 +1041,20 @@ function runSummary(lanes: readonly RunLane[]): RunSummary {
   for (const lane of lanes) {
     byPhase[lane.phase] += 1;
   }
-  const blockedLanes = lanes.filter((lane) => lane.phase === 'blocked');
-  const activeLanes = lanes.filter((lane) => lane.phase !== 'blocked' && lane.phase !== 'complete');
+  const strandedLanes = lanes.filter(
+    (lane) => lane.registration === 'stranded' && lane.phase !== 'complete',
+  );
+  const blockedLanes = lanes.filter(
+    (lane) => lane.phase === 'blocked' && lane.registration !== 'stranded',
+  );
+  const activeLanes = lanes.filter(
+    (lane) =>
+      lane.phase !== 'blocked' && lane.phase !== 'complete' && lane.registration !== 'stranded',
+  );
   return {
     lanes: activeLanes,
     blockedLanes,
+    strandedLanes,
     totalActive: activeLanes.length,
     runCounts: {
       total: activeLanes.length,
@@ -1021,16 +1063,20 @@ function runSummary(lanes: readonly RunLane[]): RunSummary {
       designReview: 0,
       bugfix: 0,
       blocked: blockedLanes.length,
+      stranded: strandedLanes.length,
       other: 0,
     },
     recentChanges: [],
     census: {
       status: 'available',
+      // gascity-dashboard-pxvb: the production census excludes stranded lanes
+      // from the in-flight count (they never executed), so mirror that here —
+      // only active + blocked are in flight.
       data: {
         byPhase,
-        totalInFlight: lanes.length,
+        totalInFlight: activeLanes.length + blockedLanes.length,
         unverifiable: 0,
-        knownDenominator: lanes.length,
+        knownDenominator: activeLanes.length + blockedLanes.length,
         thrashing: 0,
       },
     },
@@ -1045,6 +1091,7 @@ function runLane({
   scope,
   statusCounts = {},
   activeAssignees = [],
+  registration,
 }: {
   id: string;
   title: string;
@@ -1057,6 +1104,7 @@ function runLane({
   scope?: RunLane['scope'];
   statusCounts?: Record<string, number>;
   activeAssignees?: string[];
+  registration?: RunLane['registration'];
 }): RunLane {
   return {
     id,
@@ -1072,7 +1120,7 @@ function runLane({
     stages: [],
     progress: { status: 'unavailable', error: 'run progress unavailable' },
     formulaStageResolved: false,
-    registration: 'unknown',
+    registration: registration ?? 'unknown',
     health: {
       status: 'available',
       data: {

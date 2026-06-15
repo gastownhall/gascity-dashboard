@@ -94,6 +94,7 @@ function buildRunSource(
     data: {
       totalActive: 0,
       blockedLanes: [],
+      strandedLanes: [],
       runCounts: {
         total: 0,
         visible: 0,
@@ -101,6 +102,7 @@ function buildRunSource(
         designReview: 0,
         bugfix: 0,
         blocked: 0,
+        stranded: 0,
         other: 0,
       },
       lanes: [],

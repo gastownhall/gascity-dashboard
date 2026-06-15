@@ -148,6 +148,24 @@ export interface RunSummary {
    *  blocked lane is an operator-attention item and must not be silently
    *  truncated the way the active 8-cap window trims calm lanes. */
   blockedLanes: RunLane[];
+  /** Stranded (`registration === 'stranded'`) lanes, sorted by compareLanes
+   *  (gascity-dashboard-pxvb). An orphaned molecule that never executed and
+   *  never will — partitioned out of the Active set alongside `blockedLanes`
+   *  so it stops reading as live work in `totalActive`/`census.totalInFlight`,
+   *  but stays on the page (and in the attention surface) as the state most
+   *  needing an operator action (clean up / re-dispatch). `runCounts.stranded`
+   *  counts this array. Deliberately uncapped, mirroring `blockedLanes`: every
+   *  stranded lane is an operator-attention item and must not be truncated by
+   *  the active 8-cap window.
+   *
+   *  Visibility precedence vs the 24h stale latch (isStaleSessionlessLatch): a
+   *  stranded lane is sessionless with no in_progress step, so once its last
+   *  write ages past STALE_LATCH_AFTER_MS the latch demotes it out of this set
+   *  exactly like any other abandoned lane — a day-old orphan leaves the board
+   *  rather than accumulating forever (see isStrandedRun in runs/liveness.ts).
+   *  That demotion happens at enrichment (frontend), where session facts and
+   *  the snapshot generation time are available. */
+  strandedLanes: RunLane[];
   recentChanges: RunChange[];
   /**
    * City-level health census (gascity-dashboard-3ax). Threshold-INDEPENDENT
@@ -307,6 +325,12 @@ export interface RunCounts {
    *  phase 'blocked' (mapRunPhase checks members first), so this is the
    *  complete blocked count, not a subset. */
   blocked: number;
+  /** Count of stranded lanes (`registration === 'stranded'`, i.e.
+   *  `strandedLanes.length`). gascity-dashboard-pxvb: disjoint from `total`
+   *  and `blocked` — a stranded run (orphaned molecule that never executed) is
+   *  partitioned out of the Active set alongside blocked, so it is never
+   *  double-counted as live work. */
+  stranded: number;
   other: number;
 }
 

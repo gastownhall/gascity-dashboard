@@ -10,6 +10,7 @@ import type {
 import {
   selectAgentsNeedingYou,
   selectBlockedRuns,
+  selectStrandedRuns,
   selectOperatorActionableUnread,
 } from 'gas-city-dashboard-shared';
 import { selectBeadsNeedingAttention, type BeadAttentionReason } from './beadsNeedingAttention';
@@ -301,7 +302,7 @@ function deriveRunsAttention(facts: RunsAttentionFacts | undefined): readonly At
       ),
     );
   }
-  for (const lane of [...summary.lanes, ...summary.blockedLanes]) {
+  for (const lane of [...summary.lanes, ...summary.blockedLanes, ...summary.strandedLanes]) {
     if (lane.health.status === 'available') continue;
     items.push(
       domainUnavailable(
@@ -328,6 +329,23 @@ function deriveRunsAttention(facts: RunsAttentionFacts | undefined): readonly At
         id: `runs:${run.id}:blocked`,
         title: `${run.title} blocked`,
         summary: run.reason,
+        href: runDetailHref(run.id, run.scope),
+      }),
+    );
+  }
+
+  // gascity-dashboard-pxvb: a stranded run (orphaned molecule that never
+  // executed) is the state most needing an operator action — clean up or
+  // re-dispatch — yet it emitted no attention item and rode the Active set as
+  // false-alive work. Surface it as a counting attention item, the same
+  // selectStrandedRuns set the /runs Stranded section renders, so the badge
+  // number and the page count read one selector and cannot disagree.
+  for (const run of selectStrandedRuns(summary.strandedLanes)) {
+    items.push(
+      domainAttention('runs', {
+        id: `runs:${run.id}:stranded`,
+        title: `${run.title} stranded`,
+        summary: run.remedy,
         href: runDetailHref(run.id, run.scope),
       }),
     );

@@ -205,7 +205,8 @@ export function useRunSummarySubscription(): RunSummarySubscription {
         : staleDueToFailureRef.current ||
           (runs.data.lanesPartial === true &&
             runs.data.lanes.length === 0 &&
-            runs.data.blockedLanes.length === 0);
+            runs.data.blockedLanes.length === 0 &&
+            runs.data.strandedLanes.length === 0);
     if (!degraded) {
       retryAttemptRef.current = 0;
       return;

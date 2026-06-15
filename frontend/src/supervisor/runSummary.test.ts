@@ -1126,9 +1126,34 @@ describe('run registration (gascity-dashboard-uxvk)', () => {
 
     expect(source.status).toBe('fresh');
     if (source.status === 'error') throw new Error(source.error);
-    const lane = source.data.lanes.find((l) => l.id === 'gc-odssky');
+    // gascity-dashboard-pxvb: the stranded lane is partitioned out of Active
+    // into its own bucket and must not count as live work.
+    const lane = source.data.strandedLanes.find((l) => l.id === 'gc-odssky');
     expect(lane?.registration).toBe('stranded');
     expect(lane?.phase).toBe('intake');
+    expect(source.data.lanes.some((l) => l.id === 'gc-odssky')).toBe(false);
+    expect(source.data.totalActive).toBe(0);
+    expect(source.data.runCounts.stranded).toBe(1);
+    // The census in-flight count excludes the orphan entirely — the false-alive
+    // bug pxvb fixes was exactly this lane reading as live work.
+    if (source.data.census.status !== 'available') throw new Error('census unavailable');
+    expect(source.data.census.data.totalInFlight).toBe(0);
+    expect(source.data.census.data.byPhase.intake).toBe(0);
+  });
+
+  it('demotes a stranded lane past the 24h stale latch out of the board (pxvb precedence)', async () => {
+    // Documented precedence on isStrandedRun: a day-old orphan leaves the board
+    // with the rest of the stale latches rather than accumulating in Stranded
+    // forever. The orphan's last write (created_at 11:00) is read against a much
+    // later snapshot generation time so it ages past STALE_LATCH_AFTER_MS.
+    vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
+    wideApi(feed([]));
+
+    const source = await loadSupervisorRunSummarySource();
+
+    if (source.status === 'error') throw new Error(source.error);
+    expect(source.data.strandedLanes.some((l) => l.id === 'gc-odssky')).toBe(false);
+    expect(source.data.lanes.some((l) => l.id === 'gc-odssky')).toBe(false);
   });
 
   it('a run listed by the feed is registered', async () => {
@@ -1172,7 +1197,9 @@ describe('run registration (gascity-dashboard-uxvk)', () => {
     wideApi(feed([]));
     const first = await loadSupervisorRunSummarySource();
     if (first.status === 'error') throw new Error(first.error);
-    expect(first.data.lanes.find((l) => l.id === 'gc-odssky')?.registration).toBe('stranded');
+    expect(first.data.strandedLanes.find((l) => l.id === 'gc-odssky')?.registration).toBe(
+      'stranded',
+    );
 
     wideApi(
       feed([feedRun({ id: 'gc-odssky', root_bead_id: 'gc-odssky', workflow_id: 'gc-odssky' })]),
@@ -1188,7 +1215,9 @@ describe('run registration (gascity-dashboard-uxvk)', () => {
     wideApi(feed([]));
     const first = await loadSupervisorRunSummarySource();
     if (first.status === 'error') throw new Error(first.error);
-    expect(first.data.lanes.find((l) => l.id === 'gc-odssky')?.registration).toBe('stranded');
+    expect(first.data.strandedLanes.find((l) => l.id === 'gc-odssky')?.registration).toBe(
+      'stranded',
+    );
 
     wideApi(
       feed(
@@ -1205,7 +1234,9 @@ describe('run registration (gascity-dashboard-uxvk)', () => {
     wideApi(feed([]));
     const first = await loadSupervisorRunSummarySource();
     if (first.status === 'error') throw new Error(first.error);
-    expect(first.data.lanes.find((l) => l.id === 'gc-odssky')?.registration).toBe('stranded');
+    expect(first.data.strandedLanes.find((l) => l.id === 'gc-odssky')?.registration).toBe(
+      'stranded',
+    );
 
     const { root_bead_id: _omitted, ...rootless } = feedRun({
       id: 'other-run',
@@ -1229,7 +1260,9 @@ describe('run registration (gascity-dashboard-uxvk)', () => {
     wideApi(feed([]));
     const first = await loadSupervisorRunSummarySource();
     if (first.status === 'error') throw new Error(first.error);
-    expect(first.data.lanes.find((l) => l.id === 'gc-odssky')?.registration).toBe('stranded');
+    expect(first.data.strandedLanes.find((l) => l.id === 'gc-odssky')?.registration).toBe(
+      'stranded',
+    );
 
     const { root_bead_id: _omitted, ...rootless } = feedRun({
       id: 'gc-odssky',
@@ -1238,14 +1271,18 @@ describe('run registration (gascity-dashboard-uxvk)', () => {
     wideApi(feed([rootless]));
     const second = await loadSupervisorRunSummarySource();
     if (second.status === 'error') throw new Error(second.error);
-    expect(second.data.lanes.find((l) => l.id === 'gc-odssky')?.registration).toBe('stranded');
+    expect(second.data.strandedLanes.find((l) => l.id === 'gc-odssky')?.registration).toBe(
+      'stranded',
+    );
   });
 
   it('the cheap active source reuses the cached complete-feed observation (no flap)', async () => {
     wideApi(feed([]));
     const wide = await loadSupervisorRunSummarySource();
     if (wide.status === 'error') throw new Error(wide.error);
-    expect(wide.data.lanes.find((l) => l.id === 'gc-odssky')?.registration).toBe('stranded');
+    expect(wide.data.strandedLanes.find((l) => l.id === 'gc-odssky')?.registration).toBe(
+      'stranded',
+    );
 
     // The cheap source: core active read + sessions only, NO feed read.
     const listBeads = vi.fn(async () => beadList(orphanBeads()));
@@ -1261,7 +1298,9 @@ describe('run registration (gascity-dashboard-uxvk)', () => {
 
     if (cheap.status === 'error') throw new Error(cheap.error);
     expect(formulaFeed).not.toHaveBeenCalled();
-    expect(cheap.data.lanes.find((l) => l.id === 'gc-odssky')?.registration).toBe('stranded');
+    expect(cheap.data.strandedLanes.find((l) => l.id === 'gc-odssky')?.registration).toBe(
+      'stranded',
+    );
   });
 
   it('without any complete feed observation the cheap source reports unknown', async () => {
