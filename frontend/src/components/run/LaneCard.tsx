@@ -5,6 +5,7 @@ import { attentionListItemProps } from '../../attention/routeHighlight';
 import { formatRelative } from '../../hooks/time';
 import { runDetailHref } from '../../supervisor/runHref';
 import { StageLadder } from './StageLadder';
+import { STRANDED_EXPLANATION, STRANDED_GLYPH, STRANDED_WORD } from './strandedRun';
 
 // Per-lane typographic row. No card chrome — vertical rhythm carries the
 // hierarchy, hairline dividers separate lanes at the RunMap level.
@@ -79,7 +80,7 @@ export function LaneCard({
         <span className={`text-label uppercase tracking-wider ${phaseLabelTone(lane.phase)}`}>
           {isStranded ? (
             <>
-              <span aria-hidden="true">(!)</span> stranded
+              <span aria-hidden="true">{STRANDED_GLYPH}</span> {STRANDED_WORD}
             </>
           ) : (
             lane.phaseLabel
@@ -122,10 +123,7 @@ export function LaneCard({
       )}
 
       {isStranded ? (
-        <p className="mt-2 text-body text-fg-muted leading-snug">
-          Dispatched but never registered with the supervisor, likely a supervisor restart or crash
-          at dispatch time. This run never executed.
-        </p>
+        <p className="mt-2 text-body text-fg-muted leading-snug">{STRANDED_EXPLANATION}</p>
       ) : (
         <StageLadder stages={lane.stages} label={lane.title} />
       )}

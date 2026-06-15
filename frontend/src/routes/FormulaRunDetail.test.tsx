@@ -752,6 +752,60 @@ describe('FormulaRunDetailPage', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('renders the DEFINITIVE stranded explanation on a 404 when the warm lane proves the run is stranded (gascity-dashboard-s36w)', async () => {
+    // The page already resolved this run's lane from the warm run-summary, and
+    // that lane carries the authoritative registration fact. A 404 from the
+    // detail endpoint is then NOT ambiguous: the speculative list (v1/wisp,
+    // unretained snapshot, ...) over-claims uncertainty the page does not have.
+    // Render the same definitive stranded copy LaneCard uses instead.
+    //
+    // gascity-dashboard-1ka9: a stranded lane lives in the `strandedLanes`
+    // bucket (pxvb partitions it out of `lanes`). The notFound branch can only
+    // resolve it because the skeleton lookup searches all three buckets — this
+    // test exercises that exact coupling, so s36w cannot ship without pxvb.
+    const source = runSummarySourceWithActiveLane();
+    if (source.status === 'error') throw new Error(source.error);
+    source.data.strandedLanes = source.data.lanes.map((lane) => ({
+      ...lane,
+      registration: 'stranded' as const,
+    }));
+    source.data.lanes = [];
+    source.data.totalActive = 0;
+    setCached('runs:summary:test-city', source);
+    loadSupervisorFormulaRunDetail.mockImplementation(async () => {
+      throw new SupervisorApiError(404, 'workflow gc-adopt-pr-active not found', undefined);
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/never registered with the supervisor/i)).toBeTruthy();
+    // The speculative list is suppressed — the registration fact is definitive.
+    expect(screen.queryByText(/may be a v1\/wisp run/i)).toBeNull();
+    expect(screen.queryByText(/snapshot was not found/i)).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('keeps the speculative not-found list when the warm lane is registered, not stranded (gascity-dashboard-s36w)', async () => {
+    // A 404 on a lane the supervisor DID register is genuinely ambiguous
+    // (unretained snapshot, pruned run, stale derived scope). Keep the
+    // speculative list — do not assert it is stranded.
+    const source = runSummarySourceWithActiveLane();
+    if (source.status === 'error') throw new Error(source.error);
+    source.data.lanes = source.data.lanes.map((lane) => ({
+      ...lane,
+      registration: 'registered' as const,
+    }));
+    setCached('runs:summary:test-city', source);
+    loadSupervisorFormulaRunDetail.mockImplementation(async () => {
+      throw new SupervisorApiError(404, 'workflow gc-adopt-pr-active not found', undefined);
+    });
+
+    renderPage();
+
+    await screen.findByText(/this run’s detail snapshot was not found/i);
+    expect(screen.getByText(/may be a v1\/wisp run/i)).toBeTruthy();
+  });
+
   it('still shows the generic failure for a malformed graph.v2 snapshot (invalid_snapshot)', async () => {
     // A genuine load failure (malformed graph.v2 snapshot, or any other
     // UnsupportedRunError reason) must NOT be mistaken for a v1 list-only run.

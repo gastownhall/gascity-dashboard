@@ -17,6 +17,7 @@ import { BeadDetailModal } from '../components/BeadDetailModal';
 import { FormulaRunDiagram } from '../components/run/FormulaRunDiagram';
 import { FormulaRunTabs } from '../components/run/FormulaRunTabs';
 import { StageLadder } from '../components/run/StageLadder';
+import { StrandedRunNotice } from '../components/run/strandedRun';
 import { useNow } from '../contexts/NowContext';
 import { useGcEventRefresh } from '../hooks/useGcEvents';
 import { runEventIdentity, formulaRunDetailEventMatches } from '../hooks/runEventIdentity';
@@ -205,11 +206,7 @@ export function FormulaRunDetailPage() {
             {/* A stranded lane must not flash a live stage ladder while the
                 detail loads — mirror the LaneCard stranded treatment. */}
             {skeletonLane.registration === 'stranded' ? (
-              <p className="text-body text-fg-muted leading-snug" role="status">
-                <span aria-hidden="true">(!)</span> stranded: dispatched but never registered with
-                the supervisor, likely a supervisor restart or crash at dispatch time. This run
-                never executed.
-              </p>
+              <StrandedRunNotice />
             ) : (
               <StageLadder stages={skeletonLane.stages} label={skeletonLane.title} />
             )}
@@ -224,12 +221,18 @@ export function FormulaRunDetailPage() {
           appears in the run list only.
         </p>
       ) : notFound ? (
-        <p className="text-body text-fg-muted" role="status">
-          This run&rsquo;s detail snapshot was not found. It may be a v1/wisp run, a completed run
-          whose snapshot wasn&rsquo;t retained, no longer available, or a run that was dispatched
-          but never registered with the supervisor (a supervisor restart or crash at dispatch time
-          strands a run before it executes).
-        </p>
+        // A warm lane that proves the run stranded makes the 404 unambiguous:
+        // show the definitive explanation, not the speculative list (s36w).
+        skeletonLane?.registration === 'stranded' ? (
+          <StrandedRunNotice />
+        ) : (
+          <p className="text-body text-fg-muted" role="status">
+            This run&rsquo;s detail snapshot was not found. It may be a v1/wisp run, a completed run
+            whose snapshot wasn&rsquo;t retained, no longer available, or a run that was dispatched
+            but never registered with the supervisor (a supervisor restart or crash at dispatch time
+            strands a run before it executes).
+          </p>
+        )
       ) : pageError && !detail ? (
         <p className="text-body text-accent" role="alert">
           {pageError}
