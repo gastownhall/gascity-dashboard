@@ -13,7 +13,7 @@ export const STRANDED_EXPLANATION =
 export function StrandedRunNotice() {
   return (
     <p className="text-body text-fg-muted leading-snug" role="status">
-      <span aria-hidden="true">{STRANDED_GLYPH}</span> {STRANDED_WORD} — {STRANDED_EXPLANATION}
+      <span aria-hidden="true">{STRANDED_GLYPH}</span> {STRANDED_WORD}: {STRANDED_EXPLANATION}
     </p>
   );
 }
