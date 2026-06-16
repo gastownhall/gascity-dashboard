@@ -127,7 +127,7 @@ function Meta({ label, value }: { label: string; value: string }) {
 }
 
 const TITLE_FALLBACK_TOOLTIP =
-  'name inferred from bead title — supervisor did not set gc.formula on this graph.v2 root';
+  'name inferred from bead title; supervisor did not set gc.formula on this graph.v2 root';
 
 /**
  * Formula identity cell with provenance. Mirrors FormulaRunDetail's FormulaMeta

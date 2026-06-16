@@ -91,6 +91,21 @@ describe('projectConvoyView', () => {
     assert.deepEqual(view.progress, { closed: 0, total: 1 });
   });
 
+  test('degrades to graph_v2_root_only for a current-era root keyed by gc.routed_to (no gc.run_target)', () => {
+    // The supervisor retired gc.run_target in favor of gc.routed_to (gascity
+    // #2763); current roots carry only gc.routed_to. The gate must accept it,
+    // or the primary real-world case misclassifies as no_children.
+    const root = bead('root', {
+      status: 'in_progress',
+      metadata: { 'gc.formula_contract': 'graph.v2', 'gc.routed_to': 'city/claude-1' },
+      title: 'mol-focus-review',
+    });
+
+    const view = projectConvoyView(root, [], { closed: 0, total: 1 });
+
+    assert.deepEqual(view.exposure, { kind: 'collapsed', reason: 'graph_v2_root_only' });
+  });
+
   test('reports no_children for a genuine leaf bead with no graph.v2 contract', () => {
     const view = projectConvoyView(bead('leaf', { status: 'closed' }), [], null);
     assert.deepEqual(view.exposure, { kind: 'collapsed', reason: 'no_children' });

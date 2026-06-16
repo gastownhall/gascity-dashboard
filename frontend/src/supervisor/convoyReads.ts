@@ -56,6 +56,13 @@ export async function loadConvoyView(rootBeadId: string): Promise<ConvoyLoad> {
   const children = descendantsOf(root.id, beads);
   return {
     view: projectConvoyView(root, children, null),
+    // Conservative by design: a truncated city page cannot prove this convoy's
+    // subtree is complete — a descendant could sit in the unfetched tail, and a
+    // flat list gives no way to tell "all descendants fetched" from "some
+    // missing". So we surface partial whenever the city page is incomplete. This
+    // can over-warn (the convoy may in fact be whole), but never under-warns
+    // (hiding missing steps). Tightening to a true subtree-scoped completeness
+    // check needs a supervisor subtree query — tracked as a follow-up.
     partial: list.partial,
   };
 }

@@ -13,6 +13,7 @@ const CLOSED_STATUS = 'closed';
 const GRAPH_V2_CONTRACT = 'graph.v2';
 const FORMULA_CONTRACT_KEY = 'gc.formula_contract';
 const RUN_TARGET_KEY = 'gc.run_target';
+const ROUTED_TO_KEY = 'gc.routed_to';
 
 export interface ConvoyStep {
   bead: DashboardBead;
@@ -29,7 +30,9 @@ export interface ConvoyStep {
  * `no_children` is a genuine leaf with nothing below it.
  *
  * The graph.v2 classification requires BOTH `gc.formula_contract=graph.v2` AND
- * `gc.run_target` — the same contract+target gate `resolveRunFormulaName` uses
+ * a run-target key (`gc.run_target` OR the current `gc.routed_to`, which the
+ * supervisor retired `gc.run_target` in favor of per gascity #2763) — the same
+ * dual-key contract+target gate `rootRunTarget`/`resolveRunFormulaName` use
  * (formula-name.ts): only a fully-instantiated runnable root carries both.
  * A childless bead that has the contract label but no target (e.g. a stray
  * label on a non-run bead) is a genuine leaf, so it reports `no_children`
@@ -108,7 +111,8 @@ function computeExposure(
   if (children.length === 0) {
     const isGraphV2Run =
       metaString(root, FORMULA_CONTRACT_KEY) === GRAPH_V2_CONTRACT &&
-      metaString(root, RUN_TARGET_KEY) !== undefined;
+      (metaString(root, RUN_TARGET_KEY) !== undefined ||
+        metaString(root, ROUTED_TO_KEY) !== undefined);
     return { kind: 'collapsed', reason: isGraphV2Run ? 'graph_v2_root_only' : 'no_children' };
   }
   const statusById = new Map<string, string>([[root.id, root.status]]);
