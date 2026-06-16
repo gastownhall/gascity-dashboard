@@ -1,6 +1,7 @@
 import type { ConvoyView, DashboardBead } from 'gas-city-dashboard-shared';
 import { projectConvoyView } from 'gas-city-dashboard-shared';
-import { fetchSupervisorBead, listSupervisorBeads } from './beadReads';
+import { LOG_COMPONENT, logWarn } from '../lib/logging';
+import { fetchBeadSubtreeIds, fetchSupervisorBead, listSupervisorBeads } from './beadReads';
 import { normalizeBead, normalizeBeads } from './normalizeBead';
 
 // Loader for the /convoy/:rootBead route (gascity-dashboard-caag, Shape A).
@@ -22,19 +23,24 @@ import { normalizeBead, normalizeBeads } from './normalizeBead';
 //     never addresses.
 //   * beads/graph/{root} collapses graph.v2 snapshots to the root bead alone
 //     (the same upstream hole tracked by gascity-dashboard-jl3c), so it returns
-//     no step children the parent-chain scan does not — and it is slow.
+//     no step children the parent-chain scan does not — and it is slow. So it is
+//     not the projection source; it serves only as the authoritative subtree
+//     walk that confirms completeness on the truncated-page path (jy3d, below).
 // So there is no supervisor progress count to prefer: `projectConvoyView`
 // derives progress from the materialized children, and a graph.v2 root with no
 // exposed children collapses to the honest "steps not exposed" state. The
 // authoritative graph.v2 step graph lives in the workflow snapshot
 // (WorkflowSnapshotResponse) — wiring it here is the jl3c redesign, out of
-// scope for this loader. Because the route composes only the already-allowed
-// `beads` and `bead/{id}` reads, it works under DASHBOARD_READONLY=1 as-is.
+// scope for this loader. The route composes only allowlisted reads — `beads`,
+// `bead/{id}`, and the `beads/graph/{rootID}` completeness walk — so it works
+// under DASHBOARD_READONLY=1 as-is.
 //
-// Truncation is honest: a busy city's closed beads can exceed one bounded page,
-// so `partial` trips when the bounded read is incomplete (the supervisor flags
-// it, returns a `next_cursor`, or its total outruns the page) and the route
-// renders a partial notice rather than silently dropping steps.
+// Truncation is honest AND subtree-scoped: a busy city's closed beads can
+// exceed one bounded page, but a truncated city page only matters when it could
+// be hiding a member of THIS convoy's subtree. So when the page read is
+// incomplete (the supervisor flags it, returns a `next_cursor`, or its total
+// outruns the page) the loader confirms the subtree against the authoritative
+// graph walk before warning — see `deriveConvoyPartial` (gascity-dashboard-jy3d).
 
 // Convoy step beads are bookkeeping-typed and frequently closed, so the read
 // must include both — unlike the board's default open/engineering view.
@@ -54,17 +60,57 @@ export async function loadConvoyView(rootBeadId: string): Promise<ConvoyLoad> {
   });
   const beads = normalizeBeads(list.items);
   const children = descendantsOf(root.id, beads);
+  const view = projectConvoyView(root, children, null);
   return {
-    view: projectConvoyView(root, children, null),
-    // Conservative by design: a truncated city page cannot prove this convoy's
-    // subtree is complete — a descendant could sit in the unfetched tail, and a
-    // flat list gives no way to tell "all descendants fetched" from "some
-    // missing". So we surface partial whenever the city page is incomplete. This
-    // can over-warn (the convoy may in fact be whole), but never under-warns
-    // (hiding missing steps). Tightening to a true subtree-scoped completeness
-    // check needs a supervisor subtree query — tracked as a follow-up.
-    partial: list.partial,
+    view,
+    partial: await deriveConvoyPartial(view, children, list.partial),
   };
+}
+
+/**
+ * Whether the convoy view is built from an incomplete subtree — the precise
+ * signal behind the route's "Partial convoy" notice (gascity-dashboard-jy3d).
+ *
+ * A complete city page proves the subtree is whole, so it is never partial. A
+ * truncated city page only matters when it could be hiding a member of THIS
+ * convoy's subtree, so the broad `list.partial` is narrowed in two steps:
+ *
+ *  - A graph.v2 run root's steps live in the workflow snapshot, never as
+ *    parent-linked beads in the city page (the gascity-dashboard-jl3c hole), so
+ *    a truncated page provably cannot hide them — the collapse to
+ *    `graph_v2_root_only` is structural, not truncation-induced.
+ *  - Otherwise (materialized steps, or a leaf a truncated page might be hiding
+ *    children behind) the authoritative graph walk reports the true descendant
+ *    set; the convoy is partial only when that set holds an id the bounded page
+ *    did not capture.
+ *
+ * The graph walk runs only on the truncated-page path, so the slower scoped read
+ * is paid only in the large-city case it disambiguates. If it fails the loader
+ * stays conservative (over-warn, never hide missing steps) and logs the
+ * degradation rather than swallowing it.
+ */
+async function deriveConvoyPartial(
+  view: ConvoyView,
+  children: readonly DashboardBead[],
+  cityPagePartial: boolean,
+): Promise<boolean> {
+  if (!cityPagePartial) return false;
+  if (view.exposure.kind === 'collapsed' && view.exposure.reason === 'graph_v2_root_only') {
+    return false;
+  }
+  try {
+    const subtreeIds = await fetchBeadSubtreeIds(view.rootBeadId);
+    const captured = new Set(children.map((child) => child.id));
+    return subtreeIds.some((id) => !captured.has(id));
+  } catch (err) {
+    logWarn(
+      LOG_COMPONENT.convoy,
+      `subtree completeness check failed for ${view.rootBeadId}; staying conservative: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return true;
+  }
 }
 
 /**

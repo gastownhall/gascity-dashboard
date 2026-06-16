@@ -125,6 +125,25 @@ export async function listSupervisorBeadsAssignedTo(
   };
 }
 
+/**
+ * Authoritative descendant ids of `rootId`, scoped to the root's graph rather
+ * than the bounded city bead page. Used to confirm whether a convoy's subtree
+ * was fully captured by the page read when that read is truncated. The root
+ * itself is excluded so the result lines up with the parent-chain descendant
+ * scan it is compared against. For graph.v2 run roots the supervisor collapses
+ * this walk to the root alone (the gascity-dashboard-jl3c hole), so it returns
+ * an empty set — the caller short-circuits those before reaching here.
+ */
+export async function fetchBeadSubtreeIds(rootId: string): Promise<string[]> {
+  const cityName = activeCityOrThrow('fetch bead subtree');
+  const graph = await supervisorApi().beadsGraph(cityName, rootId);
+  const ids = new Set<string>();
+  for (const bead of graph.beads ?? []) {
+    if (bead.id !== rootId) ids.add(bead.id);
+  }
+  return [...ids];
+}
+
 export async function fetchSupervisorBead(id: string): Promise<SupervisorBead> {
   const cityName = activeCityOrThrow('fetch supervisor bead');
   try {

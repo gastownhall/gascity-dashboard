@@ -20,6 +20,7 @@ const READ_ENDPOINT_TEMPLATES = [
   '/v0/cities',
   '/v0/city/{cityName}/agents',
   '/v0/city/{cityName}/beads',
+  '/v0/city/{cityName}/beads/graph/{rootID}',
   '/v0/city/{cityName}/bead/{id}',
   '/v0/city/{cityName}/events',
   '/v0/city/{cityName}/events/stream',

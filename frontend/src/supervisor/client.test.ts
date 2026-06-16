@@ -1233,6 +1233,7 @@ describe('supervisor client wrapper', () => {
     const fake = {
       baseUrl: 'test://supervisor',
       getBead: vi.fn(),
+      beadsGraph: vi.fn(),
       cityHealth: vi.fn(),
       cityStatus: vi.fn(),
       health: vi.fn(),

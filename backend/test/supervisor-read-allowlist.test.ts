@@ -10,6 +10,7 @@ describe('supervisor read allowlist', () => {
       '/v0/cities',
       '/v0/city/test-city/agents',
       '/v0/city/test-city/beads',
+      '/v0/city/test-city/beads/graph/gascity-0001',
       '/v0/city/test-city/bead/gascity-0001',
       '/v0/city/test-city/events',
       '/v0/city/test-city/events/stream',

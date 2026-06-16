@@ -8,6 +8,7 @@ import {
   getV0CityByCityNameAgentByDirByBasePrime,
   getV0CityByCityNameBeadById,
   getV0CityByCityNameBeads,
+  getV0CityByCityNameBeadsGraphByRootId,
   getV0CityByCityNameEvents,
   getV0CityByCityNameFormulasByName,
   getV0CityByCityNameFormulasFeed,
@@ -36,6 +37,7 @@ import type {
   Bead,
   BeadCloseBody,
   BeadCreateInputBody,
+  BeadGraphResponse,
   BeadUpdateBody,
   AgentPrimeBody,
   FormulaFeedBody,
@@ -123,6 +125,12 @@ export interface SupervisorApi {
     query?: NonNullable<GetV0CityByCityNameEventsData['query']>,
   ): Promise<ListBodyWireEvent>;
   getBead(cityName: string, id: string): Promise<Bead>;
+  /**
+   * Authoritative subtree walk from a root bead. Unlike the bounded city
+   * `listBeads` page, this is scoped to the root's graph, so it carries the
+   * convoy's full descendant set even in a city whose bead page is truncated.
+   */
+  beadsGraph(cityName: string, rootId: string): Promise<BeadGraphResponse>;
   createBead(cityName: string, body: BeadCreateInputBody): Promise<Bead>;
   updateBead(cityName: string, id: string, body: BeadUpdateBody): Promise<OkResponseBody>;
   closeBead(cityName: string, id: string, body?: BeadCloseBody): Promise<OkResponseBody>;
@@ -292,6 +300,15 @@ export function createSupervisorApi(options: CreateSupervisorApiOptions = {}): S
           path: { cityName, id },
         }) as Promise<SupervisorResult<Bead>>,
         'gc supervisor bead response was empty',
+      );
+    },
+    beadsGraph(cityName, rootId) {
+      return unwrapSupervisorResult<BeadGraphResponse>(
+        getV0CityByCityNameBeadsGraphByRootId({
+          client,
+          path: { cityName, rootID: rootId },
+        }) as Promise<SupervisorResult<BeadGraphResponse>>,
+        'gc supervisor bead graph response was empty',
       );
     },
     createBead(cityName, body) {
