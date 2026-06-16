@@ -506,6 +506,8 @@ describe('loadSupervisorRunSummarySource', () => {
     // the lane set may be degraded (scopes unresolved) — flag partial, but the
     // active lanes from the core read still render. Never required: a feed
     // failure must not blank the view (live it measured 14.3s city-scoped).
+    // gascity-dashboard-dh7t: the failure must also be logged, not swallowed.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const listBeads = vi.fn(async () => beadList([runRoot()]));
     setSupervisorApiForTests({
       ...baseApi,
@@ -522,6 +524,39 @@ describe('loadSupervisorRunSummarySource', () => {
     if (source.status === 'error') throw new Error(source.error);
     expect(source.data.totalActive).toBe(1);
     expect(source.data.lanesPartial).toBe(true);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('formula feed read failed for city=test-city'),
+    );
+    expect(errorSpy.mock.calls[0]?.[0]).toContain('feed unavailable');
+    errorSpy.mockRestore();
+  });
+
+  it('logs and degrades lane health to unavailable when the session read fails (gascity-dashboard-dh7t)', async () => {
+    // A swallowed session-read failure leaves every lane health at 'unavailable'
+    // with no operator-visible reason. The lanes still render (sessions are
+    // enrichment, not required); the failure must be logged before degrading.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const listBeads = vi.fn(async () => beadList([runRoot()]));
+    setSupervisorApiForTests({
+      ...baseApi,
+      listBeads,
+      formulaFeed: vi.fn(async () => feed([feedRun()])),
+      listSessions: vi.fn(async () => {
+        throw new Error('sessions unavailable');
+      }),
+    });
+
+    const source = await loadSupervisorRunSummarySource();
+
+    expect(source.status).toBe('fresh');
+    if (source.status === 'error') throw new Error(source.error);
+    expect(source.data.totalActive).toBe(1);
+    expect(source.data.lanes[0]?.health.status).toBe('unavailable');
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('run sessions read failed for city=test-city'),
+    );
+    expect(errorSpy.mock.calls[0]?.[0]).toContain('sessions unavailable');
+    errorSpy.mockRestore();
   });
 
   it('marks the summary partial when the active bead list is cursor-truncated', async () => {

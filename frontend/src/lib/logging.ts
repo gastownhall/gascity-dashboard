@@ -11,9 +11,15 @@
 export const LOG_COMPONENT = {
   views: 'views',
   convoy: 'convoy',
+  runs: 'runs',
 } as const;
 
 export type LogComponent = (typeof LOG_COMPONENT)[keyof typeof LOG_COMPONENT];
+
+export function logError(component: LogComponent, message: string): void {
+  // eslint-disable-next-line no-console -- single-point seam (mirrors backend/logging.ts).
+  console.error(`[${component}] ${message}`);
+}
 
 export function logWarn(component: LogComponent, message: string): void {
   // eslint-disable-next-line no-console -- single-point seam (mirrors backend/logging.ts).

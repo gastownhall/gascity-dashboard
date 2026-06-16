@@ -26,6 +26,7 @@ import {
   type LaneProgressMark,
 } from 'gas-city-dashboard-shared';
 import { activeCityOrThrow } from '../api/cityBase';
+import { logError, LOG_COMPONENT } from '../lib/logging';
 import type { FormulaFeedBody, ListBodyBead } from 'gas-city-dashboard-shared/gc-supervisor';
 import { supervisorApiForRequestBudget } from './client';
 import { fetchCoreRead } from './coreRead';
@@ -601,7 +602,16 @@ async function discoverFromFeed(
       rootIdsComplete,
       partial: feedIsPartial(runs),
     };
-  } catch {
+  } catch (err) {
+    // gascity-dashboard-dh7t: a swallowed feed failure silently degrades the
+    // whole run set — scopes go unresolved and every run-registration judgment
+    // collapses to 'unknown' (a stranded run reads as merely 'unknown', a
+    // false-alive). Surface it before returning the partial fallback so the
+    // degradation is visible instead of silent (Don't Swallow Errors).
+    logError(
+      LOG_COMPONENT.runs,
+      `formula feed read failed for city=${cityName}; degrading run registration to unknown and marking lanes partial: ${errorMessage(err, 'formula feed unavailable')}`,
+    );
     return {
       rigNames: [],
       scopes: new Map(),
@@ -624,7 +634,15 @@ async function loadRunSessions(cityName: string, budgetMs: number): Promise<RunS
       kind: 'available',
       sessions: normalizeSessions(list),
     };
-  } catch {
+  } catch (err) {
+    // gascity-dashboard-dh7t: a swallowed session-read failure makes every
+    // lane's health degrade to 'unavailable' (no session resolution), so the
+    // operator loses needs-operator/thrash signal with no indication why.
+    // Surface it before returning the unavailable fallback (Don't Swallow Errors).
+    logError(
+      LOG_COMPONENT.runs,
+      `run sessions read failed for city=${cityName}; degrading lane health to unavailable: ${errorMessage(err, 'run sessions unavailable')}`,
+    );
     return { kind: 'unavailable', sessions: [] };
   }
 }
