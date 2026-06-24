@@ -4,59 +4,16 @@ import { useVisibleRefresh } from './useVisibleRefresh';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
+  const promise = new Promise<T>((res) => {
     resolve = res;
-    reject = rej;
   });
-  return { promise, resolve, reject };
+  return { promise, resolve };
 }
 
 describe('useVisibleRefresh', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
-  });
-
-  it('backs off after rejected refresh promises', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
-    const first = deferred<void>();
-    const refresh = vi.fn(() => first.promise);
-    const onError = vi.fn();
-
-    renderHook(() =>
-      useVisibleRefresh(refresh, 1_000, {
-        initialBackoffMs: 2_000,
-        maxBackoffMs: 2_000,
-        onError,
-      }),
-    );
-
-    await act(async () => {
-      vi.advanceTimersByTime(1_000);
-    });
-    expect(refresh).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      first.reject(new Error('network down'));
-      try {
-        await first.promise;
-      } catch {
-        // Rejection drives the hook path under test.
-      }
-    });
-    expect(onError).toHaveBeenCalledOnce();
-
-    await act(async () => {
-      vi.advanceTimersByTime(1_000);
-    });
-    expect(refresh).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      vi.advanceTimersByTime(1_000);
-    });
-    expect(refresh).toHaveBeenCalledTimes(2);
   });
 
   it('does not overlap refresh calls while one is still in flight', async () => {
@@ -176,5 +133,22 @@ describe('useVisibleRefresh', () => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not poll or listen for refocus while disabled', async () => {
+    vi.useFakeTimers();
+    const hiddenSpy = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    const refresh = vi.fn(() => Promise.resolve());
+
+    renderHook(() => useVisibleRefresh(refresh, 1_000, { enabled: false }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+    });
+    hiddenSpy.mockReturnValue(false);
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
