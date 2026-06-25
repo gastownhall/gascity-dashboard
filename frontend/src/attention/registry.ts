@@ -309,7 +309,7 @@ function deriveRunsAttention(facts: RunsAttentionFacts | undefined): readonly At
   // dash-ygj + gascity-dashboard-2j8e.2: degraded runs reads land in the
   // `unavailable` tier, which BadgeSeverity excludes — so a partial fan-out and
   // any lane whose health could not be read surface as quiet, non-counting items
-  // (never a badge number) and ride read freshness so a stale read can be aged.
+  // (never a badge number).
   // The formula feed is no longer a source (it produced the gc-1920 phantom roots
   // and flapped 6<->13), so #91's feed-derived emitters are gone; only the
   // summary-derived degraded reads survive.

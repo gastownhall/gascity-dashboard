@@ -184,9 +184,8 @@ export function useLiveAttentionContributors(
  * the same selectBlockedRuns the /runs page renders — so reading the page's exact
  * source object makes the badge and the page agree by construction, not merely by
  * shared selector (gascity-dashboard-2j8e.7). The source's own status flows
- * through as provenance and is carried onto `unavailable`-tier items so a
- * degraded read can be aged rather than rendered as current truth; `fetchedAt`
- * carries the exact read time for any age comparison.
+ * through as provenance and `fetchedAt` carries the exact read time, so the read
+ * can be aged rather than rendered as current truth.
  */
 export function runsFactsFromSource(
   source: SourceState<RunSummary> | undefined,
