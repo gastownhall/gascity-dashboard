@@ -469,6 +469,10 @@ describe('createAttentionContributors', () => {
     expect(model.byDomain.runs.attention).toBe(1);
     expect(model.byDomain.runs.unavailable).toBe(0);
     expect(model.byDomain.runs.items[0]?.id).toBe('runs:unavailable');
+    // The read-freshness provenance still threads through on the error path —
+    // the loud runs:unavailable item does not shadow the 'error' read state the
+    // board liveness line folds from byDomain.runs (gascity-dashboard-5t0m).
+    expect(model.byDomain.runs.provenance).toBe('error');
   });
 
   it('counts an agent awaiting an input decision as needs-you', () => {

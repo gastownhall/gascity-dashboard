@@ -56,7 +56,6 @@ const mockApi = vi.hoisted(() => ({
 
 const mockSupervisorApi = vi.hoisted(() => ({
   cityHealth: vi.fn(),
-  formulaFeed: vi.fn(),
   listAgents: vi.fn(),
   listBeads: vi.fn(),
   listEvents: vi.fn(),
@@ -90,7 +89,6 @@ describe('useLiveAttentionContributors', () => {
       mockApi.maintainerTriage,
       mockApi.systemHealth,
       mockSupervisorApi.cityHealth,
-      mockSupervisorApi.formulaFeed,
       mockSupervisorApi.listAgents,
       mockSupervisorApi.listBeads,
       mockSupervisorApi.listEvents,
@@ -101,24 +99,6 @@ describe('useLiveAttentionContributors', () => {
       fn.mockReset();
     }
 
-    mockSupervisorApi.formulaFeed.mockResolvedValue({
-      partial: false,
-      items: [
-        {
-          id: 'run-1',
-          root_bead_id: 'B-root',
-          root_store_ref: 'city:B-root',
-          scope_kind: 'city',
-          scope_ref: 'test-city',
-          started_at: '2026-05-29T20:00:00.000Z',
-          status: 'failed',
-          target: 'mayor',
-          title: 'Failed run',
-          type: 'formula',
-          updated_at: '2026-05-29T20:05:00.000Z',
-        },
-      ],
-    });
     mockSupervisorApi.listAgents.mockResolvedValue({
       total: 1,
       items: [
