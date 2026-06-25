@@ -136,6 +136,28 @@ describe('csrfIssueCookie — hands the token to the browser on reads', () => {
     );
   });
 
+  test('also issues the cookie on HEAD (csrf.ts treats HEAD like GET)', async () => {
+    await withApp(
+      (app) => {
+        app.use(csrfIssueCookie);
+        ok(app);
+      },
+      async ({ url }) => {
+        // HEAD shares the read path in csrfIssueCookie, so a SPA that probes
+        // with HEAD before its first GET must still receive the token. A HEAD
+        // response carries no body but the Set-Cookie header is still present.
+        const res = await rawRequest(url, { method: 'HEAD' });
+        const cookie = res.headers['set-cookie'];
+        assert.ok(Array.isArray(cookie) && cookie.length === 1, 'one Set-Cookie header on HEAD');
+        const value = cookie[0];
+        if (value === undefined) throw new Error('Set-Cookie header had no value');
+        assert.ok(value.startsWith(`gascity_admin_csrf=${getCsrfToken()}`));
+        assert.ok(value.includes('SameSite=Strict'));
+        assert.ok(!/HttpOnly/i.test(value));
+      },
+    );
+  });
+
   test('does NOT issue the cookie on a write method', async () => {
     await withApp(
       (app) => {

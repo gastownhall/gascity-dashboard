@@ -45,10 +45,18 @@ export async function withApp<T>(
   }
 }
 
+// Fail-fast ceiling for a single raw request. These are localhost middleware
+// tests that resolve in single-digit milliseconds; if one blows past this, a
+// middleware branch has stalled and we want the runner to fail with a clear
+// error rather than hang until the whole suite times out.
+const RAW_REQUEST_TIMEOUT_MS = 5_000;
+
 export interface RawRequestOptions {
   method?: string;
   /** Verbatim request headers, including normally-protected ones like `Host`. */
   headers?: Record<string, string>;
+  /** Override the {@link RAW_REQUEST_TIMEOUT_MS} fail-fast ceiling. */
+  timeoutMs?: number;
 }
 
 export interface RawResponse {
@@ -64,7 +72,7 @@ export interface RawResponse {
  */
 export function rawRequest(url: string, options: RawRequestOptions = {}): Promise<RawResponse> {
   const target = new URL(url);
-  const { method = 'GET', headers = {} } = options;
+  const { method = 'GET', headers = {}, timeoutMs = RAW_REQUEST_TIMEOUT_MS } = options;
   return new Promise<RawResponse>((resolve, reject) => {
     const req = http.request(
       {
@@ -75,18 +83,33 @@ export function rawRequest(url: string, options: RawRequestOptions = {}): Promis
         headers,
       },
       (res) => {
+        // A mid-stream socket error must reject, not leave the request dangling
+        // on a promise that never settles (the runner would hang on it).
+        res.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => chunks.push(chunk));
-        res.on('end', () =>
+        res.on('end', () => {
+          clearTimeout(timer);
           resolve({
             status: res.statusCode ?? 0,
             headers: res.headers,
             body: Buffer.concat(chunks).toString('utf8'),
-          }),
-        );
+          });
+        });
       },
     );
-    req.on('error', reject);
+    // Fail fast on a stalled middleware branch: destroy the request, which
+    // surfaces through the 'error' handler below with a clear timeout reason.
+    const timer = setTimeout(() => {
+      req.destroy(new Error(`rawRequest timed out after ${timeoutMs}ms: ${method} ${url}`));
+    }, timeoutMs);
+    req.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
     req.end();
   });
 }

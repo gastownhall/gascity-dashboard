@@ -222,11 +222,20 @@ describe('securityHeaders — CSP + clickjacking + sniff lockdown', () => {
         assert.ok(directives.includes("base-uri 'none'"));
         assert.ok(directives.includes("form-action 'self'"));
         assert.ok(directives.includes("connect-src 'self'"));
-        // The theme-boot inline script is pinned by hash, not 'unsafe-inline'.
-        const scriptSrc = directives.find((d) => d.startsWith('script-src '));
-        assert.ok(scriptSrc?.includes("'self'"));
-        assert.ok(scriptSrc?.includes("'sha256-"));
-        assert.ok(!scriptSrc?.includes("'unsafe-inline'"));
+        // style-src/img-src are part of the lockdown too: inline styles are
+        // allowed (Tailwind/theme), images only same-origin + data: URIs. Pin
+        // them so a directive drop is caught, not silently widened.
+        assert.ok(directives.includes("style-src 'self' 'unsafe-inline'"));
+        assert.ok(directives.includes("img-src 'self' data:"));
+        // The theme-boot inline script is pinned by EXACT hash, not 'unsafe-inline'.
+        // Matching the full directive (not just the 'sha256-' prefix) catches both
+        // a hash drift and a widening — an added 'unsafe-inline' or extra source
+        // changes the string, so it would no longer be an exact element here.
+        assert.ok(
+          directives.includes(
+            "script-src 'self' 'sha256-UwUdbc/TSVCB3Er6sM8M1BP5Fk3RrQVkswCUvEjf08g='",
+          ),
+        );
       },
     );
   });
