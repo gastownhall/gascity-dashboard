@@ -115,8 +115,14 @@ export function useGcEventRefresh(
     // active stream never trips it; only true silence past the window does.
     const armIdleWatchdog = () => {
       clearIdleWatchdog();
+      // Bind this watchdog to the connection live when it was armed, mirroring
+      // the connect-grace timer's `es !== source` guard: a stale timer from a
+      // since-replaced EventSource must never force 'degraded' on its successor.
+      // Redundant today (onerror clears the watchdog before every reconnect),
+      // but zero-cost defense-in-depth.
+      const armedSource = es;
       idleWatchdog = setTimeout(() => {
-        if (cancelled) return;
+        if (cancelled || es !== armedSource) return;
         idleWatchdog = null;
         setState('degraded');
       }, SSE_IDLE_WATCHDOG_MS);
@@ -169,6 +175,9 @@ export function useGcEventRefresh(
       setState('connecting');
       connectGraceTimer = setTimeout(() => {
         if (cancelled || es !== source || source.readyState === EventSourceCtor.CLOSED) return;
+        // The timer has fired: null its handle so the state mirrors clearIdleWatchdog's
+        // null-on-fire, keeping a later clearConnectGraceTimer a clean no-op.
+        connectGraceTimer = null;
         setState('open');
         armIdleWatchdog();
       }, CONNECTING_GRACE_MS);

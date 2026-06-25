@@ -284,11 +284,13 @@ describe('useGcEventRefresh', () => {
       expect(result.current).toBe('closed');
 
       // The idle timer was cleared on close, so advancing past the window must
-      // not resurrect a stale 'degraded' over the real 'closed'/reconnect state.
+      // not resurrect a stale 'degraded'. Within the window the reconnect cycle
+      // runs (retry -> connecting -> grace-promote), landing back on 'open' — a
+      // tighter terminal state than merely "not degraded".
       act(() => {
         vi.advanceTimersByTime(SSE_IDLE_WATCHDOG_MS);
       });
-      expect(result.current).not.toBe('degraded');
+      expect(result.current).toBe('open');
     });
 
     it('cancels the watchdog on unmount so no state update lands after teardown', () => {
@@ -302,6 +304,61 @@ describe('useGcEventRefresh', () => {
       });
       // No throw and the last observed state is the pre-unmount 'open'.
       expect(result.current).toBe('open');
+    });
+
+    it('arms the watchdog via the connecting-grace path, not only an explicit open', () => {
+      const { result } = renderHook(() => useGcEventRefresh([GC_EVENT_PREFIX.bead], vi.fn()));
+
+      // Never call .open(): a quiet supervisor that accepts the socket but sends
+      // no onopen is promoted to 'open' by the 2s connecting-grace timer. That
+      // arm-path was previously uncovered — every other watchdog case opens
+      // explicitly, so only the onopen arm was exercised.
+      expect(result.current).toBe('connecting');
+      act(() => {
+        vi.advanceTimersByTime(2_000); // CONNECTING_GRACE_MS
+      });
+      expect(result.current).toBe('open');
+
+      // The grace callback armed the watchdog, so a then-silent stream still
+      // degrades a full idle window later.
+      act(() => {
+        vi.advanceTimersByTime(SSE_IDLE_WATCHDOG_MS);
+      });
+      expect(result.current).toBe('degraded');
+    });
+
+    it('runs a fresh watchdog on the reconnected stream without a stale one from the dead socket', () => {
+      const { result } = renderHook(() => useGcEventRefresh([GC_EVENT_PREFIX.bead], vi.fn()));
+
+      // Source 0 opens (arming its watchdog) then errors. onerror clears that
+      // watchdog and schedules a 1s reconnect.
+      act(() => eventSources[0]?.open());
+      act(() => eventSources[0]?.error());
+      expect(result.current).toBe('closed');
+
+      // The backoff elapses and connect() builds source 1, which then opens and
+      // arms its OWN watchdog.
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+      expect(eventSources).toHaveLength(2);
+      act(() => eventSources[1]?.open());
+      expect(result.current).toBe('open');
+
+      // Advance to the instant source 0's watchdog WOULD have fired had it leaked
+      // (one full window after source 0 opened, at t0+window). The stream must
+      // still read 'open' — proving no stale timer from the dead socket forced a
+      // premature 'degraded' on its successor.
+      act(() => {
+        vi.advanceTimersByTime(SSE_IDLE_WATCHDOG_MS - 1_000);
+      });
+      expect(result.current).toBe('open');
+
+      // Source 1's own watchdog then fires a full window after IT opened.
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+      expect(result.current).toBe('degraded');
     });
   });
 
