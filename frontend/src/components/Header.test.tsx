@@ -101,15 +101,19 @@ describe('Header mobile nav', () => {
 
   it('gives Convoy a top-level tab pointing at /convoy, ordered between Runs and Mail', () => {
     // gascity-dashboard-0chv3: the convoy view had no front door — this is it.
-    const { container } = renderHeader();
-    const desktopList = container.querySelector('ul.sm\\:flex') as HTMLElement;
-    expect(desktopList).not.toBeNull();
-    const convoy = within(desktopList).getByRole('link', { name: /Convoy/ });
+    renderHeader();
+    // Anchor on the semantic primary nav, not the responsive `sm:flex` utility
+    // class (an implementation detail). The mobile menu is a separate labelled
+    // nav, so this scopes cleanly to the desktop row.
+    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    const convoy = within(nav).getByRole('link', { name: /Convoy/ });
     expect(convoy.getAttribute('href')).toBe('/convoy');
     // Order is explicit (45), so Convoy sits after Runs and before Mail. Assert
     // the relative order without pinning the full set — registry-driven views may
     // also be present depending on the async config fetch's timing.
-    const labels = Array.from(desktopList.querySelectorAll('a')).map((a) => a.textContent ?? '');
+    const labels = within(nav)
+      .getAllByRole('link')
+      .map((link) => link.textContent ?? '');
     expect(labels.indexOf('Runs')).toBeLessThan(labels.indexOf('Convoy'));
     expect(labels.indexOf('Convoy')).toBeLessThan(labels.indexOf('Mail'));
   });
