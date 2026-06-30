@@ -24,7 +24,11 @@ interface ViewErrorBoundaryState {
 // (never swallowed), and Retry remounts the subtree so transient slowness
 // clears without a full-page reload. Greyscale-readable per DESIGN.md (the
 // state is carried by a glyph and the word, not by tone) and non-counting (no
-// maroon mark — One Mark Rule unaffected).
+// maroon mark, so the One Mark Rule is unaffected).
+//
+// The neutral grey is deliberate and distinct from the convoy DATA layer's
+// Stuck Maroon "failed" tier: a render crash is an unexpected fault in the view
+// itself, mirroring the app-root ErrorBoundary, not a counted domain signal.
 export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErrorBoundaryState> {
   override state: ViewErrorBoundaryState = { failed: false };
 
@@ -47,7 +51,7 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
       return (
         <section className="space-y-3" role="alert">
           <p className="text-body text-fg-muted">
-            <span aria-hidden="true">◌</span> Unavailable. This view could not be rendered — the
+            <span aria-hidden="true">◌</span> Unavailable. This view could not be rendered; the
             supervisor store may be slow or returning partial data. The error was reported to the
             local dashboard log.
           </p>

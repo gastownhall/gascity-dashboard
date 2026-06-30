@@ -1,5 +1,5 @@
 import { Suspense, lazy, useMemo, type ReactNode } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { api } from './api/client';
 import { AttentionProvider } from './attention/context';
 import { useLiveAttentionContributors } from './attention/liveContributors';
@@ -35,6 +35,21 @@ const FormulaRunDetailPage = lazy(() =>
   import('./routes/FormulaRunDetail').then((m) => ({ default: m.FormulaRunDetailPage })),
 );
 const RunsPage = lazy(() => import('./routes/Runs').then((m) => ({ default: m.RunsPage })));
+
+// The convoy detail boundary is keyed by the :rootBead param. React Router
+// reuses a route's element across param-only navigations, so a single boundary
+// instance would keep its tripped "unavailable" latch when the operator follows
+// a step-row link from a throwing convoy root A to a healthy root B, masking B's
+// good data until manual Retry. Keying by rootBead gives each root its own
+// boundary instance, so the latch resets on navigation.
+function ConvoyDetailRoute(): ReactNode {
+  const { rootBead } = useParams<{ rootBead: string }>();
+  return (
+    <ViewErrorBoundary key={rootBead ?? ''} view="convoy detail">
+      <ConvoyPage />
+    </ViewErrorBoundary>
+  );
+}
 
 export function App() {
   // NowProvider lives at the App root because useFaviconSignal (R8) is
@@ -120,14 +135,7 @@ export function App() {
                           </ViewErrorBoundary>
                         }
                       />
-                      <Route
-                        path="/convoy/:rootBead"
-                        element={
-                          <ViewErrorBoundary view="convoy detail">
-                            <ConvoyPage />
-                          </ViewErrorBoundary>
-                        }
-                      />
+                      <Route path="/convoy/:rootBead" element={<ConvoyDetailRoute />} />
                       <Route path="/runs" element={<RunsPage />} />
                       <Route path="/runs/:runId" element={<FormulaRunDetailPage />} />
                       <Route path="/mail" element={<MailPage />} />
