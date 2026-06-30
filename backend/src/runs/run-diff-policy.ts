@@ -22,6 +22,20 @@ export function normalizeGitDiffPath(filePath: string): string {
   return filePath.replace(/^"?[ab]\//, '').replace(/"$/, '');
 }
 
+// Defense-in-depth guard for paths handed to a `git diff` shell-out in the
+// untracked-patch pass. Git only ever emits repo-relative paths, so in normal
+// operation every path passes; the guard fails closed if a compromised or
+// malformed git output ever yields an absolute path, a `..` escape, or an
+// embedded NUL — none of which a legitimate relative in-repo path carries.
+export function isSafeRelativeGitPath(filePath: string): boolean {
+  return (
+    filePath.length > 0 &&
+    !filePath.startsWith('/') &&
+    !filePath.includes('\0') &&
+    !filePath.split('/').includes('..')
+  );
+}
+
 export function classifyRunDiffFile(filePath: string): RunChangedFileKind {
   const lower = normalizeGitDiffPath(filePath).toLowerCase();
   if (

@@ -13,7 +13,11 @@ import {
 } from '../exec.js';
 import { MAX_RUN_DIFF_BYTES } from '../exec-core.js';
 import { LOG_COMPONENT, errorMessage, logWarn } from '../logging.js';
-import { classifyRunDiffFile, isReviewableRunDiffPath } from './run-diff-policy.js';
+import {
+  classifyRunDiffFile,
+  isReviewableRunDiffPath,
+  isSafeRelativeGitPath,
+} from './run-diff-policy.js';
 
 const MAX_UNTRACKED_PATCH_FILES = 50;
 const MAX_UNTRACKED_FILE_DIFF_BYTES = 96 * 1024;
@@ -339,15 +343,6 @@ function isReviewablePatchBlock(block: string): boolean {
   const match = /^diff --git a\/(.+) b\/(.+)$/.exec(header);
   if (!match) return true;
   return isReviewableRunDiffPath(match[1] ?? '') && isReviewableRunDiffPath(match[2] ?? '');
-}
-
-function isSafeRelativeGitPath(filePath: string): boolean {
-  return (
-    filePath.length > 0 &&
-    !filePath.startsWith('/') &&
-    !filePath.includes('\0') &&
-    !filePath.split('/').includes('..')
-  );
 }
 
 function isChangedFile(value: RunChangedFile | null): value is RunChangedFile {
