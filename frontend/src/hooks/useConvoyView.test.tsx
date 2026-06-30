@@ -24,8 +24,21 @@ function convoyLoad(rootBeadId: string): ConvoyLoad {
 
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
+  // resetAllMocks (not clearAllMocks) so a mockReturnValueOnce/mockImplementation
+  // set in one test does not leak its impl into the next — the stale-result tests
+  // below depend on a clean per-call queue.
+  vi.resetAllMocks();
 });
+
+// A promise whose settlement the test controls, so a load can be held in flight
+// across a rerender/unmount and then resolved in a deliberate order.
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 describe('useConvoyView', () => {
   it('stays idle when no root bead id is supplied', () => {
@@ -124,5 +137,108 @@ describe('useConvoyView', () => {
       await result.current.refresh();
     });
     expect(mockLoadConvoyView).not.toHaveBeenCalled();
+  });
+
+  // Stale-result guards (gascity-dashboard-v9lz). These pin the only
+  // non-trivial correctness mechanism in the hook: the effect 'cancelled'
+  // flag and the refresh liveRootRef guard. Tests 1 and 3 are mutation-biting:
+  // each resolves the STALE load AFTER the fresh one, so a neutered guard
+  // (isCurrent -> () => true) clobbers the new convoy's state and the assertion
+  // flips. Test 2 (unmount) is documentation-only — React 18 silently drops
+  // post-unmount setState, so neutering the cancelled guard leaves it green;
+  // its assertion still verifies the observable behaviour (state stays loading
+  // after unmount).
+  it('discards a stale initial load that resolves after the root changed (cancelled guard)', async () => {
+    const stale = deferred<ConvoyLoad>();
+    const fresh = deferred<ConvoyLoad>();
+    mockLoadConvoyView
+      .mockReturnValueOnce(stale.promise) // load for root-1
+      .mockReturnValueOnce(fresh.promise); // load for root-2
+
+    const { result, rerender } = renderHook(({ id }) => useConvoyView(id), {
+      initialProps: { id: 'root-1' },
+    });
+    expect(result.current.state.kind).toBe('loading');
+
+    // Root changes while load #1 is still in flight: the effect cleanup sets
+    // its cancelled flag and a fresh load starts for root-2.
+    rerender({ id: 'root-2' });
+
+    // Fresh load lands first.
+    await act(async () => {
+      fresh.resolve(convoyLoad('root-2'));
+    });
+    await waitFor(() => {
+      if (result.current.state.kind !== 'ready') throw new Error('expected ready');
+      expect(result.current.state.load.view.rootBeadId).toBe('root-2');
+    });
+
+    // The stale load resolves LAST — the cancelled guard must drop it.
+    await act(async () => {
+      stale.resolve(convoyLoad('root-1'));
+    });
+
+    if (result.current.state.kind !== 'ready') throw new Error('expected ready');
+    expect(result.current.state.load.view.rootBeadId).toBe('root-2');
+  });
+
+  it('writes no ready state when an in-flight load resolves after unmount (cancelled guard)', async () => {
+    const inFlight = deferred<ConvoyLoad>();
+    mockLoadConvoyView.mockReturnValueOnce(inFlight.promise);
+
+    const { result, unmount } = renderHook(() => useConvoyView('root-1'));
+    expect(result.current.state.kind).toBe('loading');
+
+    unmount();
+    await act(async () => {
+      inFlight.resolve(convoyLoad('root-1'));
+    });
+
+    // The last committed state stays 'loading'; the post-unmount resolution is
+    // dropped by the cancelled guard rather than committing a ready view.
+    expect(result.current.state.kind).toBe('loading');
+  });
+
+  it('discards a stale refresh that resolves after the root changed (liveRootRef guard)', async () => {
+    const initial = deferred<ConvoyLoad>();
+    const staleRefresh = deferred<ConvoyLoad>();
+    const nextRoot = deferred<ConvoyLoad>();
+    mockLoadConvoyView
+      .mockReturnValueOnce(initial.promise) // initial load for root-1
+      .mockReturnValueOnce(staleRefresh.promise) // manual refresh for root-1
+      .mockReturnValueOnce(nextRoot.promise); // initial load for root-2
+
+    const { result, rerender } = renderHook(({ id }) => useConvoyView(id), {
+      initialProps: { id: 'root-1' },
+    });
+    await act(async () => {
+      initial.resolve(convoyLoad('root-1'));
+    });
+    await waitFor(() => expect(result.current.state.kind).toBe('ready'));
+
+    // Kick off a manual refresh for root-1 (held in flight).
+    act(() => {
+      void result.current.refresh();
+    });
+
+    // Root changes before the refresh resolves: liveRootRef.current advances to
+    // root-2, and a fresh initial load for root-2 lands.
+    rerender({ id: 'root-2' });
+    await act(async () => {
+      nextRoot.resolve(convoyLoad('root-2'));
+    });
+    await waitFor(() => {
+      if (result.current.state.kind !== 'ready') throw new Error('expected ready');
+      expect(result.current.state.load.view.rootBeadId).toBe('root-2');
+    });
+
+    // The stale refresh (for root-1) resolves LAST — the liveRootRef guard must
+    // drop it rather than clobber the root-2 view.
+    await act(async () => {
+      staleRefresh.resolve(convoyLoad('root-1'));
+    });
+
+    if (result.current.state.kind !== 'ready') throw new Error('expected ready');
+    expect(result.current.state.load.view.rootBeadId).toBe('root-2');
   });
 });
