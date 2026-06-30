@@ -109,7 +109,6 @@ export function HealthPage() {
     localTools !== null ||
     trend !== null ||
     rigStores !== null;
-  const hostHealthStatus = health ? hostStatus(health) : undefined;
   const supervisorAttention = prefixedAttentionSeverity(attention, 'health', [
     'health:supervisor-',
   ]);
@@ -145,89 +144,21 @@ export function HealthPage() {
 
       {hasAnyData ? (
         <div className="space-y-12">
-          <Section
-            title="Supervisor"
-            attention={supervisorAttention}
-            {...(supervisor ? { status: supervisorStatus(supervisor) } : {})}
-          >
-            {supervisor === null ? (
-              <p className="text-body text-fg-muted italic">Loading supervisor state.</p>
-            ) : supervisor.status === 'available' ? (
-              <KvList>
-                {/* izgc F7/F8: city + version are optional per supervisor's
-                    OpenAPI. Absence is itself a wire-drift signal — render
-                    in 'warn' tone rather than coalescing to a glanceable
-                    em-dash, so the operator notices the regression. */}
-                {supervisor.data.city !== undefined ? (
-                  <Kv label="City" value={supervisor.data.city} />
-                ) : (
-                  <Kv label="City" value="not reported by supervisor" tone="warn" />
-                )}
-                {supervisor.data.version !== undefined ? (
-                  <Kv label="Version" value={supervisor.data.version} />
-                ) : (
-                  <Kv label="Version" value="not reported by supervisor" tone="warn" />
-                )}
-                <Kv label="Uptime" value={formatDuration(supervisor.data.uptime_sec)} />
-                <Kv label="Status" value={supervisor.data.status} />
-              </KvList>
-            ) : (
-              <p className="text-body text-accent">
-                Supervisor not reachable. The dashboard shell stays up; live data is stale.
-              </p>
-            )}
-          </Section>
+          <SupervisorSection supervisor={supervisor} attention={supervisorAttention} />
 
-          <Section
-            title="Host"
+          <HostSection
+            healthState={healthState}
+            health={health}
+            healthError={healthError}
             attention={hostAttention}
-            {...(hostHealthStatus ? { status: hostHealthStatus } : {})}
-          >
-            {healthState === null ? (
-              <p className="text-body text-fg-muted italic">Loading dashboard host health.</p>
-            ) : health === null ? (
-              <p className="text-body text-accent">
-                Dashboard host health unavailable{healthError ? `: ${healthError}` : ''}.
-              </p>
-            ) : (
-              <KvList>
-                <Kv label="CPUs" value={health.host.cpu_count.toString()} />
-                <Kv
-                  label="Load (1m, 5m, 15m)"
-                  value={`${health.host.load_avg_1.toFixed(2)}, ${health.host.load_avg_5.toFixed(2)}, ${health.host.load_avg_15.toFixed(2)}`}
-                  {...(health.host.load_avg_1 > health.host.cpu_count
-                    ? { tone: 'warn' as const }
-                    : {})}
-                />
-                <Kv
-                  label="Memory free"
-                  value={`${formatHumanSize(health.host.free_mem_bytes)} of ${formatHumanSize(health.host.total_mem_bytes)}`}
-                  {...(health.host.free_mem_bytes / health.host.total_mem_bytes < 0.1
-                    ? { tone: 'warn' as const }
-                    : {})}
-                />
-                <Kv label="Host uptime" value={formatDuration(health.host.uptime_sec)} />
-              </KvList>
-            )}
-          </Section>
+          />
 
-          <Section title="Admin process" attention={adminAttention}>
-            {healthState === null ? (
-              <p className="text-body text-fg-muted italic">Loading dashboard process health.</p>
-            ) : health === null ? (
-              <p className="text-body text-accent">
-                Dashboard process health unavailable{healthError ? `: ${healthError}` : ''}.
-              </p>
-            ) : (
-              <KvList>
-                <Kv label="PID" value={health.admin.pid.toString()} />
-                <Kv label="Uptime" value={formatDuration(health.admin.uptime_sec)} />
-                <Kv label="RSS" value={formatHumanSize(health.admin.rss_bytes)} />
-                <Kv label="Heap used" value={formatHumanSize(health.admin.heap_used_bytes)} />
-                <Kv label="Node" value={health.admin.node_version} />
-              </KvList>
-            )}
-          </Section>
+          <AdminProcessSection
+            healthState={healthState}
+            health={health}
+            healthError={healthError}
+            attention={adminAttention}
+          />
 
           <Section title="Tool versions">
             <ToolVersionsTable state={localTools} />
@@ -252,30 +183,163 @@ export function HealthPage() {
             <ConfigComparison comparison={configComparisonOf(status)} />
           </Section>
 
-          <Section
-            title="Dolt-noms · 24 h"
-            attention={doltNomsAttention}
-            meta={trend && trend.samples.length > 0 ? `${trend.samples.length} samples` : undefined}
-          >
-            {trend === null ? (
-              <p className="text-body text-fg-muted italic">Loading.</p>
-            ) : !trend.available ? (
-              <p className="text-body text-fg-muted italic">
-                Dolt-noms metric unavailable: {doltUnavailableCopy(trend.reason)}.
-              </p>
-            ) : trend.samples.length === 0 ? (
-              <p className="text-body text-fg-muted italic">
-                No samples yet. Backend just started; next sample in ten minutes or less.
-              </p>
-            ) : (
-              <Sparkline samples={trend.samples} />
-            )}
-          </Section>
+          <DoltNomsSection trend={trend} attention={doltNomsAttention} />
         </div>
       ) : (
         <p className="text-body text-fg-muted italic">Loading.</p>
       )}
     </section>
+  );
+}
+
+function SupervisorSection({
+  supervisor,
+  attention,
+}: {
+  supervisor: SupervisorHealthState | null;
+  attention: ReturnType<typeof prefixedAttentionSeverity>;
+}) {
+  return (
+    <Section
+      title="Supervisor"
+      attention={attention}
+      {...(supervisor ? { status: supervisorStatus(supervisor) } : {})}
+    >
+      {supervisor === null ? (
+        <p className="text-body text-fg-muted italic">Loading supervisor state.</p>
+      ) : supervisor.status === 'available' ? (
+        <KvList>
+          {/* izgc F7/F8: city + version are optional per supervisor's
+              OpenAPI. Absence is itself a wire-drift signal — render
+              in 'warn' tone rather than coalescing to a glanceable
+              em-dash, so the operator notices the regression. */}
+          {supervisor.data.city !== undefined ? (
+            <Kv label="City" value={supervisor.data.city} />
+          ) : (
+            <Kv label="City" value="not reported by supervisor" tone="warn" />
+          )}
+          {supervisor.data.version !== undefined ? (
+            <Kv label="Version" value={supervisor.data.version} />
+          ) : (
+            <Kv label="Version" value="not reported by supervisor" tone="warn" />
+          )}
+          <Kv label="Uptime" value={formatDuration(supervisor.data.uptime_sec)} />
+          <Kv label="Status" value={supervisor.data.status} />
+        </KvList>
+      ) : (
+        <p className="text-body text-accent">
+          Supervisor not reachable. The dashboard shell stays up; live data is stale.
+        </p>
+      )}
+    </Section>
+  );
+}
+
+function HostSection({
+  healthState,
+  health,
+  healthError,
+  attention,
+}: {
+  healthState: SystemHealthState | null;
+  health: SystemHealth | null;
+  healthError: string | null;
+  attention: ReturnType<typeof prefixedAttentionSeverity>;
+}) {
+  const hostHealthStatus = health ? hostStatus(health) : undefined;
+  return (
+    <Section
+      title="Host"
+      attention={attention}
+      {...(hostHealthStatus ? { status: hostHealthStatus } : {})}
+    >
+      {healthState === null ? (
+        <p className="text-body text-fg-muted italic">Loading dashboard host health.</p>
+      ) : health === null ? (
+        <p className="text-body text-accent">
+          Dashboard host health unavailable{healthError ? `: ${healthError}` : ''}.
+        </p>
+      ) : (
+        <KvList>
+          <Kv label="CPUs" value={health.host.cpu_count.toString()} />
+          <Kv
+            label="Load (1m, 5m, 15m)"
+            value={`${health.host.load_avg_1.toFixed(2)}, ${health.host.load_avg_5.toFixed(2)}, ${health.host.load_avg_15.toFixed(2)}`}
+            {...(health.host.load_avg_1 > health.host.cpu_count ? { tone: 'warn' as const } : {})}
+          />
+          <Kv
+            label="Memory free"
+            value={`${formatHumanSize(health.host.free_mem_bytes)} of ${formatHumanSize(health.host.total_mem_bytes)}`}
+            {...(health.host.free_mem_bytes / health.host.total_mem_bytes < 0.1
+              ? { tone: 'warn' as const }
+              : {})}
+          />
+          <Kv label="Host uptime" value={formatDuration(health.host.uptime_sec)} />
+        </KvList>
+      )}
+    </Section>
+  );
+}
+
+function AdminProcessSection({
+  healthState,
+  health,
+  healthError,
+  attention,
+}: {
+  healthState: SystemHealthState | null;
+  health: SystemHealth | null;
+  healthError: string | null;
+  attention: ReturnType<typeof prefixedAttentionSeverity>;
+}) {
+  return (
+    <Section title="Admin process" attention={attention}>
+      {healthState === null ? (
+        <p className="text-body text-fg-muted italic">Loading dashboard process health.</p>
+      ) : health === null ? (
+        <p className="text-body text-accent">
+          Dashboard process health unavailable{healthError ? `: ${healthError}` : ''}.
+        </p>
+      ) : (
+        <KvList>
+          <Kv label="PID" value={health.admin.pid.toString()} />
+          <Kv label="Uptime" value={formatDuration(health.admin.uptime_sec)} />
+          <Kv label="RSS" value={formatHumanSize(health.admin.rss_bytes)} />
+          <Kv label="Heap used" value={formatHumanSize(health.admin.heap_used_bytes)} />
+          <Kv label="Node" value={health.admin.node_version} />
+        </KvList>
+      )}
+    </Section>
+  );
+}
+
+function DoltNomsSection({
+  trend,
+  attention,
+}: {
+  trend: DoltNomsTrend | null;
+  attention: ReturnType<typeof prefixedAttentionSeverity>;
+}) {
+  return (
+    <Section
+      title="Dolt-noms · 24 h"
+      attention={attention}
+      meta={trend && trend.samples.length > 0 ? `${trend.samples.length} samples` : undefined}
+    >
+      {trend === null ? (
+        <p className="text-body text-fg-muted italic">Loading.</p>
+      ) : !trend.available ? (
+        <p className="text-body text-fg-muted italic">
+          Dolt-noms metric unavailable: {doltUnavailableCopy(trend.reason)}.
+        </p>
+      ) : trend.samples.length === 0 ? (
+        <p className="text-body text-fg-muted italic">
+          No samples yet. Backend just started; next sample in ten minutes or less.
+        </p>
+      ) : (
+        <Sparkline samples={trend.samples} />
+      )}
+    </Section>
   );
 }
 

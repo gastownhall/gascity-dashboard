@@ -1,5 +1,6 @@
 import {
   GC_EVENT_PREFIX,
+  errorMessage,
   type RunSummary,
   type SourceAvailableState,
   type SourceState,
@@ -7,6 +8,7 @@ import {
 } from 'gas-city-dashboard-shared';
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
 import { getActiveCity } from '../api/cityBase';
+import { LOG_COMPONENT, logWarn } from '../lib/logging';
 import { useCachedData } from '../hooks/useCachedData';
 import { useGcEventRefresh, type GcEventConnState } from '../hooks/useGcEvents';
 import {
@@ -179,7 +181,10 @@ export function useRunSummarySubscription(): RunSummarySubscription {
     const refreshKey = cityName ?? 'no-city';
     if (fullRefreshKeyRef.current === refreshKey) return;
     fullRefreshKeyRef.current = refreshKey;
-    void refresh().catch(() => {
+    void refresh().catch((err: unknown) => {
+      // Log before clearing the key so a persistently-failing first-upgrade
+      // leaves a diagnostic trail instead of silently re-arming forever.
+      logWarn(LOG_COMPONENT.runs, `run-summary full refresh failed: ${errorMessage(err)}`);
       fullRefreshKeyRef.current = null;
     });
   }, [cityName, refresh, runs]);
@@ -239,7 +244,10 @@ export function useRunSummarySubscription(): RunSummarySubscription {
     // SSE-driven bursts take the CHEAP path (active-only + merged history); the
     // wide scan is reserved for the manual Refresh button and the one-time
     // first-upgrade.
-    void cheapRefresh().catch(() => {
+    void cheapRefresh().catch((err: unknown) => {
+      // Log before resetting so a persistently-failing SSE-driven refresh leaves
+      // a diagnostic trail rather than churning silently every event.
+      logWarn(LOG_COMPONENT.runs, `run-summary event refresh failed: ${errorMessage(err)}`);
       // Reset on error so the next event retries instead of being silently
       // dropped for the rest of the debounce window.
       lastRefreshAtRef.current = 0;

@@ -298,6 +298,16 @@ const INTAKE_STAGE_TOKENS: ReadonlySet<string> = new Set([
  * full description+metadata dump, and drops the incidental-matching needles
  * ('gate', 'human', 'merge', 'close', 'report', 'work', 'fix', 'code') that
  * collapsed real runs onto late phases. Conservative: 'active' when ambiguous.
+ *
+ * ZFC boundary (audit-2026-06-28 #3): this is render-time UI presentation, not
+ * AI-orchestration — the ZFC ban on hardcoded semantic classifiers carves out
+ * UI/hot paths, and no model is in the loop at synchronous render. The keyword
+ * scan is a last-resort DISPLAY hint, reached only after the structural,
+ * gc.step_id-based `structuredPhase` returns null (legacy / pre-step-id runs);
+ * it gates no action, fails safe to the neutral 'active' label when ambiguous,
+ * and is already narrowed to step-identity text with the false-positive needles
+ * removed. Kept (not deleted) so unstructured runs still show a best-effort
+ * phase instead of always rendering 'active'.
  */
 function fallbackPhase(issues: RunIssue[]): PhaseMapping {
   if (stepSignalContainsAny(issues, ['approval', 'approved', 'finalize-scope'])) {

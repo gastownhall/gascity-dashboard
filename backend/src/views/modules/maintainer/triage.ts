@@ -398,35 +398,53 @@ export function computeHasInFlightPr(items: TriageItem[]): void {
  *
  * Extracted from composeEnvelope so the GET overlay (gascity-dashboard-9qs)
  * can re-run the winnow after splicing slung-state onto items at serve
- * time. Mutates each item's is_marked in place.
+ * time.
+ *
+ * The winner is resolved purely (selectMarkWinner — no mutation), then a
+ * single pass sets is_marked = (item is the winner) on every item. The
+ * decision and the assignment are no longer split across provisional-set
+ * then multiple clearing passes (audit-2026-06-28 #5). Immutability note:
+ * this still writes is_marked in place rather than returning new objects,
+ * because the item references are shared — collectItems() hands back the
+ * very objects held inside the rendered envelope tiers, and applySlungOverlay
+ * is by contract an in-place envelope mutator; returning fresh objects here
+ * would orphan the envelope's references and drop the maroon ● at render.
  *
  * Callers must have already populated tier + triage_score on every item
  * AND set the provisional is_marked from classifyItem / isMarkCandidate.
- * Items whose is_marked is already false are passed over.
  */
 export function selectOneMark(items: TriageItem[]): void {
-  // (1) Drop candidate issues whose in-flight PR is in view so the eye
-  // lands on the action (the PR), not the problem.
-  const issueNumbersWithInFlightPrSet = issueNumbersWithInFlightPr(items);
+  const winner = selectMarkWinner(items);
   for (const item of items) {
-    if (item.kind === 'issue' && issueNumbersWithInFlightPrSet.has(item.number)) {
-      item.is_marked = false;
-    }
+    item.is_marked = item === winner;
   }
+}
 
-  // (2) Pick the top scorer among the surviving candidates. Uses
-  // sortScore so a vetted item wins the mark over an unvetted item
-  // with a higher heuristic score (vetted is the stronger signal).
+/**
+ * Pure winner resolution for the One Mark Rule — reads provisional is_marked
+ * + scores and returns the single item that should carry the maroon ● (or
+ * null when nothing qualifies). No mutation, so the decision is testable and
+ * the assignment lives in exactly one place (selectOneMark).
+ */
+function selectMarkWinner(items: TriageItem[]): TriageItem | null {
+  // (1) Candidate set: provisionally-marked items, minus any issue whose
+  // in-flight PR is in view — the eye should land on the action (the PR),
+  // not the problem.
+  const issueNumbersWithInFlightPrSet = issueNumbersWithInFlightPr(items);
+  const isCandidate = (item: TriageItem): boolean =>
+    item.is_marked && !(item.kind === 'issue' && issueNumbersWithInFlightPrSet.has(item.number));
+
+  // (2) Top scorer among the survivors. Uses sortScore so a vetted item wins
+  // the mark over an unvetted item with a higher heuristic score (vetted is
+  // the stronger signal).
   let topMark: TriageItem | null = null;
   for (const item of items) {
-    if (!item.is_marked) continue;
+    if (!isCandidate(item)) continue;
     if (topMark === null || sortScore(item) > sortScore(topMark)) {
       topMark = item;
     }
   }
-  for (const item of items) {
-    if (item.is_marked && item !== topMark) item.is_marked = false;
-  }
+  if (topMark === null) return null;
 
   // (3) Legacy parent-transfer (PR → parent issue): when the winning mark
   // is a PR, the mark belongs on the parent issue ONLY when there is no
@@ -434,25 +452,24 @@ export function selectOneMark(items: TriageItem[]): void {
   // open action item (merged / closed), so the eye should fall back to
   // the still-open problem.
   //
-  // gascity-dashboard-443: the guard is keyed on the step-(1) in-flight
+  // gascity-dashboard-443: the guard is keyed on the candidate in-flight
   // set, NOT on `parent.is_marked`. The previous `parent.is_marked` check
   // was structurally wrong in two ways:
-  //   - It is unconditionally dead today: step (2) clears is_marked on
-  //     every non-topMark item, so the parent is always unmarked here.
+  //   - It was unconditionally dead: the winnow cleared is_marked on every
+  //     non-topMark item, so the parent was always unmarked at this point.
   //   - It points the wrong direction for the forward-defense case the
   //     block claims to handle. If isMarkCandidate is ever extended to
-  //     mark issues directly, a parent issue that was the top scorer in
-  //     step (2) would arrive with is_marked=true and WRONGLY trigger a
-  //     transfer from a winning in-flight PR to its parent issue —
-  //     re-introducing the exact bs2 regression (the mark must stay on
-  //     the action item, the PR).
+  //     mark issues directly, a parent issue that was the top scorer would
+  //     arrive with is_marked=true and WRONGLY trigger a transfer from a
+  //     winning in-flight PR to its parent issue — re-introducing the exact
+  //     bs2 regression (the mark must stay on the action item, the PR).
   //
   // Keying on `issueNumbersWithInFlightPr` makes the intent explicit and
   // direction-correct: an issue with an in-flight PR NEVER receives the
-  // mark (bs2), regardless of which item won step (2). The transfer fires
-  // only for a parent with no in-flight PR (its linking PR is the merged /
-  // closed topMark) and which is not itself the top scorer.
-  if (topMark !== null && topMark.kind === 'pr' && topMark.linked_numbers.length > 0) {
+  // mark (bs2), regardless of which item is the top scorer. The transfer
+  // fires only for a parent with no in-flight PR (its linking PR is the
+  // merged / closed topMark) and which is not itself the top scorer.
+  if (topMark.kind === 'pr' && topMark.linked_numbers.length > 0) {
     for (const linkedNum of topMark.linked_numbers) {
       const parent = items.find((i) => i.kind === 'issue' && i.number === linkedNum);
       if (
@@ -460,12 +477,11 @@ export function selectOneMark(items: TriageItem[]): void {
         parent !== topMark &&
         !issueNumbersWithInFlightPrSet.has(parent.number)
       ) {
-        topMark.is_marked = false;
-        parent.is_marked = true;
-        break;
+        return parent;
       }
     }
   }
+  return topMark;
 }
 
 function composeEnvelope(repo: string, items: TriageItem[]): MaintainerTriage {
