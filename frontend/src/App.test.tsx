@@ -31,6 +31,15 @@ vi.mock('./routes/Runs', () => ({
   RunsPage: () => <h1>Runs route</h1>,
 }));
 
+// The convoy index render throws — standing in for an unanticipated partial or
+// degenerate supervisor shape that slips past the data layer under store
+// slowness (gascity-dashboard-sw1w). The per-view boundary must catch it.
+vi.mock('./routes/ConvoyIndex', () => ({
+  ConvoyIndex: () => {
+    throw new Error('convoy render exploded');
+  },
+}));
+
 function LocationProbe() {
   const location = useLocation();
   return <output data-testid="pathname">{location.pathname}</output>;
@@ -86,5 +95,23 @@ describe('App routes', () => {
 
     expect(await screen.findByRole('heading', { name: 'Runs route' })).toBeTruthy();
     expect(screen.getByTestId('pathname').textContent).toBe('/runs');
+  });
+
+  it('degrades a throwing convoy view to the per-view unavailable tier, not a whole-app crash', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 202 })),
+    );
+
+    renderAt('/convoy');
+
+    const notice = await screen.findByRole('alert');
+    expect(notice.textContent).toContain('Unavailable');
+    expect(notice.textContent).toContain('◌');
+    // The route stayed mounted at /convoy — the throw was contained, not fatal.
+    expect(screen.getByTestId('pathname').textContent).toBe('/convoy');
+
+    vi.unstubAllGlobals();
   });
 });

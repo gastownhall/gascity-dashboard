@@ -4,6 +4,7 @@ import { api } from './api/client';
 import { AttentionProvider } from './attention/context';
 import { useLiveAttentionContributors } from './attention/liveContributors';
 import { Layout } from './components/Layout';
+import { ViewErrorBoundary } from './components/ViewErrorBoundary';
 import { NowProvider } from './contexts/NowContext';
 import {
   OperatorConfigProvider,
@@ -105,8 +106,28 @@ export function App() {
                       <Route path="/agents" element={<AgentsPage />} />
                       <Route path="/agents/:slug" element={<AgentDetailPage />} />
                       <Route path="/beads" element={<BeadsPage />} />
-                      <Route path="/convoy" element={<ConvoyIndexPage />} />
-                      <Route path="/convoy/:rootBead" element={<ConvoyPage />} />
+                      {/* The convoy views compose a city-wide bead scan and a
+                  client-side graph projection (gascity-dashboard-sw1w). Their
+                  data layer already degrades a failing/slow fetch to an honest
+                  state, but a per-view boundary keeps an unanticipated
+                  render throw under supervisor store slowness from bubbling to
+                  the app-root crash page and taking down the whole dashboard. */}
+                      <Route
+                        path="/convoy"
+                        element={
+                          <ViewErrorBoundary view="convoy index">
+                            <ConvoyIndexPage />
+                          </ViewErrorBoundary>
+                        }
+                      />
+                      <Route
+                        path="/convoy/:rootBead"
+                        element={
+                          <ViewErrorBoundary view="convoy detail">
+                            <ConvoyPage />
+                          </ViewErrorBoundary>
+                        }
+                      />
                       <Route path="/runs" element={<RunsPage />} />
                       <Route path="/runs/:runId" element={<FormulaRunDetailPage />} />
                       <Route path="/mail" element={<MailPage />} />
