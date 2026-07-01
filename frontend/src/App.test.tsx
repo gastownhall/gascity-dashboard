@@ -78,6 +78,12 @@ function renderAt(path: string) {
 describe('App routes', () => {
   afterEach(() => {
     cleanup();
+    // Guarantee stub/spy cleanup even if a test throws before its own cleanup:
+    // restoreAllMocks reverts spyOn spies (console.error), unstubAllGlobals
+    // reverts stubGlobal (fetch). Without this a mid-test throw leaks them into
+    // later files in the same Vitest worker.
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   beforeEach(() => {
@@ -127,8 +133,6 @@ describe('App routes', () => {
     expect(notice.textContent).toContain('◌');
     // The route stayed mounted at /convoy — the throw was contained, not fatal.
     expect(screen.getByTestId('pathname').textContent).toBe('/convoy');
-
-    vi.unstubAllGlobals();
   });
 
   it('resets a tripped convoy-detail boundary when navigating from a throwing root to a healthy one', async () => {
@@ -161,7 +165,5 @@ describe('App routes', () => {
 
     expect(await screen.findByRole('heading', { name: 'convoy root root-b' })).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
-
-    vi.unstubAllGlobals();
   });
 });

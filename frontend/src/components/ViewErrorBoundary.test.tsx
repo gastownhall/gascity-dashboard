@@ -19,6 +19,9 @@ describe('ViewErrorBoundary', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    // restoreAllMocks reverts spyOn spies but NOT stubGlobal; unstub the fetch
+    // stub explicitly so it cannot leak into later files in the same worker.
+    vi.unstubAllGlobals();
   });
 
   it('renders its children when they do not throw', () => {
