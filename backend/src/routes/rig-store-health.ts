@@ -15,10 +15,12 @@ import type { ExecResult } from '../exec.js';
 import { recordAudit } from '../audit.js';
 import { LOG_COMPONENT, errorMessage, logWarn } from '../logging.js';
 
-// Per-rig bead-store + dolt health (gascity-dashboard-u6d0). Each rig owns its
-// own embedded-dolt `.beads` store, so — unlike the supervisor's single
-// city-level store_health — this is a dashboard-local probe of host state:
-//   1. `.beads` present on disk            → reachable
+// Per-rig bead-store + dolt health (gascity-dashboard-u6d0). Older rigs report
+// the rig root and store the beads data in `/.beads`; newer DoltLite-backed
+// setups can report the bead-store path directly. Unlike the supervisor's
+// single city-level store_health, this is a dashboard-local probe of host
+// state:
+//   1. bead store present on disk         → reachable
 //   2. dolt-server.port + TCP connect      → dolt sql-server up + endpoint
 //   3. `bd doctor --json` (read-only)      → schema drift / integrity / count
 // rolled up to one red/green-per-rig tone. The probe runs on a periodic
@@ -195,7 +197,7 @@ export async function probeRigStore(
   rig: SupervisorRigDescriptor,
   deps: RigStoreProbeDeps,
 ): Promise<RigStoreHealth> {
-  const beadsPath = path.join(rig.path, '.beads');
+  const beadsPath = resolveBeadsPath(rig.path);
   const reachable = await deps.statBeads(beadsPath);
   if (!reachable) {
     return {
@@ -253,6 +255,10 @@ export async function probeRigStore(
     problems,
     ...(note !== undefined ? { note } : {}),
   };
+}
+
+function resolveBeadsPath(rigPath: string): string {
+  return path.basename(rigPath) === '.beads' ? rigPath : path.join(rigPath, '.beads');
 }
 
 // ── Sampler ──────────────────────────────────────────────────────────────

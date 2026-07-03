@@ -195,6 +195,19 @@ describe('probeRigStore', () => {
     assert.deepEqual(health.problems, []);
   });
 
+  test('accepts a rig path that already points at the bead store', async () => {
+    const health = await probeRigStore(
+      { name: 'codeprobe', path: '/home/ds/projects/codeprobe/.beads' },
+      depsFor({
+        statBeads: async (beadsPath) => {
+          assert.equal(beadsPath, '/home/ds/projects/codeprobe/.beads');
+          return true;
+        },
+      }),
+    );
+    assert.equal(health.beadsPath, '/home/ds/projects/codeprobe/.beads');
+  });
+
   test('missing .beads is down + unreachable without probing further', async () => {
     let doctorCalled = false;
     const health = await probeRigStore(
@@ -292,6 +305,29 @@ describe('createRigStoreHealthSampler', () => {
     assert.equal(report.available, true);
     assert.equal(report.rigs.length, 2);
     if (report.available) assert.equal(report.sampledAt, '2026-06-06T00:00:00.000Z');
+  });
+
+  test('samples a rig that already reports the bead-store path', async () => {
+    const sampler = createRigStoreHealthSampler({
+      listRigs: async () => [{ name: 'codeprobe', path: '/home/ds/projects/codeprobe/.beads' }],
+      probe: async (rig) => ({
+        rig: rig.name,
+        beadsPath: rig.path,
+        rollup: 'ok',
+        reachable: true,
+        doltEndpoint: '127.0.0.1:29620',
+        doltConnected: true,
+        issueCount: 1,
+        problems: [],
+      }),
+      now: () => '2026-06-06T00:00:00.000Z',
+    });
+    await sampler.sampleOnce();
+    const report = sampler.report();
+    assert.equal(report.available, true);
+    if (report.available) {
+      assert.equal(report.rigs[0]?.beadsPath, '/home/ds/projects/codeprobe/.beads');
+    }
   });
 
   test('rig_list failure keeps the prior snapshot but flips available=false', async () => {
