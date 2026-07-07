@@ -257,8 +257,32 @@ export async function probeRigStore(
   };
 }
 
-function resolveBeadsPath(rigPath: string): string {
-  return path.basename(rigPath) === '.beads' ? rigPath : path.join(rigPath, '.beads');
+// One-shot guard: log the first time a rig reports its bead-store path directly
+// so the DoltLite direct-store premise is confirmable in production, without
+// spamming the warn stream on every sample cycle (gascity-dashboard-ahwg).
+let directStoreLogged = false;
+
+/**
+ * Resolve a rig's untrusted supervisor path to its bead-store directory. Older
+ * rigs report the rig root (store lives at `<root>/.beads`); DoltLite rigs can
+ * report the store path directly. Trailing separators are stripped first so a
+ * `/foo/.beads/` path is recognised as the store and returns a clean path,
+ * rather than being re-nested to `/foo/.beads/.beads`. This is the single
+ * definition shared by the happy path and safeProbe's error fallback.
+ */
+export function resolveBeadsPath(rigPath: string): string {
+  const normalized = rigPath.replace(/\/+$/, '');
+  if (path.basename(normalized) === '.beads') {
+    if (!directStoreLogged) {
+      directStoreLogged = true;
+      logWarn(
+        LOG_COMPONENT.rigStoreHealth,
+        `rig reported a bead-store path directly (direct-store rig class); using as-is: ${normalized}`,
+      );
+    }
+    return normalized;
+  }
+  return path.join(normalized, '.beads');
 }
 
 // ── Sampler ──────────────────────────────────────────────────────────────
@@ -367,7 +391,7 @@ async function safeProbe(
   } catch (err) {
     return {
       rig: rig.name,
-      beadsPath: path.join(rig.path, '.beads'),
+      beadsPath: resolveBeadsPath(rig.path),
       rollup: 'down',
       reachable: false,
       doltEndpoint: null,
