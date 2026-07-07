@@ -185,19 +185,31 @@ const RIG: SupervisorRigDescriptor = { name: 'codeprobe', path: '/home/ds/projec
 
 describe('resolveBeadsPath', () => {
   test('appends .beads to a rig root', () => {
-    assert.equal(resolveBeadsPath('/home/ds/projects/codeprobe'), '/home/ds/projects/codeprobe/.beads');
+    assert.equal(
+      resolveBeadsPath('/home/ds/projects/codeprobe'),
+      '/home/ds/projects/codeprobe/.beads',
+    );
   });
 
   test('accepts a path that already points at the store', () => {
-    assert.equal(resolveBeadsPath('/home/ds/projects/codeprobe/.beads'), '/home/ds/projects/codeprobe/.beads');
+    assert.equal(
+      resolveBeadsPath('/home/ds/projects/codeprobe/.beads'),
+      '/home/ds/projects/codeprobe/.beads',
+    );
   });
 
   test('strips a trailing separator on a direct-store path (no permanent downgrade)', () => {
-    assert.equal(resolveBeadsPath('/home/ds/projects/codeprobe/.beads/'), '/home/ds/projects/codeprobe/.beads');
+    assert.equal(
+      resolveBeadsPath('/home/ds/projects/codeprobe/.beads/'),
+      '/home/ds/projects/codeprobe/.beads',
+    );
   });
 
   test('strips a trailing separator on a rig root before appending', () => {
-    assert.equal(resolveBeadsPath('/home/ds/projects/codeprobe/'), '/home/ds/projects/codeprobe/.beads');
+    assert.equal(
+      resolveBeadsPath('/home/ds/projects/codeprobe/'),
+      '/home/ds/projects/codeprobe/.beads',
+    );
   });
 });
 
