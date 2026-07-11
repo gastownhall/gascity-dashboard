@@ -16,8 +16,10 @@ import { readFileSync } from 'node:fs';
 test('RunSnapshotBead/RunSnapshotDep are aliases of the generated wire types, not hand mirrors', () => {
   const source = readFileSync(new URL('./run-snapshot.ts', import.meta.url), 'utf8');
 
-  assert.doesNotMatch(source, /export interface RunSnapshotBead/);
-  assert.doesNotMatch(source, /export interface RunSnapshotDep/);
-  assert.match(source, /export type RunSnapshotBead = WorkflowBeadResponse;/);
-  assert.match(source, /export type RunSnapshotDep = WorkflowDepResponse;/);
+  // Whitespace-tolerant so a reformat (extra spaces/newlines) can't fail the
+  // guard while the types remain true aliases.
+  assert.doesNotMatch(source, /export\s+interface\s+RunSnapshotBead\b/);
+  assert.doesNotMatch(source, /export\s+interface\s+RunSnapshotDep\b/);
+  assert.match(source, /export\s+type\s+RunSnapshotBead\s*=\s*WorkflowBeadResponse\s*;/);
+  assert.match(source, /export\s+type\s+RunSnapshotDep\s*=\s*WorkflowDepResponse\s*;/);
 });

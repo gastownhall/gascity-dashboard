@@ -250,9 +250,14 @@ test('shared barrel narrows to only externally-consumed session/link symbols (ga
   assert.equal(typeof parseRef, 'function');
   assert.equal(typeof sanitiseUrl, 'function');
 
-  assert.equal((barrel as Record<string, unknown>)['recordResolution'], undefined);
-  assert.equal((barrel as Record<string, unknown>)['nodeKey'], undefined);
-  assert.equal((barrel as Record<string, unknown>)['matchesSessionTarget'], undefined);
+  // Assert the key is absent from the module namespace, not merely `=== undefined`:
+  // a symbol accidentally exported with the value `undefined` would pass the
+  // latter but is still a barrel leak.
+  const isExported = (name: string): boolean =>
+    Object.prototype.hasOwnProperty.call(barrel, name);
+  assert.equal(isExported('recordResolution'), false);
+  assert.equal(isExported('nodeKey'), false);
+  assert.equal(isExported('matchesSessionTarget'), false);
 });
 
 test('errorMessage normalizes unknown error values for shared client/server reporting', () => {
