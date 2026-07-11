@@ -45,7 +45,7 @@ function matchFirst(
  * positions: exact alias, pool, last-segment of alias (split on '/' '.'),
  * or last-segment of session_name (split on '__' '--').
  */
-export function matchesSessionTarget(session: DashboardSession, target: string): boolean {
+function matchesSessionTarget(session: DashboardSession, target: string): boolean {
   if (session.alias === target) return true;
   if (session.pool === target) return true;
   if (session.alias !== undefined && lastSegment(session.alias, ['/', '.']) === target) {

@@ -1,30 +1,22 @@
+import type {
+  WorkflowBeadResponse,
+  WorkflowDepResponse,
+} from './generated/gc-supervisor-client/index.js';
+
 /**
- * Raw dependency edge from gc supervisor's run snapshot endpoint.
- * This mirrors RunDepResponse in the supervisor OpenAPI schema.
+ * Raw dependency edge from gc supervisor's run snapshot endpoint. Rides the
+ * generated WorkflowDepResponse wire shape directly (AGENTS.md: do not
+ * mirror supervisor wire shapes in shared).
  */
-export interface RunSnapshotDep {
-  from: string;
-  to: string;
-  kind?: string;
-}
+export type RunSnapshotDep = WorkflowDepResponse;
 
 /**
  * Raw bead row inside a gc supervisor run snapshot. This is still
- * supervisor wire shape, not the dashboard's display node shape. It mirrors
- * RunBeadResponse in the supervisor OpenAPI schema.
+ * supervisor wire shape, not the dashboard's display node shape. Rides the
+ * generated WorkflowBeadResponse wire shape directly (AGENTS.md: do not
+ * mirror supervisor wire shapes in shared).
  */
-export interface RunSnapshotBead {
-  id: string;
-  title: string;
-  status: string;
-  kind: string;
-  step_ref?: string;
-  attempt?: number;
-  logical_bead_id?: string;
-  scope_ref?: string;
-  assignee?: string;
-  metadata: Record<string, string>;
-}
+export type RunSnapshotBead = WorkflowBeadResponse;
 
 /**
  * Dashboard-normalized gc supervisor snapshot. The current supervisor wire

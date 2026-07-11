@@ -3,7 +3,7 @@
 // `export type *` so importing the package root does not pull in dead JS.
 
 export type * from './snapshot/types.js';
-export { resolveSessionForTarget, matchesSessionTarget, lastSegment } from './session-resolve.js';
+export { resolveSessionForTarget, lastSegment } from './session-resolve.js';
 export * from './run-detail.js';
 export type * from './run-snapshot.js';
 export * from './run-scope.js';
@@ -37,9 +37,11 @@ export * from './runs/stranded.js';
 export * from './bead-id.js';
 export * from './links.js';
 export * from './links/build-link-view.js';
-export * from './links/instrumentation.js';
-export * from './links/node-ref.js';
-export * from './links/relation-index.js';
+// Named exports below, not `export *` — only these symbols have real external
+// consumers (frontend + backend tests). Audit before widening back to `export *`.
+export { ResolutionRollup } from './links/instrumentation.js';
+export { parseRef, sanitiseUrl } from './links/node-ref.js';
+export { buildRelationIndex } from './links/relation-index.js';
 export * from './convoy/projection.js';
 export * from './city.js';
 export * from './operator.js';
