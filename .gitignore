@@ -46,6 +46,10 @@ credentials.*
 # ...but never the nested git worktrees agents create under .claude/ — those are
 # full checkouts (with node_modules) that must not be tracked or formatted.
 .claude/worktrees/
+# ...nor session-runtime skills that regenerate on every session-active cycle
+# (search-sessions rewrites SKILL.md each wake) — the !.claude/** un-ignore would
+# otherwise surface them as a perpetually-dirty tree and block every worker claim.
+.claude/skills/search-sessions/
 !.agents/
 !.agents/**
 .scorecard/
