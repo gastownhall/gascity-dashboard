@@ -15,7 +15,7 @@ interface ViewErrorBoundaryState {
 // A per-view error boundary. When one view's render throws — e.g. an
 // unanticipated partial or degenerate supervisor shape that slips past the data
 // layer's guards while the dolt store is slow — this degrades THAT view to a
-// calm, DESIGN-compliant "unavailable" tier (glyph + word + a retry affordance)
+// calm, DESIGN-compliant "unavailable" tier (the word + a retry affordance)
 // instead of letting the throw bubble to the app-root ErrorBoundary, which
 // replaces the WHOLE dashboard with the generic crash page.
 //
@@ -23,8 +23,9 @@ interface ViewErrorBoundaryState {
 // edge: the underlying error is still REPORTED to the local dashboard log
 // (never swallowed), and Retry remounts the subtree so transient slowness
 // clears without a full-page reload. Greyscale-readable per DESIGN.md (the
-// state is carried by a glyph and the word, not by tone) and non-counting (no
-// maroon mark, so the One Mark Rule is unaffected).
+// state is carried by the word, not by tone; glyph-less like the app-root
+// ErrorBoundary so it adds no mark to the run/bead status glyph vocabulary) and
+// non-counting (no maroon mark, so the One Mark Rule is unaffected).
 //
 // The neutral grey is deliberate and distinct from the convoy DATA layer's
 // Stuck Maroon "failed" tier: a render crash is an unexpected fault in the view
@@ -51,9 +52,8 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
       return (
         <section className="space-y-3" role="alert">
           <p className="text-body text-fg-muted">
-            <span aria-hidden="true">◌</span> Unavailable. This view could not be rendered; the
-            supervisor store may be slow or returning partial data. The error was reported to the
-            local dashboard log.
+            Unavailable. This view could not be rendered; the supervisor store may be slow or
+            returning partial data. The error was reported to the local dashboard log.
           </p>
           <button
             type="button"

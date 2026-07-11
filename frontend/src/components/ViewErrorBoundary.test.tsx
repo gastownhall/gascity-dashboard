@@ -33,7 +33,7 @@ describe('ViewErrorBoundary', () => {
     expect(screen.getByText('convoy contents')).toBeTruthy();
   });
 
-  it('degrades a child render throw to a glyph+word unavailable tier instead of failing the whole app', () => {
+  it('degrades a child render throw to a word-carried unavailable tier instead of failing the whole app', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal(
       'fetch',
@@ -51,9 +51,12 @@ describe('ViewErrorBoundary', () => {
     );
 
     const notice = screen.getByRole('alert');
+    // Greyscale-readable: the state is carried by the word (glyph-less, like the
+    // app-root ErrorBoundary), not tone.
     expect(notice.textContent).toContain('Unavailable');
-    // Greyscale-readable: the state is carried by a glyph + the word, not tone.
-    expect(notice.textContent).toContain('◌');
+    // Must NOT reuse ◌ — that glyph means the `waiting` run-node status
+    // (statusGlyph), so it would give one mark two meanings (gascity-dashboard-xdzm).
+    expect(notice.textContent).not.toContain('◌');
     // The app-root crash page must NOT have taken over the whole dashboard.
     expect(screen.queryByText('Dashboard view failed.')).toBeNull();
   });

@@ -130,7 +130,9 @@ describe('App routes', () => {
 
     const notice = await screen.findByRole('alert');
     expect(notice.textContent).toContain('Unavailable');
-    expect(notice.textContent).toContain('◌');
+    // The unavailable tier is glyph-less and must not reuse ◌ (the `waiting`
+    // statusGlyph), so one mark keeps one meaning (gascity-dashboard-xdzm).
+    expect(notice.textContent).not.toContain('◌');
     // The route stayed mounted at /convoy — the throw was contained, not fatal.
     expect(screen.getByTestId('pathname').textContent).toBe('/convoy');
   });
