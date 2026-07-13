@@ -90,6 +90,7 @@ export function stateTone(state: string): StatusTone {
     case 'closed':
     case 'errored':
     case 'stuck':
+    case 'crashed':
       return 'stuck';
     case 'detached':
     case 'asleep':

@@ -703,7 +703,10 @@ export type SynopsisBucket =
   | 'stuck'
   | 'suspended';
 
-function stateBucket(agent: SupervisorAgent): SynopsisBucket {
+// Exported for the crashed-divergence regression test (gascity-dashboard-h5rl.2)
+// and for /reef's signal-parity coverage; otherwise only used internally by
+// buildAgentSynopsis.
+export function stateBucket(agent: SupervisorAgent): SynopsisBucket {
   if (agent.suspended) return 'suspended';
   switch (agent.state) {
     case 'active':
@@ -719,6 +722,7 @@ function stateBucket(agent: SupervisorAgent): SynopsisBucket {
     case 'closed':
     case 'errored':
     case 'stuck':
+    case 'crashed':
       return 'stuck';
     default:
       return 'idle';
