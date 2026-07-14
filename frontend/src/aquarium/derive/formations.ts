@@ -2,10 +2,13 @@
 // same anchors, every derive call — the operator's spatial memory of "where
 // the rig lives" must never drift while the fleet composition is unchanged.
 //
-// Placement is deliberately IRREGULAR (round-2 fix, sharpened round-3): even
-// spacing + one flat baseline read as a bar chart, not a reef. Each formation
-// gets a deterministic per-formation SLOT WEIGHT (so gaps vary a lot — some
-// rigs near, some far), a horizontal jitter, and a wide seabed-depth offset.
+// Placement is deliberately IRREGULAR (round-2 fix, sharpened round-3, depth-
+// deepened round-4): even spacing + one flat baseline read as a bar chart, not
+// a reef. Each formation gets a deterministic per-formation SLOT WEIGHT (so gaps
+// vary a lot — some rigs near, some far), a horizontal jitter, a WIDE seabed-
+// depth offset (distinct depth planes the render layer scales/hazes fore-to-
+// background), and a gentle size-variety multiplier (equal-crew rigs still
+// differ in footprint, so silhouettes never read as one repeated icon).
 // Adjacency is gated on non-overlapping CORES (not full silhouettes), so
 // neighbours may gently overlap and cluster while every rig still keeps a
 // distinct, findable home. The per-adjacent-pair CORE-gap floor is a hard
@@ -36,18 +39,29 @@ const MIN_CORE_GAP_WU = 40;
 /** Absolute horizontal jitter (world units) on each weighted slot centre —
  * an extra break on top of the varied slot widths. */
 const JITTER_MAX_WU = 150;
-/** Seabed-depth spread: a formation's base sits this many world units below
- * the nominal seabed line at most, so bases aren't all on one baseline. */
-const DEPTH_BAND_WU = 220;
+/** Seabed-depth spread: a formation's base sits this many world units below the
+ * nominal seabed line at most. Widened (round 4) so formations occupy clearly
+ * DIFFERENT depth planes — the render layer scales/hazes higher (further) bases
+ * into the background and lower (nearer) bases into the foreground, so the reef
+ * reads with fore/mid/background depth rather than one flat row. Stays under
+ * WORLD.height so a base never sinks off-tank. */
+const DEPTH_BAND_WU = 320;
 /** Per-formation slot WEIGHT range: adjacent formations draw widely different
  * spacing (some near, some far), so the row never reads as evenly-spaced bars.
  * Weights are normalised across the reef, so the total span is unchanged. */
 const SLOT_WEIGHT_MIN = 0.5;
 const SLOT_WEIGHT_MAX = 1.75;
+/** Per-formation size-variety multiplier (round 4): even equal-crew rigs get
+ * gently different footprints, so silhouettes don't read as one repeated icon.
+ * Bounded and applied before the [MIN_RADIUS, MAX_RADIUS] clamp, so the crew
+ * signal still dominates and the footprint stays within the same envelope. */
+const SIZE_JITTER_MIN = 0.85;
+const SIZE_JITTER_MAX = 1.2;
 
 const JITTER_SALT = 0x2545f491;
 const DEPTH_SALT = 0x9e3779b1;
 const WEIGHT_SALT = 0x27d4eb2f;
+const SIZE_SALT = 0x5bd1e995;
 
 /** A formation's core radius (see CORE_RADIUS_FRACTION). */
 export function formationCoreRadius(radius: number): number {
@@ -63,7 +77,7 @@ export function buildFormations(inputs: FormationInputs): RigFormation[] {
   // left to right — the same rig set always resolves to the same order.
   const sorted = [...keys].sort(byHashThenKey);
   const seeds = sorted.map((key) => hashString(key));
-  const radii = sorted.map((key) => radiusForCrew(crewCountByKey.get(key) ?? 0));
+  const radii = sorted.map((key, i) => radiusForCrew(crewCountByKey.get(key) ?? 0, seeds[i]!));
   const anchorXs = placeAlongSeabed(radii, seeds);
 
   return sorted.map((key, i) => ({
@@ -96,9 +110,15 @@ function countBy(values: readonly string[]): Map<string, number> {
   return counts;
 }
 
-function radiusForCrew(crewCount: number): number {
-  const raw = MIN_RADIUS + RADIUS_PER_CREW * crewCount;
+function radiusForCrew(crewCount: number, seed: number): number {
+  const raw = (MIN_RADIUS + RADIUS_PER_CREW * crewCount) * sizeJitter(seed);
   return Math.min(Math.max(raw, MIN_RADIUS), MAX_RADIUS);
+}
+
+/** Deterministic per-formation size-variety multiplier in
+ * [SIZE_JITTER_MIN, SIZE_JITTER_MAX). */
+function sizeJitter(seed: number): number {
+  return hashRange(seed ^ SIZE_SALT, SIZE_JITTER_MIN, SIZE_JITTER_MAX);
 }
 
 function byHashThenKey(a: string, b: string): number {

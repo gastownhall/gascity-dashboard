@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WORLD } from '../contracts';
-import { BAND_WORKING_Y } from './constants';
+import { BAND_WORKING_Y, WORKING_BAND_HALF_HEIGHT_WU } from './constants';
 import { createShoalAccum } from './grid';
 import type { HomeAnchor } from './restPositions';
 import { tickFish, type FishTickInputs } from './fishTick';
@@ -36,7 +36,7 @@ describe('tickFish — general', () => {
     const kin = tickFish(baseInputs({ pose: 'working' }));
     expect(kin.x === 0 && kin.y === 0).toBe(false);
     expect(Math.abs(kin.x - ANCHOR.x)).toBeLessThanOrEqual(ANCHOR.radius * 1.5);
-    expect(Math.abs(kin.y - BAND_WORKING_Y)).toBeLessThanOrEqual(80);
+    expect(Math.abs(kin.y - BAND_WORKING_Y)).toBeLessThanOrEqual(WORKING_BAND_HALF_HEIGHT_WU);
   });
 
   it('a tombstoned fish freezes exactly at its previous kinematics with zero speed', () => {
@@ -96,7 +96,9 @@ describe('tickFish — working', () => {
       kin = tickFish(baseInputs({ pose: 'working', prevKin: kin, clockMs: i * 16 }));
     }
     expect(kin.y).toBeLessThan(ANCHOR.y - ANCHOR.radius);
-    expect(Math.abs(kin.y - BAND_WORKING_Y)).toBeLessThan(180);
+    // Settles onto its own band spot (homeY within ±half), plus a little
+    // wander — always within the widened working band.
+    expect(Math.abs(kin.y - BAND_WORKING_Y)).toBeLessThan(WORKING_BAND_HALF_HEIGHT_WU + 60);
   });
 });
 

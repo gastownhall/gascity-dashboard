@@ -17,6 +17,9 @@ import {
   BAND_IDLE_Y,
   BAND_STALLED_Y,
   BAND_WORKING_Y,
+  IDLE_BAND_HALF_HEIGHT_WU,
+  STALLED_BAND_HALF_HEIGHT_WU,
+  WORKING_BAND_HALF_HEIGHT_WU,
 } from './constants';
 
 export interface HomeAnchor {
@@ -47,14 +50,21 @@ export function restPosition(
   const s = seed ^ (POSE_SALT[pose] * 0x9e3779b1);
   switch (pose) {
     case 'working':
-      // Mid-water shoal in the pellet band, spread across the formation width.
-      return bandScatter(anchor, s, BAND_WORKING_Y, anchor.radius, 70);
+      // Mid-water shoal in the pellet band, spread across the formation width
+      // and thickened VERTICALLY (round 4) so it reads as a volume, not a line.
+      return bandScatter(anchor, s, BAND_WORKING_Y, anchor.radius, WORKING_BAND_HALF_HEIGHT_WU);
     case 'idle':
       // Lower and looser than the working shoal, still mid-water.
-      return bandScatter(anchor, s, BAND_IDLE_Y, anchor.radius * 0.85, 80);
+      return bandScatter(anchor, s, BAND_IDLE_Y, anchor.radius * 0.85, IDLE_BAND_HALF_HEIGHT_WU);
     case 'stalled':
       // Upper-mid, treading; tighter horizontal spread than the shoal.
-      return bandScatter(anchor, s, BAND_STALLED_Y, anchor.radius * 0.55, 45);
+      return bandScatter(
+        anchor,
+        s,
+        BAND_STALLED_Y,
+        anchor.radius * 0.55,
+        STALLED_BAND_HALF_HEIGHT_WU,
+      );
     case 'asleep':
       return settledOnSeabed(anchor, s);
     case 'awaiting-input':

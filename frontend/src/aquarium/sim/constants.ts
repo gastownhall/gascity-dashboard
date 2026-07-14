@@ -82,6 +82,31 @@ export const BAND_WORKING_Y = WORLD.waterlineY + Math.round(COLUMN_SPAN * 0.45);
 /** idle wanders here — below the working shoal, above the seabed. */
 export const BAND_IDLE_Y = WORLD.waterlineY + Math.round(COLUMN_SPAN * 0.62);
 
+// FIX 1 (round 4) — the mid-water read as a flat CROSS-SECTION line: one thin
+// horizontal band of working fish. Each calm/hold band gets a vertical scatter
+// half-extent so it reads as an occupied VOLUME, not a line. The working band
+// is widened the most (its shoal is the mid-water's mass) but stays BOUNDED so
+// it never crosses into the stalled stratum above or the idle stratum below —
+// the blind-legibility 7/7 win depends on those strata staying disjoint.
+/** stalled tread scatter (unchanged read — a tight upper-mid band). */
+export const STALLED_BAND_HALF_HEIGHT_WU = 45;
+/** working shoal scatter — wide, so the pellet band is a thick occupied volume.
+ * Also each working fish homes to its own y within ±this (fishTick shoalHomeY),
+ * so the thickness persists in live motion, not only at spawn. */
+export const WORKING_BAND_HALF_HEIGHT_WU = 120;
+/** idle wander scatter — mid-low, looser than the working shoal. */
+export const IDLE_BAND_HALF_HEIGHT_WU = 80;
+
+/** Guaranteed clear vertical gap between the working band's nearest extreme and
+ * the adjacent pose band (stalled above, idle below). Derived from the band
+ * centres and half-extents so it can never silently go negative: a future band
+ * edit that squeezes the strata makes this drop and its guard test fail loudly,
+ * catching any regression of the pose separation before it reaches a judge. */
+export const WORKING_BAND_GUARD_WU = Math.min(
+  BAND_WORKING_Y - WORKING_BAND_HALF_HEIGHT_WU - (BAND_STALLED_Y + STALLED_BAND_HALF_HEIGHT_WU),
+  BAND_IDLE_Y - IDLE_BAND_HALF_HEIGHT_WU - (BAND_WORKING_Y + WORKING_BAND_HALF_HEIGHT_WU),
+);
+
 /** Soft-repel margin: a fish this close to the world edge is nudged back in,
  * on top of the hard clamp. */
 export const WALL_MARGIN_WU = 60;

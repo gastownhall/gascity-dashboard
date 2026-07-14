@@ -26,6 +26,7 @@ import {
   SHOAL_SEPARATION_SCALE,
   SHOAL_SPREAD_RADIUS_FACTOR,
   WALL_MARGIN_WU,
+  WORKING_BAND_HALF_HEIGHT_WU,
 } from './constants';
 
 const TAU = Math.PI * 2;
@@ -215,6 +216,19 @@ function shoalHomeX(inputs: FishTickInputs): number {
   return inputs.homeAnchor.x + hashRange(inputs.seed + 11, -spread, spread);
 }
 
+/** Round-4 FIX 1: each working fish holds its OWN vertical spot within the
+ * (guarded) working band, not the exact BAND_WORKING_Y centre line. The
+ * per-fish y offset is bounded by WORKING_BAND_HALF_HEIGHT_WU — the same extent
+ * the spawn scatter uses — so the shoal reads as an occupied mid-water VOLUME
+ * in live motion (not just at spawn) while never crossing the guard margin into
+ * the stalled band above or the idle band below. */
+function shoalHomeY(inputs: FishTickInputs): number {
+  return (
+    BAND_WORKING_Y +
+    hashRange(inputs.seed + 13, -WORKING_BAND_HALF_HEIGHT_WU, WORKING_BAND_HALF_HEIGHT_WU)
+  );
+}
+
 /** A working fish cruises the mid-water pellet band as part of a loose shoal.
  * Cohesion/separation/alignment come pre-reduced from the spatial grid (see
  * sim/grid.ts) — one allocation-free scalar blend here instead of the old
@@ -244,13 +258,14 @@ function tickWorking(
  * no intermediate Pt/array allocation per pull. */
 function blendWorkingTarget(inputs: FishTickInputs, prevPos: Pt, phase: number): Pt {
   const homeX = shoalHomeX(inputs);
+  const homeY = shoalHomeY(inputs);
   const sh = inputs.shoal;
   // No shoalmates in range => cohesion is neutral (hold the current band spot),
   // NOT a yank back to the wide random home. The lone `home` term (below) still
-  // tethers a solo fish loosely to its rig; letting cohesion fall back to the
-  // wide home instead would overpower a fish's own task-pellet pull.
+  // tethers a solo fish loosely to its own band spot; letting cohesion fall back
+  // to the band centre instead would flatten every solo fish onto one y line.
   const cohX = sh.cohCount > 0 ? sh.cohX / sh.cohCount : prevPos.x;
-  const cohY = sh.cohCount > 0 ? sh.cohY / sh.cohCount : BAND_WORKING_Y;
+  const cohY = sh.cohCount > 0 ? sh.cohY / sh.cohCount : homeY;
   const wanderAngle = inputs.clockMs / 4000 + phase;
 
   let tx = (prevPos.x + Math.cos(wanderAngle) * 40) * W_WANDER;
@@ -262,7 +277,7 @@ function blendWorkingTarget(inputs: FishTickInputs, prevPos: Pt, phase: number):
   ty +=
     cohY * W_COHESION +
     (prevPos.y + sh.sepY * SHOAL_SEPARATION_SCALE) * W_SEPARATION +
-    BAND_WORKING_Y * W_HOME;
+    homeY * W_HOME;
   let tw = W_WANDER + W_COHESION + W_SEPARATION + W_HOME;
 
   if (sh.alignCount > 0 && (sh.alignCos !== 0 || sh.alignSin !== 0)) {

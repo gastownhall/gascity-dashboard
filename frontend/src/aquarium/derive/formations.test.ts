@@ -71,14 +71,33 @@ describe('buildFormations', () => {
     expect(byKey.get('beta')?.openBeadTotal).toBe(0);
   });
 
-  it('scales radius with crew count and clamps to [140, 420]', () => {
+  it('scales radius with crew count within the [140, 420] clamp, with per-rig size variety', () => {
     const inputs: FormationInputs = {
       beadsByRig: beadsByRig({ solo: 0, crowded: 0 }),
       fishHomeKeys: [...Array(50).fill('crowded')] as string[],
     };
     const byKey = new Map(buildFormations(inputs).map((f) => [f.key, f]));
-    expect(byKey.get('solo')?.radius).toBe(140);
-    expect(byKey.get('crowded')?.radius).toBe(420);
+    const solo = byKey.get('solo')!;
+    const crowded = byKey.get('crowded')!;
+    // A huge crew saturates the size ceiling; a zero-crew rig sits near the floor.
+    expect(crowded.radius).toBe(420);
+    expect(solo.radius).toBeGreaterThanOrEqual(140);
+    // Crew still drives size: the crowded rig is far larger than the solo one.
+    expect(solo.radius).toBeLessThan(crowded.radius);
+    // Every formation stays inside the clamp envelope.
+    for (const f of buildFormations(layoutInputs())) {
+      expect(f.radius).toBeGreaterThanOrEqual(140);
+      expect(f.radius).toBeLessThanOrEqual(420);
+    }
+  });
+
+  it('gives equal-crew rigs gently different footprints (size variety, not one repeated icon)', () => {
+    const inputs: FormationInputs = {
+      beadsByRig: {},
+      fishHomeKeys: ['ay', 'ay', 'ay', 'bee', 'bee', 'bee'],
+    };
+    const byKey = new Map(buildFormations(inputs).map((f) => [f.key, f]));
+    expect(byKey.get('ay')!.radius).not.toBe(byKey.get('bee')!.radius);
   });
 
   it('seeds each formation deterministically from a hash of its key', () => {
@@ -136,5 +155,18 @@ describe('buildFormations', () => {
     const formations = buildFormations(layoutInputs());
     const distinctDepths = new Set(formations.map((f) => f.anchorY));
     expect(distinctDepths.size).toBeGreaterThan(1);
+  });
+
+  it('spreads formation depth across distinct planes, wider than the round-3 band', () => {
+    const ys = buildFormations(layoutInputs()).map((f) => f.anchorY);
+    const depthSpread = Math.max(...ys) - Math.min(...ys);
+    // Round-3 produced ~199 wu of spread for this layout; round 4 widens the
+    // seabed-depth band so near/far formations occupy visibly different planes.
+    expect(depthSpread).toBeGreaterThan(240);
+    // Bases stay on the seabed and never sink off the bottom of the tank.
+    for (const y of ys) {
+      expect(y).toBeGreaterThanOrEqual(WORLD.seabedY);
+      expect(y).toBeLessThan(WORLD.height);
+    }
   });
 });

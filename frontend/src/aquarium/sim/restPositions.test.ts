@@ -6,6 +6,9 @@ import {
   BAND_IDLE_Y,
   BAND_STALLED_Y,
   BAND_WORKING_Y,
+  IDLE_BAND_HALF_HEIGHT_WU,
+  WORKING_BAND_GUARD_WU,
+  WORKING_BAND_HALF_HEIGHT_WU,
 } from './constants';
 import { restPosition, type HomeAnchor } from './restPositions';
 
@@ -40,7 +43,7 @@ describe('restPosition — vertical bands (the shared pose table)', () => {
 
   it('working shoals in the mid-water pellet band: above the crest, below the waterline', () => {
     const p = restPosition('working', ANCHOR, 7);
-    expect(Math.abs(p.y - BAND_WORKING_Y)).toBeLessThanOrEqual(80);
+    expect(Math.abs(p.y - BAND_WORKING_Y)).toBeLessThanOrEqual(WORKING_BAND_HALF_HEIGHT_WU);
     expect(p.y).toBeGreaterThan(WORLD.waterlineY);
     expect(p.y).toBeLessThan(CREST);
     expect(Math.abs(p.x - ANCHOR.x)).toBeLessThanOrEqual(ANCHOR.radius);
@@ -127,5 +130,54 @@ describe('restPosition — FIX 3 legibility separation', () => {
       expect(awaiting.y).toBeLessThan(WORLD.waterlineY + 60);
       expect(stalled.y - awaiting.y).toBeGreaterThan(300);
     }
+  });
+});
+
+describe('restPosition — FIX 1 working band is a guarded mid-water VOLUME', () => {
+  // The working band (y only) is anchor-independent, but sample varied anchors
+  // and many seeds so the disjointness holds for the whole fleet, not one fish.
+  const ANCHORS: HomeAnchor[] = [
+    { x: 2000, y: WORLD.seabedY, radius: 200 },
+    { x: 800, y: WORLD.seabedY + 150, radius: 340 },
+    { x: 3500, y: WORLD.seabedY + 60, radius: 140 },
+  ];
+
+  function bandYs(pose: AquariumPose): number[] {
+    const ys: number[] = [];
+    for (const anchor of ANCHORS) {
+      for (let seed = 0; seed < 200; seed += 1) ys.push(restPosition(pose, anchor, seed).y);
+    }
+    return ys;
+  }
+
+  it('the derived guard margin is comfortably positive (protects the 7/7 pose separation)', () => {
+    expect(WORKING_BAND_GUARD_WU).toBeGreaterThanOrEqual(100);
+  });
+
+  it('working fish fill a thick vertical band, not a thin mid-water line', () => {
+    const workY = bandYs('working');
+    const thickness = Math.max(...workY) - Math.min(...workY);
+    // Occupies most of its full ±half extent — a volume, well past a flat line.
+    expect(thickness).toBeGreaterThan(2 * WORKING_BAND_HALF_HEIGHT_WU - 40);
+  });
+
+  it('the working band stays DISJOINT from stalled above and idle below with the guard margin', () => {
+    const minWork = Math.min(...bandYs('working'));
+    const maxWork = Math.max(...bandYs('working'));
+    const maxStall = Math.max(...bandYs('stalled'));
+    const minIdle = Math.min(...bandYs('idle'));
+    // No working fish reaches up into the stalled stratum...
+    expect(minWork - maxStall).toBeGreaterThanOrEqual(WORKING_BAND_GUARD_WU);
+    // ...nor down into the idle stratum; both gaps clear the guard margin.
+    expect(minIdle - maxWork).toBeGreaterThanOrEqual(WORKING_BAND_GUARD_WU);
+  });
+
+  it('idle fish also get vertical variation but stay clear of working and asleep', () => {
+    const idleY = bandYs('idle');
+    const idleRange = Math.max(...idleY) - Math.min(...idleY);
+    expect(idleRange).toBeGreaterThan(2 * IDLE_BAND_HALF_HEIGHT_WU - 40);
+    // Below every working fish, and never down onto the seabed rest poses.
+    expect(Math.min(...idleY)).toBeGreaterThan(Math.max(...bandYs('working')));
+    expect(Math.max(...idleY)).toBeLessThan(Math.min(...bandYs('rate-limited')));
   });
 });
