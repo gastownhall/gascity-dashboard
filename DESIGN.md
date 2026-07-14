@@ -134,3 +134,56 @@ Both the Active and Historical sections of the Runs view collapse to a small def
 - **Don't** carry meaning in color alone. Strip the page to greyscale; every state must still be readable.
 - **Don't** use em dashes in UI copy. Commas, colons, semicolons, periods, or parentheses.
 - **Don't** use `#000` or `#fff`. Every neutral is tinted toward the maroon hue.
+
+## 7. /reef (the aquarium): a licensed diorama
+
+The reef route is the one page in the system that is a scene, not a spread. It
+renders the live fleet as an aquarium seen through glass: a full-bleed Canvas
+2D world with a stable seabed geography (rigs as formations), sessions as
+procedurally drawn fish, and open beads as food pellets. The operator pans and
+zooms; detail arrives with proximity. This section is the named carve-out that
+licenses it; outside this route, nothing here applies.
+
+### Still binding on /reef
+
+- **The Greyscale Test, carried by posture.** Every fish state must be
+  identifiable with color stripped: pose, position in the water column, eye,
+  and fin attitude carry the state. Color remains emphasis.
+- **The One Mark Rule, adapted.** The single maroon per viewport is the
+  overlay's "N need attention" ledger line. No fish, pellet, or formation is
+  ever maroon.
+- **The One Voice Rule and tabular figures** for all overlay and in-scene
+  text. The scene draws creatures; the type stays the system's type.
+- **`prefers-reduced-motion`.** The scene freezes to a truthful still frame:
+  poses and positions remain facts, autonomous animation stops, state changes
+  swap instantly. User-initiated pan and zoom still work, as instant jumps.
+- **Truthfulness.** Nothing fish-shaped or pellet-shaped is decorative. Every
+  fish is a live session, every pellet is a real bead, every count is a real
+  count. Ambience (water gradient, light shafts, particulate, kelp) is
+  licensed only for things no operator could mistake for data.
+- **No external assets.** The scene is procedural: no sprite sheets, no image
+  files, no icon fonts.
+
+### Suspended on /reef only
+
+- **The Flat Page Rule.** The scene has depth by definition: parallax layers,
+  fog with distance, a gradient water column. The page around the canvas
+  stays flat.
+- **The gradient prohibition**, for the water itself. Water is a gradient;
+  text and controls are not.
+- **The 150ms fade rule**, for continuous motion. Swimming, drifting, and
+  camera glides are continuous; discrete state changes still resolve quickly
+  rather than theatrically.
+- **Light-by-default's fixed surface.** The tank keys its water mood to the
+  theme: sunlit shallows in light, midnight deep in dark. The dark tank is a
+  scene, not a dark-slate chrome reflex.
+
+### Named Rules
+
+**The Pane Rule.** The reef is a window, not a page. Chrome inside the glass
+is limited to the ledger line, the connection state, and the zoom controls;
+everything else the operator learns by looking at the water.
+
+**The Honest Zoom Rule.** Zooming in may only reveal true detail. If a label,
+number, or creature becomes legible at closer zoom, it must be a fact from the
+live snapshot; the scene never invents detail to fill the glass.
