@@ -99,3 +99,49 @@ boids for O(n) neighbors + no hot-path allocation to beat 16ms; widen school
 roam + cluster/vary formations to kill the bar-chart read; asleep-open vs
 rate-limited-tucked and awaiting-at-surface vs stalled-lower position
 separation). FIXTURES (unrigged in manifest.rigs[]; single-fish blind crops).
+
+## Round 3 (2026-07-14)
+
+Three parallel fix agents landed (render polish, spatial-grid sim + composition,
+fixtures honesty + single-fish crops); all mechanical gates green (typecheck
+src+test, 1519 frontend + 618 backend + 356 shared tests, lint, prettier,
+build). Re-judged full panel + perf.
+
+| Criterion             | Result                                                                        | Verdict  |
+| --------------------- | ----------------------------------------------------------------------------- | -------- |
+| 1 Aquarium illusion   | 3/5 median (judges 3,3,3)                                                     | FAIL     |
+| 2 Fish craft          | 3/5 median (4,3,3); clip-art FALSE + countershading READS (all 3)             | FAIL     |
+| 3 Blind legibility    | 7/7 median (judges 7,7,5)                                                     | **PASS** |
+| 4 LOD honesty         | clean (no mismatches; unrigged rollup fixed; labels correctly absent at LOD0) | **PASS** |
+| 5 Camera perf         | p95 33.3 ms (unchanged)                                                       | FAIL     |
+| 6 Truthfulness parity | unit tests green                                                              | PASS     |
+| 7 Mechanical          | all gates green                                                               | PASS     |
+
+Legibility trajectory 2/7 -> 4/7 -> 7/7: the vertical pose bands + position
+separation (asleep on open sand vs rate-limited tucked under the overhang;
+awaiting at the surface vs stalled lower) + sharpened attitudes resolved every
+confusion; only the working/idle pair is still subtle (one judge swapped it,
+median still correct). Rig labels off at LOD0 killed the bar-chart axis read
+and the honesty auditor is clean.
+
+Remaining blockers (round 4), 3 criteria:
+
+- ILLUSION (3/5): the composition now reads as a flat 2D CROSS-SECTION, not a
+  volume. Every judge: fish sit in ONE thin horizontal mid-water band, evenly
+  spaced across the width (a row of markers on an axis); formations sit in ONE
+  flat row along the bottom; no foreground/midground/background SCALE FALLOFF,
+  no depth planes, uniform fish size/style (reads as an icon set). Fix =
+  DEPTH-PLANE PARALLAX: per-fish depth -> scale + atmospheric haze (near big/
+  sharp, far small/hazy), some formations as hazier background reef, and a
+  thicker vertical fish distribution WITHIN the safe pose bands (must not
+  regress the 7/7 legibility). This is orthogonal to y-banding, so low risk.
+- CRAFT (3/5): countershading + clip-art SOLVED. Residual: working/errored
+  spines read straight ("parked"); fin vocabulary thin (tail only, no visible
+  dorsal/pectoral); the errored X-eye reads as a "stray scribble" (two judges).
+- PERF (33 ms, unchanged by the sim grid): the bottleneck is paintScene, not
+  the boids. p50 is already 16.7 ms (over budget) so it is a STEADY render cost,
+  not just GC spikes. Fix = offscreen-cache the static/slow layers (water,
+  seabed, formations, kelp, shafts, speckle) and re-blit under camera motion;
+  batch the 1000 pellets; trim particulate. Note: fixture mode is DEV-only so
+  perf is measured on the dev server, but the camera-workout cost is the rAF
+  loop (sim + native canvas paint), ~same in prod, so 33 ms is a real cost.
