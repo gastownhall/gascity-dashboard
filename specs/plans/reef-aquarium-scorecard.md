@@ -18,15 +18,15 @@ illusion may regress from 3/5 toward 2/5 — **re-judge illusion before treating
 that row as still 3/5.** Depth is to be re-approached via rig-color-identity
 (mwx0.8) + palette, not smudges.
 
-| Criterion             | Final                                                                                         | Verdict                   |
-| --------------------- | --------------------------------------------------------------------------------------------- | ------------------------- |
-| 1 Aquarium illusion   | 3/5 median (plateaued rounds 3-8); re-judge after mwx0.13 foreground removal                  | FAIL (subjective plateau) |
-| 2 Fish craft          | 4/5                                                                                           | PASS                      |
-| 3 Blind legibility    | 7/7 (round-7 render; perf fix doesn't touch fish poses; no foreground to occlude blind crops) | PASS                      |
-| 4 LOD honesty         | clean                                                                                         | PASS                      |
-| 5 Camera perf         | render-work p95 = 2.9-3.1 ms, verified across 2 clean runs (was ~55 ms zoom re-bake)          | **PASS**                  |
-| 6 Truthfulness parity | unit tests green                                                                              | PASS                      |
-| 7 Mechanical          | all gates green                                                                               | PASS                      |
+| Criterion             | Final                                                                                                                                      | Verdict                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------- |
+| 1 Aquarium illusion   | 3/5 median; post-mwx0.8 re-judge flipped the blockers positive (creatures + colour), new holdout = pale light water + sparsity (see below) | FAIL (now a fixable lever) |
+| 2 Fish craft          | 4/5                                                                                                                                        | PASS                       |
+| 3 Blind legibility    | 7/7 (round-7 render; perf fix doesn't touch fish poses; no foreground to occlude blind crops; mwx0.8 colour is orthogonal to pose)         | PASS                       |
+| 4 LOD honesty         | clean                                                                                                                                      | PASS                       |
+| 5 Camera perf         | render-work p95 = 2.8-3.4 ms across clean runs (mwx0.8 rig lookup +0.6 ms; was ~55 ms zoom re-bake)                                        | **PASS**                   |
+| 6 Truthfulness parity | unit tests green                                                                                                                           | PASS                       |
+| 7 Mechanical          | all gates green                                                                                                                            | PASS                       |
 
 ILLUSION is a subjective plateau, not an open defect: over 8 rounds it went from
 "chart / clip-art" (2/5) to a "stylized aquarium scene" (3/5) that all judges
@@ -40,6 +40,26 @@ passes that); (c) tighten the default LOD0 framing so overview fish are bigger (
 locked grill-decision change, her call); (d) the operator's rig-color-identity
 idea (bead mwx0.8) likely helps illusion most — coloring fish by project directly
 answers the judges' "monochrome / fish-are-icons" note.
+
+### Re-judge — post mwx0.13 (foreground removed) + mwx0.8 (rig colour) — 2026-07-14
+
+Fresh 3-judge illusion panel on the coloured light LOD0 (cold framing, no prior
+scores shown). Median still **3/5** (3, 3, 3) — but the _composition_ of the 3
+moved: every diagnostic that was the stuck blocker is now unanimously positive.
+`reads_as_chart=false`, `fish_read_as_creatures=true`, `depth_reads_volumetric=
+true`, `colour_variety_reads=true` — all ×3. mwx0.8 did what it was predicted to:
+the "monochrome / fish-are-icons" note that held rounds 3–8 is resolved.
+
+The 3 now rests on a **new, unanimous, and more fixable** holdout: the **light
+water palette reads pale / washed-out / low-contrast** ("leans monochrome-cyan"
+despite the coloured fish) and the **tank feels sparse / empty** — the hero reads
+as a creature but the mid-water schools shrink to small silhouettes in a lot of
+pastel water. The lever is now the WATER palette (deepen / warm / raise contrast)
+and population density, NOT the fish; the dark tank (seen as context) reads
+richer. Refreshed options: (a) accept 6/7; (b) relax criterion 1 to "reads as an
+aquarium, not a chart" — now passes unanimously; (c) one targeted round on the
+light-water palette + density (a concrete lever, no longer a blind shot) —
+overlaps mwx0.11; (d) make the dark tank the default framing.
 
 ## Round 1 (2026-07-14)
 
