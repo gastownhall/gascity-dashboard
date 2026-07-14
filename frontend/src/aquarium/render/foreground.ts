@@ -189,7 +189,11 @@ function foregroundFills(palette: ScenePalette): ForegroundFills {
   const rockL = deepWater ? clamp(waterMidL + 26, 40, 60) : clamp(waterMidL - 46, 20, 40);
   const kelpL = rockL + 7;
   const kelpH = parseOklch(palette.kelp).h;
-  const rockH = parseOklch(palette.formation).h;
+  // In sunlit (light) water a warm formation-hue rock reads as a brown dirt
+  // smudge against the aqua; a near silhouette seen through shallow water is a
+  // cool desaturated teal, so pull the rock hue toward the deep-water hue in
+  // light mode. Deep (dark) water keeps the warm rock, which reads fine there.
+  const rockH = deepWater ? parseOklch(palette.formation).h : parseOklch(palette.waterBottom).h;
   const built: ForegroundFills = {
     kelp: withAlpha(litOklch(kelpL, 0.07, kelpH), 0.82),
     rock: withAlpha(litOklch(rockL, 0.05, rockH), 0.85),
