@@ -19,6 +19,15 @@ import type { Camera, ScenePalette, SimState, Viewport, WorldSnapshot } from '..
  *  perf sweep can't grow the array unbounded. */
 const FRAME_TIME_CAP = 5000;
 
+// The perf gate measures RENDER WORK per frame (the advanceSim + paintScene
+// wall time), not the requestAnimationFrame interval. The rAF interval is
+// vsync-locked to the display refresh (~16.67ms at 60Hz), so its median is
+// pinned at one refresh regardless of how fast the render actually is — it
+// measures frame PACING, not whether the render fits the frame budget. Timing
+// the paint work directly answers the real question ("does a pan/zoom frame's
+// render complete inside the 16ms budget?"). The raw rAF deltas are still
+// exposed on __aquariumRafDeltasMs for reference (dropped-frame diagnosis).
+
 const INITIAL_SIM_STATE: SimState = { fish: {}, pellets: {}, clockMs: 0 };
 
 export interface UseAquariumRenderLoopArgs {
@@ -96,8 +105,12 @@ export function useAquariumRenderLoop({
     const tick = (ts: number) => {
       const dtMs = lastTs === null ? 0 : ts - lastTs;
       lastTs = ts;
-      if (isFixtureRef.current) pushFrameTime(dtMs);
+      const workStart = performance.now();
       paintOnce(dtMs);
+      if (isFixtureRef.current) {
+        pushFrameTime(performance.now() - workStart);
+        pushRafDelta(dtMs);
+      }
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
@@ -136,9 +149,16 @@ function useCanvasDprSizing(
   }, [canvasRef, viewport]);
 }
 
-function pushFrameTime(dtMs: number): void {
+function pushFrameTime(workMs: number): void {
   const times = window.__aquariumFrameTimesMs ?? [];
-  times.push(dtMs);
+  times.push(workMs);
   if (times.length > FRAME_TIME_CAP) times.shift();
   window.__aquariumFrameTimesMs = times;
+}
+
+function pushRafDelta(dtMs: number): void {
+  const deltas = window.__aquariumRafDeltasMs ?? [];
+  deltas.push(dtMs);
+  if (deltas.length > FRAME_TIME_CAP) deltas.shift();
+  window.__aquariumRafDeltasMs = deltas;
 }

@@ -241,7 +241,13 @@ declare global {
   interface Window {
     /** set in fixture mode for the snapshot harness */
     __aquariumManifest?: FixtureManifest;
-    /** set in fixture mode; harness reads frame-time samples after a sweep */
+    /** set in fixture mode; per-frame RENDER WORK time (advanceSim + paintScene
+     *  wall-clock ms) — the perf gate metric. NOT the rAF interval, which is
+     *  vsync-locked to the display refresh and cannot go below ~16.67ms at
+     *  60Hz regardless of render speed. */
     __aquariumFrameTimesMs?: number[];
+    /** set in fixture mode; raw requestAnimationFrame deltas (frame pacing) for
+     *  dropped-frame diagnosis. Vsync-floored, so not the render-cost gate. */
+    __aquariumRafDeltasMs?: number[];
   }
 }
