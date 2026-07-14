@@ -243,7 +243,10 @@ function shaftQuad(
   ctx.fill();
 }
 
-const MOTE_COUNT = 160;
+// Near motes are the ONE ambient layer redrawn every frame (they keep the
+// water alive while the camera rests and the static layers sit cached), so the
+// count is kept lean.
+const MOTE_COUNT = 90;
 
 /** Sparse marine-snow particulate, drifting slowly down. Near layer must be
  * installed. Deterministic per mote from its index. */

@@ -7,10 +7,11 @@
 // root→tip so nothing reads as a pasted opaque polygon.
 
 import type { ScenePalette } from '../contracts';
+import { DEPTH_BANDS, bandHaze } from './depth';
 import type { FishHull } from './fishGeometry';
 import type { Pt } from './mathUtil';
 import { at } from './mathUtil';
-import { adjustLC, withAlpha } from './oklch';
+import { adjustLC, mixOklch, withAlpha } from './oklch';
 
 export interface CountershadeColors {
   /** dark back */
@@ -98,6 +99,49 @@ export function countershadeColors(
     cache.set(palette, built);
   }
   return built[variant];
+}
+
+type BandCache = Record<ShadeVariant, readonly CountershadeColors[]>;
+const bandCache = new WeakMap<ScenePalette, BandCache>();
+
+/** Blend one countershade set toward the far water by `haze` (atmospheric
+ * perspective): a far fish desaturates and lightens toward the haze so it reads
+ * as receding, never a crisp near fish shrunk in place. */
+function hazeColors(c: CountershadeColors, hazeFar: string, haze: number): CountershadeColors {
+  if (haze <= 0) return c;
+  const mix = (color: string): string => mixOklch(color, hazeFar, haze);
+  return {
+    dorsal: mix(c.dorsal),
+    mid: mix(c.mid),
+    ventral: mix(c.ventral),
+    belly: mix(c.belly),
+    outline: mix(c.outline),
+    finRoot: mix(c.finRoot),
+    finLight: mix(c.finLight),
+  };
+}
+
+/**
+ * DEPTH_BANDS hazed copies of a variant, band 0 = farthest/haziest. Precomputed
+ * and cached per palette so a 200-fish frame allocates zero color strings: the
+ * painter picks a fish's band from its depth and reuses the shared set.
+ */
+export function countershadeBands(
+  palette: ScenePalette,
+  variant: ShadeVariant,
+): readonly CountershadeColors[] {
+  let cached = bandCache.get(palette);
+  if (cached === undefined) {
+    const build = (v: ShadeVariant): readonly CountershadeColors[] => {
+      const base = countershadeColors(palette, v);
+      return Array.from({ length: DEPTH_BANDS }, (_unused, band) =>
+        hazeColors(base, palette.hazeFar, bandHaze(band)),
+      );
+    };
+    cached = { normal: build('normal'), dim: build('dim'), tense: build('tense') };
+    bandCache.set(palette, cached);
+  }
+  return cached[variant];
 }
 
 /** Linear gradient down the anatomical dorsal→ventral axis of the hull. */

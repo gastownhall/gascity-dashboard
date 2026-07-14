@@ -399,3 +399,30 @@ describe('surface cluster separability (awaiting-input / stalled / errored)', ()
     expect(upright.dorsalSign).toBe(1);
   });
 });
+
+describe('raised resting bow (findings: working/errored spines read parked)', () => {
+  it('working carries a resting bow well above round-3 (0.05, read as parked)', () => {
+    expect(attitudeForPose('working').restBow).toBeGreaterThan(0.08);
+  });
+
+  it('errored is limp, not a rigid plank: a positive resting bow', () => {
+    expect(attitudeForPose('errored').restBow).toBeGreaterThan(0);
+  });
+
+  it('the raised bow bends the MID-body, keeping the head on-axis', () => {
+    // eye stays on the dorsal (upper) side for an upright fish: the nose does
+    // not curl even at the raised amplitude
+    const spine = spineFor('working', 'role', 0, 0);
+    const hull = fishHull(spine, 'role', 1);
+    expect(fishHead(spine, hull).eye.y).toBeLessThan(0);
+    // and a mid-body station sits meaningfully off the nose→tail axis
+    const nose = at(spine.points, 0);
+    const tail = at(spine.points, spine.points.length - 1);
+    const mid = at(spine.points, Math.floor(spine.points.length / 2));
+    const dx = tail.x - nose.x;
+    const dy = tail.y - nose.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const midOffset = Math.abs(((mid.x - nose.x) * dy - (mid.y - nose.y) * dx) / len);
+    expect(midOffset).toBeGreaterThan(0.015 * SPECIES.role.length);
+  });
+});

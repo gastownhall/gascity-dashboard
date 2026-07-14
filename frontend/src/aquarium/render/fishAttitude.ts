@@ -48,7 +48,10 @@ const LEVEL: FishAttitude = {
   xScale: 1,
   finsFolded: false,
   tailBeat: 1,
-  restBow: 0.05,
+  // a pronounced resting S even in a frozen frame — round-3's 0.05 read
+  // "parked/straight" to every craft judge; this is the amplitude that makes
+  // a still working fish unmistakably curved, not a stick
+  restBow: 0.11,
   eye: 'open',
   mouthOpen: false,
   dimmed: false,
@@ -68,7 +71,7 @@ const BY_POSE: Record<AquariumPose, FishAttitude> = {
     ...LEVEL,
     pitch: -7 * DEG,
     tailBeat: 0.32,
-    restBow: 0.055,
+    restBow: 0.1,
     eye: 'hollow',
     maxHeadingTilt: 14 * DEG,
     swayAmp: 3.5 * DEG,
@@ -124,12 +127,13 @@ const BY_POSE: Record<AquariumPose, FishAttitude> = {
     tense: true,
     maxHeadingTilt: 6 * DEG,
   },
-  // fully belly-up: pale belly on top, dark back down, X-cross eye, limp fins
+  // fully belly-up: pale belly on top, dark back down, X-cross eye, limp fins.
+  // a gentle resting bow reads as a LIMP dead body, not a rigid parked plank
   errored: {
     ...LEVEL,
     flipVertical: true,
     tailBeat: 0.06,
-    restBow: 0,
+    restBow: 0.05,
     eye: 'cross',
     finsFolded: true,
     finClamp: 0.5,

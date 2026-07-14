@@ -1,7 +1,13 @@
-// Bead pellets: small rounded morsels batched by style (one fillStyle, many
-// arcs). Tone variation is a deterministic 3-bucket hash of the bead id;
+// Bead pellets: small rounded morsels batched by fill style (one fillStyle,
+// many arcs). Tone variation is a deterministic 3-bucket hash of the bead id;
 // sunken pellets settle darker and squashed; eaten pellets shrink+fade over
 // the gulp window. Positions (drift bob, mouth-hold) are sim facts.
+//
+// Hot path (≤1000 pellets/frame): a single pass sorts pellets into reused
+// module-level number arrays (batched by style), then each batch draws as one
+// path. No per-pellet save/restore, no gradient, and — because the batch
+// arrays are reused and only cleared (.length = 0) — no per-frame heap
+// allocation.
 
 import type { PelletEntity, ScenePalette, SimState } from '../contracts';
 import { hashString } from './hash';
@@ -36,21 +42,31 @@ function pelletColors(palette: ScenePalette): PelletColors {
   return built;
 }
 
-interface Dot {
-  x: number;
-  y: number;
-}
+// Reused batch arrays — a single synchronous caller per frame, no reentrancy.
+const driftX: [number[], number[], number[]] = [[], [], []];
+const driftY: [number[], number[], number[]] = [[], [], []];
+const sunkX: number[] = [];
+const sunkY: number[] = [];
+const sunkScale: number[] = [];
+const sunkSquash: number[] = [];
+const sunkTone: number[] = [];
+const eatenX: number[] = [];
+const eatenY: number[] = [];
+const eatenT: number[] = [];
 
-/** a settled morsel carries its own hashed size/shape so the seabed reads as
- * scattered organic food, not a row of identical UI diamonds */
-interface Morsel {
-  x: number;
-  y: number;
-  /** 0.78..1.28 of the base radius */
-  scale: number;
-  /** 0.72..0.94 vertical squash (resting, slightly flattened by gravity) */
-  squash: number;
-  tone: 0 | 1;
+function resetBatches(): void {
+  for (let b = 0; b < 3; b += 1) {
+    at(driftX, b).length = 0;
+    at(driftY, b).length = 0;
+  }
+  sunkX.length = 0;
+  sunkY.length = 0;
+  sunkScale.length = 0;
+  sunkSquash.length = 0;
+  sunkTone.length = 0;
+  eatenX.length = 0;
+  eatenY.length = 0;
+  eatenT.length = 0;
 }
 
 /** Actor layer must be installed. */
@@ -62,9 +78,7 @@ export function paintPellets(
   view: ViewRect,
 ): void {
   const colors = pelletColors(palette);
-  const buckets: [Dot[], Dot[], Dot[]] = [[], [], []];
-  const sunken: Morsel[] = [];
-  const eaten: Array<Dot & { t: number }> = [];
+  resetBatches();
   for (const pellet of pellets) {
     const kin = sim.pellets[pellet.beadId];
     // sim can lag a fresh snapshot by one frame; skip rather than invent
@@ -72,72 +86,88 @@ export function paintPellets(
     if (!rectContains(view, kin.x, kin.y)) continue;
     if (pellet.state === 'sunken') {
       const h = hashString(pellet.beadId);
-      sunken.push({
-        x: kin.x,
-        y: kin.y,
-        scale: 0.78 + ((h >>> 4) % 100) * 0.005,
-        squash: 0.72 + ((h >>> 11) % 100) * 0.0022,
-        tone: (h & 1) as 0 | 1,
-      });
+      sunkX.push(kin.x);
+      sunkY.push(kin.y);
+      sunkScale.push(0.78 + ((h >>> 4) % 100) * 0.005);
+      sunkSquash.push(0.72 + ((h >>> 11) % 100) * 0.0022);
+      sunkTone.push(h & 1);
     } else if (pellet.state === 'eaten') {
-      eaten.push({ x: kin.x, y: kin.y, t: clamp01((pellet.gulpMsLeft ?? 0) / GULP_WINDOW_MS) });
+      eatenX.push(kin.x);
+      eatenY.push(kin.y);
+      eatenT.push(clamp01((pellet.gulpMsLeft ?? 0) / GULP_WINDOW_MS));
     } else {
-      at(buckets, hashString(pellet.beadId) % 3).push({ x: kin.x, y: kin.y });
+      const b = hashString(pellet.beadId) % 3;
+      at(driftX, b).push(kin.x);
+      at(driftY, b).push(kin.y);
     }
   }
-  for (let tone = 0; tone < buckets.length; tone += 1) {
-    fillDots(ctx, at(buckets, tone), at(colors.tones, tone), PELLET_RADIUS, 0.82);
+  for (let tone = 0; tone < 3; tone += 1) {
+    fillDots(ctx, at(driftX, tone), at(driftY, tone), at(colors.tones, tone), PELLET_RADIUS, 0.82);
   }
-  paintSunken(ctx, sunken, colors);
-  for (const dot of eaten) {
-    ctx.globalAlpha = dot.t;
-    fillDots(ctx, [dot], at(colors.tones, 0), PELLET_RADIUS * (0.25 + 0.75 * dot.t), 0.82);
-  }
-  if (eaten.length > 0) ctx.globalAlpha = 1;
+  paintSunken(ctx, colors);
+  paintEaten(ctx, colors);
 }
 
 /** settled morsels: a soft contact shadow pass, then two tone passes of
  * rounded pebbles with hashed size/squash — reads as food on the sand */
-function paintSunken(
-  ctx: CanvasRenderingContext2D,
-  sunken: readonly Morsel[],
-  colors: PelletColors,
-): void {
-  if (sunken.length === 0) return;
+function paintSunken(ctx: CanvasRenderingContext2D, colors: PelletColors): void {
+  const n = sunkX.length;
+  if (n === 0) return;
   ctx.fillStyle = colors.sunkenShadow;
   ctx.beginPath();
-  for (const m of sunken) {
-    const rx = PELLET_RADIUS * m.scale * 1.25;
-    ctx.moveTo(m.x + rx, m.y + PELLET_RADIUS * 0.5);
-    ctx.ellipse(m.x, m.y + PELLET_RADIUS * 0.5, rx, PELLET_RADIUS * 0.4, 0, 0, TAU);
+  for (let i = 0; i < n; i += 1) {
+    const rx = PELLET_RADIUS * at(sunkScale, i) * 1.25;
+    const y = at(sunkY, i) + PELLET_RADIUS * 0.5;
+    ctx.moveTo(at(sunkX, i) + rx, y);
+    ctx.ellipse(at(sunkX, i), y, rx, PELLET_RADIUS * 0.4, 0, 0, TAU);
   }
   ctx.fill();
   for (let tone = 0; tone < colors.sunken.length; tone += 1) {
     ctx.fillStyle = at(colors.sunken, tone);
     ctx.beginPath();
-    for (const m of sunken) {
-      if (m.tone !== tone) continue;
-      const rx = PELLET_RADIUS * m.scale;
-      ctx.moveTo(m.x + rx, m.y);
-      ctx.ellipse(m.x, m.y, rx, rx * m.squash, 0, 0, TAU);
+    for (let i = 0; i < n; i += 1) {
+      if (at(sunkTone, i) !== tone) continue;
+      const rx = PELLET_RADIUS * at(sunkScale, i);
+      ctx.moveTo(at(sunkX, i) + rx, at(sunkY, i));
+      ctx.ellipse(at(sunkX, i), at(sunkY, i), rx, rx * at(sunkSquash, i), 0, 0, TAU);
     }
     ctx.fill();
   }
 }
 
+/** gulp: each eaten morsel shrinks + fades on its own alpha (few per frame) */
+function paintEaten(ctx: CanvasRenderingContext2D, colors: PelletColors): void {
+  const n = eatenX.length;
+  if (n === 0) return;
+  const color = at(colors.tones, 0);
+  for (let i = 0; i < n; i += 1) {
+    const t = at(eatenT, i);
+    ctx.globalAlpha = t;
+    ctx.fillStyle = color;
+    const rx = PELLET_RADIUS * (0.25 + 0.75 * t);
+    ctx.beginPath();
+    ctx.moveTo(at(eatenX, i) + rx, at(eatenY, i));
+    ctx.ellipse(at(eatenX, i), at(eatenY, i), rx, rx * 0.82, 0, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function fillDots(
   ctx: CanvasRenderingContext2D,
-  dots: readonly Dot[],
+  xs: readonly number[],
+  ys: readonly number[],
   color: string,
   rx: number,
   squash: number,
 ): void {
-  if (dots.length === 0) return;
+  const n = xs.length;
+  if (n === 0) return;
   ctx.fillStyle = color;
   ctx.beginPath();
-  for (const dot of dots) {
-    ctx.moveTo(dot.x + rx, dot.y);
-    ctx.ellipse(dot.x, dot.y, rx, rx * squash, 0, 0, TAU);
+  for (let i = 0; i < n; i += 1) {
+    ctx.moveTo(at(xs, i) + rx, at(ys, i));
+    ctx.ellipse(at(xs, i), at(ys, i), rx, rx * squash, 0, 0, TAU);
   }
   ctx.fill();
 }

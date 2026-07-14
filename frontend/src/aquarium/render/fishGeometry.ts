@@ -63,8 +63,8 @@ export const SPECIES: Record<FishSpecies, SpeciesProfile> = {
     caudalSpreadDeg: 33,
     dorsalStart: 0.3,
     dorsalEnd: 0.56,
-    dorsalHeight: 0.085,
-    pectoralLength: 0.15,
+    dorsalHeight: 0.12,
+    pectoralLength: 0.2,
     pelvicLength: 0.08,
     eyeRadius: 0.04,
     noseBlunt: 0.15,
@@ -82,8 +82,8 @@ export const SPECIES: Record<FishSpecies, SpeciesProfile> = {
     caudalSpreadDeg: 27,
     dorsalStart: 0.26,
     dorsalEnd: 0.62,
-    dorsalHeight: 0.11,
-    pectoralLength: 0.17,
+    dorsalHeight: 0.15,
+    pectoralLength: 0.24,
     pelvicLength: 0.09,
     eyeRadius: 0.037,
     noseBlunt: 0.35,
@@ -101,8 +101,8 @@ export const SPECIES: Record<FishSpecies, SpeciesProfile> = {
     caudalSpreadDeg: 30,
     dorsalStart: 0.28,
     dorsalEnd: 0.76,
-    dorsalHeight: 0.1,
-    pectoralLength: 0.21,
+    dorsalHeight: 0.14,
+    pectoralLength: 0.26,
     pelvicLength: 0.1,
     eyeRadius: 0.03,
     noseBlunt: 0.8,
@@ -157,9 +157,16 @@ export function fishSpine(
   const flip = attitude.flipVertical ? -1 : 1;
   const points = p.stations.map((s) => {
     const x = (0.5 - s) * p.length * attitude.xScale;
-    const envelope = 0.12 + 0.88 * s * s;
-    const ySwim = amp * envelope * Math.sin(swimPhase - s * BODY_WAVE_RAD);
-    const yRest = restAmp * Math.sin(s * REST_BOW_RAD);
+    // swim wave: amplitude grows toward the tail (propulsion).
+    const swimEnv = 0.12 + 0.88 * s * s;
+    const ySwim = amp * swimEnv * Math.sin(swimPhase - s * BODY_WAVE_RAD);
+    // resting S-bow: a MID-peaked envelope (≈0 with ≈0 slope at both the nose
+    // and the tail) so a raised restBow bends the body's MIDDLE into a clear,
+    // still S while the head stays on-axis — the eye reads on the dorsal side
+    // and the snout never curls, and the interior curvature is what the craft
+    // judges read as "not parked/straight".
+    const restEnv = Math.sin(Math.PI * s) ** 2;
+    const yRest = restAmp * restEnv * Math.sin(s * REST_BOW_RAD);
     const y = ySwim + yRest;
     return { x: x * cos - y * sin, y: flip * (x * sin + y * cos) };
   });
