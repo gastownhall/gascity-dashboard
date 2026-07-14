@@ -70,9 +70,14 @@ export function usesRichFishPath(richBudget: boolean, drawnPx: number): boolean 
 
 // Reused across frames so back-to-front ordering allocates no arrays in the
 // draw path (one synchronous caller, no reentrancy). `zScratch[i]` is fish i's
-// depth; `orderScratch` is the fish indices sorted far→near.
+// depth; `orderScratch` is the fish indices sorted far→near. `drawnScratch[k]`
+// is the drawn px of the fish at render slot k (−1 = culled); `richScratch[k]`
+// its rich-path flag; `rankScratch` holds the visible slots ranked by size.
 const orderScratch: number[] = [];
 const zScratch: number[] = [];
+const drawnScratch: number[] = [];
+const richScratch: boolean[] = [];
+const rankScratch: number[] = [];
 
 /** Cull + paint every fish, back-to-front by depth so near fish overlap far
  * ones. Leaves the actor layer transform installed. */
@@ -85,24 +90,54 @@ export function paintFishLayer(
   view: ViewRect,
   clockMs: number,
 ): void {
-  const richBudget = fishList.length <= RICH_FISH_BUDGET;
   const n = fishList.length;
   orderScratch.length = n;
   zScratch.length = n;
+  drawnScratch.length = n;
+  richScratch.length = n;
   for (let i = 0; i < n; i += 1) {
     orderScratch[i] = i;
     zScratch[i] = fishDepthZ(at(fishList, i).id);
   }
   // painter's algorithm: far (small z) drawn first, near (large z) last
   orderScratch.sort((a, b) => at(zScratch, a) - at(zScratch, b));
+
+  // Size pass: drawn px per VISIBLE fish (culled → −1). The rich path
+  // (countershade gradient + fin membranes + face) is expensive, so it is
+  // granted to the largest RICH_FISH_BUDGET fish only — a busy live city with
+  // more fish than the budget still shows shaded creatures with eyes where size
+  // makes them count, and the per-frame rich work stays bounded regardless of
+  // fleet size. Ranking is stable under zoom (all sizes scale together), so the
+  // rich set doesn't flicker as the camera moves.
+  let visible = 0;
   for (let k = 0; k < n; k += 1) {
     const index = at(orderScratch, k);
     const fish = at(fishList, index);
     const kin = sim.fish[fish.id];
     // sim can lag a fresh snapshot by one frame; a fish with no kinematics
     // yet is skipped rather than painted at an invented position
+    if (kin === undefined || !rectContains(view, kin.x, kin.y)) {
+      drawnScratch[k] = -1;
+      continue;
+    }
+    drawnScratch[k] = SPECIES[fish.species].length * layer.scale * depthScale(at(zScratch, index));
+    rankScratch[visible] = k;
+    visible += 1;
+  }
+  rankScratch.length = visible;
+  rankScratch.sort((a, b) => at(drawnScratch, b) - at(drawnScratch, a));
+  for (let r = 0; r < visible; r += 1) {
+    const k = at(rankScratch, r);
+    richScratch[k] = usesRichFishPath(r < RICH_FISH_BUDGET, at(drawnScratch, k));
+  }
+
+  // Draw pass: back-to-front (depth order preserved).
+  for (let k = 0; k < n; k += 1) {
+    if (at(drawnScratch, k) < 0) continue;
+    const index = at(orderScratch, k);
+    const fish = at(fishList, index);
+    const kin = sim.fish[fish.id];
     if (kin === undefined) continue;
-    if (!rectContains(view, kin.x, kin.y)) continue;
     const z = at(zScratch, index);
     const attitude = attitudeForPose(fish.pose);
     // hue = rig identity (cached per palette+hue+variant, so this is a lookup);
@@ -110,7 +145,7 @@ export function paintFishLayer(
     const variant =
       attitude.dimmed || fish.tombstoned ? 'dim' : attitude.tense ? 'tense' : 'normal';
     const bands = countershadeBands(palette, variant, rigHue(fish.homeKey));
-    paintFish(ctx, fish, kin, at(bands, depthBand(z)), layer, clockMs, richBudget, z);
+    paintFish(ctx, fish, kin, at(bands, depthBand(z)), layer, clockMs, at(richScratch, k), z);
   }
   applyLayer(ctx, layer);
 }
@@ -122,7 +157,7 @@ function paintFish(
   colors: CountershadeColors,
   layer: LayerTransform,
   clockMs: number,
-  richBudget: boolean,
+  rich: boolean,
   z: number,
 ): void {
   const attitude = attitudeForPose(fish.pose);
@@ -141,7 +176,7 @@ function paintFish(
   const drawnPx = SPECIES[fish.species].length * layer.scale * dScale;
   const alpha = fish.tombstoned ? 0.4 * depthAlpha(z) : depthAlpha(z);
   if (alpha < 1) ctx.globalAlpha = alpha;
-  if (usesRichFishPath(richBudget, drawnPx)) {
+  if (rich) {
     paintRich(ctx, fish, spine, hull, fins, colors, lineWidth, drawnPx >= FACE_MIN_PX);
   } else {
     paintFlat(ctx, hull, fins, colors, lineWidth, drawnPx);

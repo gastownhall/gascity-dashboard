@@ -155,8 +155,9 @@ describe('usesRichFishPath (count-gated rich rendering — LOD0 creatures, not i
     expect(usesRichFishPath(true, 6)).toBe(true);
   });
 
-  it('keeps the over-budget (200-fish perf sweep) case flat at ANY drawn size', () => {
-    // the count gate — not pixel size — protects the perf headroom
+  it('keeps a fish outside the size budget flat at ANY drawn size', () => {
+    // first arg = "this fish is within the top-K by size"; a fish ranked out of
+    // the budget stays flat regardless of pixels, bounding the rich work
     expect(usesRichFishPath(false, 300)).toBe(false);
     expect(usesRichFishPath(false, 10)).toBe(false);
   });
@@ -166,16 +167,19 @@ describe('usesRichFishPath (count-gated rich rendering — LOD0 creatures, not i
   });
 });
 
-describe('paintFishLayer count-gate (perf-sweep stays flat, low count richens)', () => {
+describe('paintFishLayer size budget (largest fish richen, rest flat, work bounded)', () => {
   it('allocates body/fin gradients for a low-count scene (rich shaded fish)', () => {
     const rec = drawFishScene(6, 1.0);
     expect(rec.gradients()).toBeGreaterThan(0);
   });
 
-  it('allocates ZERO gradients above the fish-count budget (200-fish path stays flat)', () => {
-    // over budget, every fish is flat regardless of drawn size → no gradients,
-    // so the 200-fish sweep keeps its render-work headroom
-    const rec = drawFishScene(RICH_FISH_BUDGET + 12, 1.0);
-    expect(rec.gradients()).toBe(0);
+  it('caps rich rendering at the size budget for a big fleet: largest fish still richen, work stays bounded', () => {
+    // a >budget fleet no longer goes fully flat (that erased eyes on a busy live
+    // city) — the largest RICH_FISH_BUDGET fish keep the rich shaded/eyes path
+    // while the render work stays bounded to the budget's worth of gradients.
+    const over = drawFishScene(RICH_FISH_BUDGET + 12, 1.0);
+    const atBudget = drawFishScene(RICH_FISH_BUDGET, 1.0);
+    expect(over.gradients()).toBeGreaterThan(0);
+    expect(over.gradients()).toBeLessThanOrEqual(atBudget.gradients());
   });
 });
