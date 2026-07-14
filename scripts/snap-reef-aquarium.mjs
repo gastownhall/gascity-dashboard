@@ -185,42 +185,49 @@ async function captureBlindCrops(browser, errors, shots) {
   const bucket = [];
   let manifest = null;
   try {
-    const page = await ctx.newPage();
-    const detach = attachWatchers(page, bucket);
+    // Read the manifest (and thus blindCams) from a first page.
+    const probe = await ctx.newPage();
+    const detachProbe = attachWatchers(probe, bucket);
     try {
-      const baseUrl = fixtureUrl('blind', null);
-      await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 });
-      await page.waitForSelector('canvas', { timeout: 10_000 });
-      manifest = await waitForManifest(page, 10_000);
-      if (!manifest) {
-        bucket.push('missing window.__aquariumManifest for blind fixture');
-      } else {
-        const blindCams = manifest.blindCams ?? [];
-        if (blindCams.length === 0)
-          bucket.push('manifest.blindCams was empty for the blind fixture');
-        for (let i = 0; i < blindCams.length; i += 1) {
-          try {
-            // Full goto (not a bare hash mutation) so the page re-settles
-            // the camera deterministically for each crop.
-            await page.goto(fixtureUrl('blind', blindCams[i]), {
-              waitUntil: 'domcontentloaded',
-              timeout: 15_000,
-            });
-            await page.waitForSelector('canvas', { timeout: 10_000 });
-            await page.waitForTimeout(800);
-            const path = `${OUT}/blind-${i}.png`;
-            await page.screenshot({ path });
-            shots.push(path);
-          } catch (err) {
-            bucket.push(`blind-${i}: ${err instanceof Error ? err.message : String(err)}`);
-          }
+      await probe.goto(fixtureUrl('blind', null), {
+        waitUntil: 'domcontentloaded',
+        timeout: 15_000,
+      });
+      await probe.waitForSelector('canvas', { timeout: 10_000 });
+      manifest = await waitForManifest(probe, 10_000);
+    } finally {
+      detachProbe();
+      await probe.close().catch(() => {});
+    }
+    if (!manifest) {
+      bucket.push('missing window.__aquariumManifest for blind fixture');
+    } else {
+      const blindCams = manifest.blindCams ?? [];
+      if (blindCams.length === 0) bucket.push('manifest.blindCams was empty for the blind fixture');
+      // A fresh page per crop: the camera parses '#cam' once on mount, and a
+      // browser does NOT reload on a hash-only URL change, so reusing one page
+      // would leave every crop at the first framing. One mount per cam is the
+      // only way each '#cam' deep-link actually takes effect.
+      for (let i = 0; i < blindCams.length; i += 1) {
+        const page = await ctx.newPage();
+        const detach = attachWatchers(page, bucket);
+        try {
+          await page.goto(fixtureUrl('blind', blindCams[i]), {
+            waitUntil: 'domcontentloaded',
+            timeout: 15_000,
+          });
+          await page.waitForSelector('canvas', { timeout: 10_000 });
+          await page.waitForTimeout(800);
+          const path = `${OUT}/blind-${i}.png`;
+          await page.screenshot({ path });
+          shots.push(path);
+        } catch (err) {
+          bucket.push(`blind-${i}: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+          detach();
+          await page.close().catch(() => {});
         }
       }
-    } catch (err) {
-      bucket.push(err instanceof Error ? err.message : String(err));
-    } finally {
-      detach();
-      await page.close().catch(() => {});
     }
   } finally {
     await ctx.close().catch(() => {});

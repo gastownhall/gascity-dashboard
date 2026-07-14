@@ -48,9 +48,14 @@ const DISTRESS_POSES: ReadonlySet<AquariumPose> = new Set([
   'errored',
 ]);
 
-/** Just under LOD2 so pose/pellet captions never fade in (Honest Zoom Rule)
- *  while the fish still fills the frame for a close-up crop. */
-const BLIND_ZOOM = LOD2_ZOOM - 0.05;
+// Captions (name / pose word / bead / belly) fade in across
+// [0.8·LOD2_ZOOM, 1.1·LOD2_ZOOM] (render/lod.ts fadeAcross). A blind crop must
+// carry NO state text, so it sits just below the fade start (0.8·LOD2_ZOOM):
+// the fish still fills the frame at this zoom, but poseWord never renders, so
+// the crop leaks nothing but posture. (Rig labels are harmless — a "BLIND-3"
+// tag does not reveal which pose the fish is in.)
+const CAPTION_FADE_START = LOD2_ZOOM * 0.8;
+const BLIND_ZOOM = CAPTION_FADE_START - 0.05;
 
 interface BlindFish {
   pose: AquariumPose;
