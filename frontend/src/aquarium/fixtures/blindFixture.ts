@@ -16,6 +16,26 @@
 // near, since both poses' steering is anchor-tethered (fish.ts weights
 // cohesion/idle-orbit back toward the home anchor) — good enough for a
 // close-up crop, not claimed pixel-exact.
+//
+// Round-3 single-fish-crop fix: round-2 judges repeatedly saw two fish in a
+// blind crop. Two of a rig's 7 pose-bands sit close enough in world y that a
+// zoom crop can't rely on vertical separation alone — working/stalled
+// (~188 wu apart at closest), working/idle (~153 wu), awaiting-input/errored
+// (~26 wu), and rate-limited/asleep (their bands can literally overlap) —
+// see sim/constants.ts's BAND_* values. buildFormations' placeAlongSeabed
+// guarantees, as a hard invariant (not a probabilistic one), that any two
+// rig anchors N hash-ranks apart sit at least N * (2*CORE_RADIUS_FRACTION*
+// radius + MIN_CORE_GAP_WU) apart in world x, regardless of jitter — for
+// this fixture's uniform 1-fish-per-rig radius (166 wu) that floor is
+// ~239.2 wu per hash-rank. POSE_BY_HASH_RANK spends that guarantee on
+// exactly the 4 close-band pairs above (>= 3 ranks apart, >= 6 for
+// working/idle) so their worst-case combined rest-position spread plus the
+// BLIND_ZOOM crop's half-width can never overlap — see the derivation this
+// bead verified with scripts run against derive/formations.ts +
+// sim/restPositions.ts (no collision at any of the 21 fish pairs, nearest
+// risky-pair margin ~1000 wu in the concrete run). Every other pose pair is
+// already band-separated by more than the crop's half-height, so it doesn't
+// need the same x-rank budget.
 
 import type { AgentResponse, SessionResponse } from 'gas-city-dashboard-shared/gc-supervisor';
 import type { AgentPendingSignal } from 'gas-city-dashboard-shared';
@@ -63,13 +83,80 @@ interface BlindFish {
   sessionName: string;
 }
 
-export function buildBlindFixture(): { inputs: DeriveInputs; manifest: FixtureManifest } {
-  const plan: BlindFish[] = ALL_POSES.map((pose, i) => ({
-    pose,
-    rigKey: `blind-${i + 1}`,
-    sessionName: `blind-session-${i + 1}`,
-  }));
+/** Candidate rig keys for the 7 blind fish. Any 7 distinct strings work —
+ * buildFormations' per-hash-rank minimum-gap floor (see the header comment)
+ * holds for any key set — but the specific strings are pinned so the
+ * hash-rank order (and thus the pose assignment below) is deterministic and
+ * doesn't shift if this list is ever reordered. */
+const BLIND_RIG_KEYS: readonly string[] = [
+  'blind-1',
+  'blind-2',
+  'blind-3',
+  'blind-4',
+  'blind-5',
+  'blind-6',
+  'blind-7',
+];
 
+/** Poses ordered by how much hash-rank separation they need from their
+ * closest-band neighbor (see the header comment's pair list). Zipped
+ * against BLIND_RIG_KEYS sorted into buildFormations' own hash-rank order
+ * below, so working/stalled, working/idle, awaiting-input/errored, and
+ * rate-limited/asleep always land far enough apart in world x. */
+const POSE_BY_HASH_RANK: readonly AquariumPose[] = [
+  'working',
+  'awaiting-input',
+  'rate-limited',
+  'stalled',
+  'errored',
+  'asleep',
+  'idle',
+];
+
+// A hand-ordered list drifting out of sync with ALL_POSES (a pose added,
+// renamed, or dropped) would silently lose the "one per pose" contract this
+// fixture promises — fail loudly at import time instead.
+const posePermutationIsComplete =
+  POSE_BY_HASH_RANK.length === ALL_POSES.length &&
+  new Set(POSE_BY_HASH_RANK).size === ALL_POSES.length;
+if (!posePermutationIsComplete) {
+  throw new Error('blind fixture: POSE_BY_HASH_RANK must be a permutation of ALL_POSES');
+}
+for (const pose of ALL_POSES) {
+  if (!POSE_BY_HASH_RANK.includes(pose)) {
+    throw new Error(`blind fixture: POSE_BY_HASH_RANK is missing pose "${pose}"`);
+  }
+}
+
+/** Mirrors derive/formations.ts's private `byHashThenKey` exactly, so the
+ * rank order computed here matches the spatial order buildFormations will
+ * actually produce for the same keys. */
+function byFormationHashRank(a: string, b: string): number {
+  const diff = hashString(a) - hashString(b);
+  return diff !== 0 ? diff : a < b ? -1 : a > b ? 1 : 0;
+}
+
+const RIG_KEYS_BY_HASH_RANK = [...BLIND_RIG_KEYS].sort(byFormationHashRank);
+
+function buildPlan(): BlindFish[] {
+  return RIG_KEYS_BY_HASH_RANK.map((rigKey, i) => ({
+    pose: POSE_BY_HASH_RANK[i]!,
+    rigKey,
+    sessionName: `blind-session-${rigKey}`,
+  }));
+}
+
+interface RawScene {
+  agents: AgentResponse[];
+  sessions: SessionResponse[];
+  pendingSignals: AgentPendingSignal[];
+  rigs: DeriveInputs['rigs'];
+  beadsByRig: DeriveInputs['beadsByRig'];
+}
+
+/** One agent (+ optional session/pending signal) per plan entry, each in its
+ * own empty-queue rig — no beads, so no pellets ever compete for a crop. */
+function buildRawScene(plan: readonly BlindFish[]): RawScene {
   const agents: AgentResponse[] = [];
   const sessions: SessionResponse[] = [];
   const pendingSignals: AgentPendingSignal[] = [];
@@ -106,10 +193,17 @@ export function buildBlindFixture(): { inputs: DeriveInputs; manifest: FixtureMa
     beadsByRig[p.rigKey] = { items: [], total: 0 };
   }
 
-  const formations = buildFormations({
-    beadsByRig,
-    fishHomeKeys: plan.map((p) => p.rigKey),
-  });
+  return { agents, sessions, pendingSignals, rigs, beadsByRig };
+}
+
+/** Each fish's manifest entry plus the camera the harness re-navigates to
+ * for its unlabeled crop, computed from the REAL formation + rest-position
+ * pipeline (see the header comment). */
+function buildFishAndCams(
+  plan: readonly BlindFish[],
+  beadsByRig: DeriveInputs['beadsByRig'],
+): { fish: FixtureManifest['fish']; blindCams: NonNullable<FixtureManifest['blindCams']> } {
+  const formations = buildFormations({ beadsByRig, fishHomeKeys: plan.map((p) => p.rigKey) });
   const formationByKey = new Map(formations.map((f) => [f.key, f]));
 
   const fish: FixtureManifest['fish'] = [];
@@ -134,14 +228,15 @@ export function buildBlindFixture(): { inputs: DeriveInputs; manifest: FixtureMa
     });
     blindCams.push({ x: pos.x, y: pos.y, zoom: BLIND_ZOOM });
   }
+  return { fish, blindCams };
+}
 
-  const inputs: DeriveInputs = {
-    sessions,
-    agents,
-    rigs,
-    pendingSignals,
-    beadsByRig,
-  };
+export function buildBlindFixture(): { inputs: DeriveInputs; manifest: FixtureManifest } {
+  const plan = buildPlan();
+  const { agents, sessions, pendingSignals, rigs, beadsByRig } = buildRawScene(plan);
+  const { fish, blindCams } = buildFishAndCams(plan, beadsByRig);
+
+  const inputs: DeriveInputs = { sessions, agents, rigs, pendingSignals, beadsByRig };
 
   const manifest: FixtureManifest = {
     kind: 'blind',

@@ -73,6 +73,26 @@ describe("'aquarium' fixture vs the real derive pipeline", () => {
       expect(rigKeys.has(rig.key)).toBe(true);
     }
   });
+
+  it('manifest.rigs is a complete, exact rollup of every rendered formation label (round-2 honesty fix: unrigged included)', () => {
+    // render/text.ts draws `${formation.key.toUpperCase()} · ${formation.openBeadTotal}`
+    // for every derived formation — every one of those on-screen labels must
+    // have a matching manifest.rigs entry with the exact same count, or the
+    // honesty auditor has nothing to validate the label against.
+    const manifestTotalByKey = new Map(manifest.rigs.map((r) => [r.key, r.openBeadTotal]));
+    for (const formation of snapshot.formations) {
+      expect(
+        manifestTotalByKey.has(formation.key),
+        `manifest.rigs is missing rendered rig "${formation.key}"`,
+      ).toBe(true);
+      expect(manifestTotalByKey.get(formation.key)).toBe(formation.openBeadTotal);
+    }
+    // and no phantom manifest entries for rigs that don't actually render.
+    const formationKeys = new Set(snapshot.formations.map((f) => f.key));
+    for (const rig of manifest.rigs) {
+      expect(formationKeys.has(rig.key), `manifest.rigs has a phantom rig "${rig.key}"`).toBe(true);
+    }
+  });
 });
 
 describe("'blind' fixture vs the real derive pipeline", () => {

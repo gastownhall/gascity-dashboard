@@ -37,13 +37,43 @@ describe("'aquarium' fixture", () => {
     expect(working.length / manifest.fish.length).toBeGreaterThan(0.6);
   });
 
-  it('has 3 rigs, a mayor, and an unrigged shoal', () => {
-    expect(manifest.rigs.length).toBe(3);
+  it('has 3 named rigs plus the unrigged bucket, a mayor, and an unrigged shoal', () => {
+    // manifest.rigs is a complete rollup of every "KEY · COUNT" label the
+    // scene renders, so the unrigged bucket belongs here too (round-2
+    // honesty finding: it rendered on screen with no manifest entry to
+    // validate against). CITY_KEY (the mayor) draws no label and stays out.
+    expect(manifest.rigs.length).toBe(4);
+    const rigKeys = manifest.rigs.map((r) => r.key);
+    const namedRigKeys = inputs.rigs.map((r) => r.name);
+    expect(namedRigKeys.length).toBe(3);
+    expect(rigKeys).toEqual(expect.arrayContaining([...namedRigKeys, UNRIGGED_KEY]));
     const mayor = inputs.agents.find((a) => a.name === 'mayor');
     expect(mayor).toBeDefined();
     expect(mayor?.rig).toBeUndefined();
     const unrigged = manifest.fish.filter((f) => f.rigKey === UNRIGGED_KEY);
     expect(unrigged.length).toBeGreaterThan(1);
+  });
+
+  it("manifest.rigs' openBeadTotal for the unrigged bucket matches the fixture's unrigged bead count", () => {
+    // The exact regression this bead is fixing: the scene renders
+    // "UNRIGGED · N" from beadsByRig[unrigged].total; the manifest entry
+    // must equal that same total so the honesty auditor has ground truth.
+    const unriggedRig = manifest.rigs.find((r) => r.key === UNRIGGED_KEY);
+    expect(unriggedRig).toBeDefined();
+    expect(unriggedRig?.openBeadTotal).toBe(inputs.beadsByRig[UNRIGGED_KEY]?.total);
+  });
+
+  it('every rig key with fish or pellets appears in manifest.rigs (complete label rollup)', () => {
+    const renderedKeys = new Set<string>([
+      ...manifest.fish.map((f) => f.rigKey).filter((k) => k !== CITY_KEY),
+      ...Object.entries(inputs.beadsByRig)
+        .filter(([, rig]) => rig.items.length > 0)
+        .map(([key]) => key),
+    ]);
+    const manifestKeys = new Set(manifest.rigs.map((r) => r.key));
+    for (const key of renderedKeys) {
+      expect(manifestKeys.has(key), `manifest.rigs is missing rendered rig "${key}"`).toBe(true);
+    }
   });
 
   it('has one rig whose open bead total exceeds the render cap', () => {

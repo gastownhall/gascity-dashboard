@@ -544,10 +544,15 @@ export function buildAquariumFixture(): { inputs: DeriveInputs; manifest: Fixtur
 
   const manifest: FixtureManifest = {
     kind: 'aquarium',
+    // Every key here must be one the scene actually draws a "KEY · COUNT"
+    // label for (round-2 honesty finding: unrigged rendered "UNRIGGED · 6"
+    // with no manifest entry to validate it against). The mayor/city
+    // stratum draws no formation or label, so CITY_KEY stays out.
     rigs: [
       { key: RIG_ALPHA, openBeadTotal: ALPHA_BEADS.length },
       { key: RIG_BETA, openBeadTotal: BETA_BEADS.length },
       { key: RIG_GAMMA, openBeadTotal: GAMMA_BEADS.length },
+      { key: UNRIGGED_KEY, openBeadTotal: UNRIGGED_BEADS.length },
     ],
     fish: FISH_SPECS.map((spec) => ({
       name: spec.alias ?? spec.name,
