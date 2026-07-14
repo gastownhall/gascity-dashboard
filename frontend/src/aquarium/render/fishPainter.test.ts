@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FishEntity, ScenePalette, SimState } from '../contracts';
 import { buildScenePalette } from './palette';
 import { fishDepthZ } from './depth';
-import { paintFishLayer } from './fishPainter';
+import { RICH_FISH_BUDGET, paintFishLayer, usesRichFishPath } from './fishPainter';
 import type { LayerTransform } from './layers';
 
 const TOKENS: Record<string, string> = {
@@ -53,6 +53,9 @@ function orderingCtx(): { ctx: CanvasRenderingContext2D; placedX: number[] } {
     stroke(): void {},
     arc(): void {},
     ellipse(): void {},
+    createLinearGradient(): CanvasGradient {
+      return { addColorStop(): void {} } as unknown as CanvasGradient;
+    },
     fillStyle: '',
     strokeStyle: '',
     lineWidth: 1,
@@ -61,6 +64,55 @@ function orderingCtx(): { ctx: CanvasRenderingContext2D; placedX: number[] } {
     globalAlpha: 1,
   };
   return { ctx: stub as unknown as CanvasRenderingContext2D, placedX };
+}
+
+/** counts createLinearGradient calls (rich path signature) while paintFishLayer
+ * runs, so a test can assert the count-gate keeps the perf sweep flat. */
+function gradientCountingCtx(): { ctx: CanvasRenderingContext2D; gradients: () => number } {
+  let count = 0;
+  const stub = {
+    setTransform(): void {},
+    beginPath(): void {},
+    moveTo(): void {},
+    lineTo(): void {},
+    bezierCurveTo(): void {},
+    quadraticCurveTo(): void {},
+    closePath(): void {},
+    fill(): void {},
+    stroke(): void {},
+    arc(): void {},
+    ellipse(): void {},
+    createLinearGradient(): CanvasGradient {
+      count += 1;
+      return { addColorStop(): void {} } as unknown as CanvasGradient;
+    },
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    lineJoin: 'round',
+    lineCap: 'butt',
+    globalAlpha: 1,
+  };
+  return { ctx: stub as unknown as CanvasRenderingContext2D, gradients: () => count };
+}
+
+/** N working pool fish all at the same spot; scale controls drawn px. */
+function drawFishScene(
+  count: number,
+  scale: number,
+): { ctx: CanvasRenderingContext2D; gradients: () => number } {
+  const fishList = Array.from({ length: count }, (_u, i) => fish(`agent-${i}`));
+  const sim: SimState = {
+    clockMs: 0,
+    pellets: {},
+    fish: Object.fromEntries(
+      fishList.map((f) => [f.id, { x: 500, y: 1000, heading: 0, speed: 60, phase: 0.3 }]),
+    ),
+  };
+  const layer: LayerTransform = { scale, tx: 0, ty: 0, dpr: 1 };
+  const rec = gradientCountingCtx();
+  paintFishLayer(rec.ctx, fishList, sim, PALETTE, layer, VIEW, 0);
+  return rec;
 }
 
 describe('paintFishLayer depth ordering (painter algorithm, back-to-front)', () => {
@@ -92,5 +144,38 @@ describe('paintFishLayer depth ordering (painter algorithm, back-to-front)', () 
     // sanity: the chosen ids actually span a range of depths (not a no-op sort)
     const zs = ids.map(fishDepthZ);
     expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThan(0.3);
+  });
+});
+
+describe('usesRichFishPath (count-gated rich rendering — LOD0 creatures, not icons)', () => {
+  it('richens SMALL fish in a low-count scene (the ~10px LOD0 pool fish read as shaded)', () => {
+    // at the fit overview a pool fish draws ~10 css px; it must take the rich
+    // (countershade + fin) path so it reads as a creature, not a flat kite
+    expect(usesRichFishPath(true, 10)).toBe(true);
+    expect(usesRichFishPath(true, 6)).toBe(true);
+  });
+
+  it('keeps the over-budget (200-fish perf sweep) case flat at ANY drawn size', () => {
+    // the count gate — not pixel size — protects the perf headroom
+    expect(usesRichFishPath(false, 300)).toBe(false);
+    expect(usesRichFishPath(false, 10)).toBe(false);
+  });
+
+  it('drops sub-pixel fish to the flat path (a gradient there is invisible)', () => {
+    expect(usesRichFishPath(true, 3)).toBe(false);
+  });
+});
+
+describe('paintFishLayer count-gate (perf-sweep stays flat, low count richens)', () => {
+  it('allocates body/fin gradients for a low-count scene (rich shaded fish)', () => {
+    const rec = drawFishScene(6, 1.0);
+    expect(rec.gradients()).toBeGreaterThan(0);
+  });
+
+  it('allocates ZERO gradients above the fish-count budget (200-fish path stays flat)', () => {
+    // over budget, every fish is flat regardless of drawn size → no gradients,
+    // so the 200-fish sweep keeps its render-work headroom
+    const rec = drawFishScene(RICH_FISH_BUDGET + 12, 1.0);
+    expect(rec.gradients()).toBe(0);
   });
 });

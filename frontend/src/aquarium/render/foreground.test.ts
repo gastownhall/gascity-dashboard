@@ -4,11 +4,13 @@ import { WORLD } from '../contracts';
 import { buildScenePalette } from './palette';
 import {
   FOREGROUND_MAX_ZOOM,
+  foregroundFillsFor,
   foregroundSilhouettes,
   foregroundVisibleAtZoom,
   paintForeground,
 } from './foreground';
 import type { ViewRect } from './layers';
+import { parseOklch } from './oklch';
 
 // jsdom has no canvas, so Path2D is undefined. The foreground geometry is pure
 // (path methods are called but nothing rasterizes here), and `foreground.ts`
@@ -123,12 +125,13 @@ describe('foreground silhouettes (near-glass depth cue)', () => {
 });
 
 describe('paintForeground (real out-of-focus blur, baked)', () => {
-  it('fills the visible foreground as ONE mass under an active blur filter', () => {
+  it('fills kelp + rock as separate blurred masses (each under an active blur)', () => {
     const { ctx, fills } = fillRecordingCtx();
     paintForeground(ctx, PALETTE, ALL, 1);
-    // one combined fill, drawn while a blur filter is active
-    expect(fills.length).toBe(1);
-    expect(blurPx(fills[0]?.filter ?? 'none')).toBeGreaterThanOrEqual(6);
+    // two masses (kelp, rock), each drawn while the blur filter is active, so
+    // each carries its own tint yet still reads as an out-of-focus near plane
+    expect(fills.length).toBe(2);
+    for (const f of fills) expect(blurPx(f.filter)).toBeGreaterThanOrEqual(6);
   });
 
   it('resets the filter to none after baking (no filter leaks to later layers)', () => {
@@ -152,6 +155,55 @@ describe('paintForeground (real out-of-focus blur, baked)', () => {
     const offToTheRight: ViewRect = { left: 9e5, top: -1e6, right: 1e6, bottom: 1e6 };
     paintForeground(ctx, PALETTE, offToTheRight, 1);
     expect(fills.length).toBe(0);
+  });
+});
+
+const DARK_PALETTE: ScenePalette = buildScenePalette('dark', TOKENS, 'serif');
+
+function L(color: string): number {
+  return parseOklch(color).l;
+}
+function C(color: string): number {
+  return parseOklch(color).c;
+}
+function H(color: string): number {
+  return parseOklch(color).h;
+}
+
+describe('foreground fill legibility (lifted off near-black, visible in both themes)', () => {
+  it('is a DARK near plane against sunlit water (a silhouette, not a pale wash)', () => {
+    const fills = foregroundFillsFor(PALETTE);
+    const waterBottomL = L(PALETTE.waterBottom);
+    // clearly darker than the water column behind it → reads as a near silhouette
+    expect(waterBottomL - L(fills.rock)).toBeGreaterThan(20);
+    expect(waterBottomL - L(fills.kelp)).toBeGreaterThan(15);
+  });
+
+  it('is a LIGHTER near plane against midnight water (never vanishes into the dark)', () => {
+    const fills = foregroundFillsFor(DARK_PALETTE);
+    const waterTopL = L(DARK_PALETTE.waterTop);
+    // a near-black foreground on a near-black background gives no depth cue, so
+    // in the deep tank the near plane must read LIGHTER than the water behind it
+    expect(L(fills.rock)).toBeGreaterThan(waterTopL);
+    expect(L(fills.kelp)).toBeGreaterThan(waterTopL);
+  });
+
+  it('is lifted off pure near-black in both moods (not a black vignette stain)', () => {
+    for (const p of [PALETTE, DARK_PALETTE]) {
+      const fills = foregroundFillsFor(p);
+      expect(L(fills.rock)).toBeGreaterThan(18);
+      expect(L(fills.kelp)).toBeGreaterThan(18);
+    }
+  });
+
+  it('is tinted, and kelp reads distinct from rock (kelp green vs warm rock, not one smudge)', () => {
+    for (const p of [PALETTE, DARK_PALETTE]) {
+      const fills = foregroundFillsFor(p);
+      expect(C(fills.kelp)).toBeGreaterThan(0);
+      expect(C(fills.rock)).toBeGreaterThan(0);
+      // the two masses carry different hues → they read as kelp vs rock
+      expect(Math.abs(H(fills.kelp) - H(fills.rock))).toBeGreaterThan(10);
+    }
   });
 });
 

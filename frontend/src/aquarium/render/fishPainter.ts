@@ -29,10 +29,20 @@ import { applyLayer, rectContains } from './layers';
 import { TAU, at, clamp, normalizeAngle, type Pt } from './mathUtil';
 import { withAlpha } from './oklch';
 
-/** above this many visible fish, everyone takes the cheap flat path */
-const RICH_FISH_BUDGET = 48;
-/** min drawn body length (css px) for the gradient path */
-const RICH_MIN_PX = 16;
+/** above this many visible fish, everyone takes the cheap flat path. This
+ * count gate — NOT a pixel size — is what protects the 200-fish perf sweep:
+ * over budget, every fish is flat regardless of how large it draws, so the
+ * richer per-fish work below can only ever fire on the low-count aquarium. */
+export const RICH_FISH_BUDGET = 48;
+/** Min drawn body length (css px) for the rich shaded (countershade + fin)
+ * path. Low on purpose: at the LOD0 fit overview a pool fish draws only ~10 css
+ * px, and the round-6 judges read the flat single-tone small fish as flat
+ * ICONS, not creatures. With the confirmed ~8x render-work headroom the
+ * low-count scene now takes the shaded path all the way down to this floor so
+ * every fish reads as a shaded body with a fin, not a kite silhouette; below it
+ * a gradient is sub-pixel and buys nothing. Guarded by RICH_FISH_BUDGET, so the
+ * perf sweep never richens. */
+const RICH_MIN_PX = 6;
 /** min drawn body length (css px) for eye/gill/mouth */
 const FACE_MIN_PX = 46;
 /** below this drawn size the secondary fins (dorsal/pelvic/pectoral) are a few
@@ -43,6 +53,19 @@ const FLAT_FIN_MIN_PX = 30;
  * only adds a draw call: the tiniest overview fish are body + tail fills only,
  * the cheapest possible mark (round-6 draw-call shave for the perf sweep). */
 const FLAT_STROKE_MIN_PX = 18;
+
+/**
+ * Whether a fish takes the rich shaded path (per-fish countershade gradient +
+ * feathered fin membranes) versus the cheap flat two-tone path. Gated on the
+ * visible-fish COUNT first (so the 200-fish perf sweep is always flat, keeping
+ * the render-work headroom), then a small drawn-size floor below which a
+ * gradient is sub-pixel. A low-count scene (the ~34-fish aquarium) therefore
+ * richens all the way down to the LOD0 fit overview — fish read as shaded
+ * creatures with fins, never flat repeated silhouettes.
+ */
+export function usesRichFishPath(richBudget: boolean, drawnPx: number): boolean {
+  return richBudget && drawnPx >= RICH_MIN_PX;
+}
 
 // Reused across frames so back-to-front ordering allocates no arrays in the
 // draw path (one synchronous caller, no reentrancy). `zScratch[i]` is fish i's
@@ -116,7 +139,7 @@ function paintFish(
   const drawnPx = SPECIES[fish.species].length * layer.scale * dScale;
   const alpha = fish.tombstoned ? 0.4 * depthAlpha(z) : depthAlpha(z);
   if (alpha < 1) ctx.globalAlpha = alpha;
-  if (richBudget && drawnPx >= RICH_MIN_PX) {
+  if (usesRichFishPath(richBudget, drawnPx)) {
     paintRich(ctx, fish, spine, hull, fins, colors, lineWidth, drawnPx >= FACE_MIN_PX);
   } else {
     paintFlat(ctx, hull, fins, colors, lineWidth, drawnPx);

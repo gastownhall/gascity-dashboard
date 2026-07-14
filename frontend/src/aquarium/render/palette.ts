@@ -17,7 +17,10 @@ const LIGHT: AquaticPalette = {
   waterTop: 'oklch(92% 0.035 195)',
   waterBottom: 'oklch(70% 0.07 220)',
   hazeFar: 'oklch(86% 0.04 205)',
-  lightShaft: 'oklch(97% 0.03 110 / 0.28)',
+  // warm-gold sunbeams (hue pulled off the blue-green toward amber, a touch
+  // more chroma) so the shafts read as warm sunlight cutting the aqua — hue
+  // range under the blue tint, not a monochrome-blue column
+  lightShaft: 'oklch(97% 0.042 86 / 0.32)',
   formation: 'oklch(45% 0.055 65)',
   formationEdge: 'oklch(33% 0.05 60)',
   kelp: 'oklch(52% 0.075 150)',

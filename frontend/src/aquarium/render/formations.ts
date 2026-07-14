@@ -12,12 +12,15 @@ import { CITY_KEY } from '../contracts';
 import {
   buildBranches,
   buildLobes,
+  buildPolyps,
   buildSpeckle,
   buildSpurs,
   blobRing,
   traceSmoothRing,
 } from './formationShapes';
 import type { Pt } from './mathUtil';
+import type { CoralAccents } from './coralColor';
+import { coralAccentsForSeed } from './coralColor';
 import type { FormationDepth } from './depth';
 import { formationDepth } from './depth';
 import { mulberry32 } from './hash';
@@ -47,6 +50,10 @@ interface FormationGeometry {
   edgePath: Path2D;
   /** forking coral limbs, stroked as one batched path */
   coralPath: Path2D;
+  /** outer branch tips — anemone-like colored accents bloom here */
+  coralTips: readonly Pt[];
+  /** scattered polyps on the front lobes — reef-color dabs across the mass */
+  coralPolyps: readonly Pt[];
   speckle: { light: readonly Pt[]; dark: readonly Pt[] };
   contact: Contact;
   fronds: readonly Frond[];
@@ -93,7 +100,8 @@ function buildGeometry(formation: RigFormation): FormationGeometry {
     front.closePath();
   }
   const coralPath = new Path2D();
-  for (const seg of buildBranches(formation, rnd)) {
+  const branches = buildBranches(formation, rnd);
+  for (const seg of branches.segs) {
     coralPath.moveTo(seg.x1, seg.y1);
     coralPath.lineTo(seg.x2, seg.y2);
   }
@@ -101,6 +109,8 @@ function buildGeometry(formation: RigFormation): FormationGeometry {
     tonePaths,
     edgePath,
     coralPath,
+    coralTips: branches.tips,
+    coralPolyps: buildPolyps(lobes, rnd),
     speckle: buildSpeckle(lobes, rnd),
     contact: { cx: (minX + maxX) / 2, cy: formation.anchorY + 6, halfWidth: (maxX - minX) / 2 },
     fronds: buildFronds(formation, rnd),
@@ -129,7 +139,6 @@ interface FormationColors {
   tones: readonly string[];
   edge: string;
   contact: string;
-  coral: string;
   speckleLight: string;
   speckleDark: string;
 }
@@ -148,8 +157,6 @@ function formationColors(palette: ScenePalette): FormationColors {
     ],
     edge: withAlpha(palette.formationEdge, 0.85),
     contact: withAlpha(adjustL(palette.formationEdge, -10), 1),
-    // a warmer, brighter accent than the rock — reads as living coral
-    coral: adjustL(mixOklch(palette.formation, palette.pellet, 0.42), 6),
     speckleLight: withAlpha(adjustL(palette.formation, 13), 0.5),
     speckleDark: withAlpha(adjustL(palette.formationEdge, -6), 0.42),
   };
@@ -185,7 +192,8 @@ export function paintFormations(
     const t = depthTransform(mid, f, depth);
     applyLayer(ctx, t);
     const colors = hazedForSeed(palette, base, f.seed, depth.haze);
-    paintOneFormation(ctx, f, colors, t.scale, palette, depth.haze, clockMs);
+    const accents = coralAccentsForSeed(palette, f.seed, depth.haze);
+    paintOneFormation(ctx, f, colors, accents, t.scale, palette, depth.haze, clockMs);
   }
   applyLayer(ctx, mid);
 }
@@ -248,7 +256,6 @@ function hazeFormationColors(
     tones: [mix(at(base.tones, 0)), mix(at(base.tones, 1)), mix(at(base.tones, 2))],
     edge: mix(base.edge),
     contact: base.contact,
-    coral: mix(base.coral),
     speckleLight: mix(base.speckleLight),
     speckleDark: mix(base.speckleDark),
   };
@@ -261,6 +268,7 @@ function paintOneFormation(
   ctx: CanvasRenderingContext2D,
   f: RigFormation,
   colors: FormationColors,
+  accents: CoralAccents,
   effScale: number,
   palette: ScenePalette,
   haze: number,
@@ -277,12 +285,41 @@ function paintOneFormation(
   ctx.lineWidth = 1.25 / effScale;
   ctx.lineJoin = 'round';
   ctx.stroke(g.edgePath);
-  ctx.strokeStyle = colors.coral;
+  ctx.strokeStyle = accents.branch;
   ctx.lineWidth = Math.max(3.5, 0.06 * f.radius);
   ctx.lineCap = 'round';
   ctx.stroke(g.coralPath);
   ctx.lineCap = 'butt';
+  paintCoralAccentsOne(ctx, g, accents, f.radius);
   paintKelpOne(ctx, g, palette, haze, effScale, clockMs);
+}
+
+/** Two-tone reef-color dots at the coral tips + polyps: an outer accent ring
+ * with a small brighter core, dabbed in the formation's seed-varied hue so the
+ * reef carries pink/orange/violet accent color across the mass. Baked. Tips
+ * bloom larger (anemone heads); polyps are small studs on the rock crown. */
+function paintCoralAccentsOne(
+  ctx: CanvasRenderingContext2D,
+  g: FormationGeometry,
+  accents: CoralAccents,
+  radius: number,
+): void {
+  const tipR = Math.max(4, 0.05 * radius);
+  const polypR = Math.max(2.6, 0.028 * radius);
+  const dab = (pts: readonly Pt[], r: number): void => {
+    ctx.beginPath();
+    for (const p of pts) {
+      ctx.moveTo(p.x + r, p.y);
+      ctx.arc(p.x, p.y, r, 0, TAU);
+    }
+    ctx.fill();
+  };
+  ctx.fillStyle = accents.polyp;
+  dab(g.coralTips, tipR);
+  dab(g.coralPolyps, polypR);
+  ctx.fillStyle = accents.polypCore;
+  dab(g.coralTips, tipR * 0.42);
+  dab(g.coralPolyps, polypR * 0.42);
 }
 
 const CONTACT_RINGS: ReadonlyArray<{ scale: number; alpha: number }> = [

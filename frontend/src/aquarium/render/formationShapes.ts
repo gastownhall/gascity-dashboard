@@ -168,11 +168,20 @@ export function buildSpurs(formation: RigFormation, rnd: Rnd): Spur[] {
   return spurs;
 }
 
+export interface CoralBranches {
+  /** flat stroked limb segments */
+  segs: CoralSeg[];
+  /** outer branch tips — where anemone-like colored accents bloom */
+  tips: Pt[];
+}
+
 /** Forking coral limbs rising off the crown: a leaning main stalk that splits
  * into 2 tapering tips (occasionally a third). Reads as branching coral, the
- * accent the round-2 mounds lacked. Returns flat stroked segments. */
-export function buildBranches(formation: RigFormation, rnd: Rnd): CoralSeg[] {
+ * accent the round-2 mounds lacked. Returns flat stroked segments plus the
+ * outer tip points (formations.ts blooms a colored anemone accent at each). */
+export function buildBranches(formation: RigFormation, rnd: Rnd): CoralBranches {
   const segs: CoralSeg[] = [];
+  const tips: Pt[] = [];
   const count = 1 + Math.floor(rnd() * 3);
   const r = formation.radius;
   for (let i = 0; i < count; i += 1) {
@@ -184,19 +193,38 @@ export function buildBranches(formation: RigFormation, rnd: Rnd): CoralSeg[] {
     const forkY = rootY - h * 0.6;
     const width = r * (0.045 + rnd() * 0.05);
     segs.push({ x1: rootX, y1: rootY, x2: forkX, y2: forkY, width });
-    const tips = 2 + Math.floor(rnd() * 2);
-    for (let k = 0; k < tips; k += 1) {
-      const spread = (k / Math.max(1, tips - 1) - 0.5) * 1.6;
-      segs.push({
-        x1: forkX,
-        y1: forkY,
-        x2: forkX + spread * h * 0.5 + lean * 0.3,
-        y2: forkY - h * (0.32 + rnd() * 0.3),
-        width: width * 0.66,
+    const tipCount = 2 + Math.floor(rnd() * 2);
+    for (let k = 0; k < tipCount; k += 1) {
+      const spread = (k / Math.max(1, tipCount - 1) - 0.5) * 1.6;
+      const tipX = forkX + spread * h * 0.5 + lean * 0.3;
+      const tipY = forkY - h * (0.32 + rnd() * 0.3);
+      segs.push({ x1: forkX, y1: forkY, x2: tipX, y2: tipY, width: width * 0.66 });
+      tips.push({ x: tipX, y: tipY });
+    }
+  }
+  return { segs, tips };
+}
+
+/** Scattered coral polyps studding the front (full-pigment) lobes: small points
+ * on the near reef crown where formations.ts dabs low-chroma reef-color accents,
+ * so the reef mass carries hue variety instead of reading as one olive blob. */
+export function buildPolyps(lobes: readonly Lobe[], rnd: Rnd): Pt[] {
+  const polyps: Pt[] = [];
+  for (const lobe of lobes) {
+    if (lobe.tone !== 2) continue; // front pigment lobes only (never the far haze)
+    const n = 2 + Math.floor(rnd() * 3);
+    for (let i = 0; i < n; i += 1) {
+      const a = rnd() * TAU;
+      const rr = Math.sqrt(rnd());
+      polyps.push({
+        x: lobe.cx + Math.cos(a) * lobe.rx * rr * 0.72,
+        // bias polyps toward the upper crown of the lobe (where coral grows to
+        // the light), never the buried base
+        y: lobe.cy - Math.abs(Math.sin(a)) * lobe.ry * rr * 0.7,
       });
     }
   }
-  return segs;
+  return polyps;
 }
 
 /** Deterministic texture speckle inside the given lobes — light and dark grain

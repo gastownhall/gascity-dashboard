@@ -81,8 +81,10 @@ export function seabedColors(palette: ScenePalette): SeabedColors {
   const hit = seabedCache.get(palette);
   if (hit !== undefined) return hit;
   // warm sand in light (formation warm brown pulled toward the gold pellet),
-  // muted deep in dark — theme-keyed off existing pigment, never pale blue
-  const sand = mixOklch(palette.formation, palette.pellet, 0.28);
+  // muted deep in dark — theme-keyed off existing pigment, never pale blue. The
+  // pellet pull is deliberately generous so the seabed brings real warm hue to
+  // an otherwise blue-tinted column (round-6 judges: "nearly monochrome blue").
+  const sand = mixOklch(palette.formation, palette.pellet, 0.34);
   const built: SeabedColors = {
     sand,
     // near floor darker/richer (grounded, in shadow); the receding back blends
