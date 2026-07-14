@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type { Camera, ScenePalette, SimState, Viewport, WorldSnapshot } from '../contracts';
-import { LOD1_ZOOM } from '../contracts';
 import { buildScenePalette } from './palette';
 import { paintTextLayers } from './text';
 
@@ -59,19 +58,20 @@ function drawAt(zoom: number): DrawnText[] {
   return drawn;
 }
 
-describe('rig labels across LOD (findings: axis-label tell at LOD0)', () => {
-  it('draws NO rig name/count at the LOD0 overview (fit zoom ≈ 0.36)', () => {
+describe('rig labels across zoom (map labels at the working overview)', () => {
+  it('draws NO rig name/count at the fully zoomed-out whole tank (fit ≈ 0.36)', () => {
+    // the full zoom-out reef stays unlabeled so it never reads as categorical bars
     const drawn = drawAt(0.36);
     const rigText = drawn.filter((d) => d.text.includes('REEF-GAMMA'));
     expect(rigText, JSON.stringify(drawn)).toHaveLength(0);
   });
 
-  it('is still withheld just below the LOD1 threshold', () => {
-    const drawn = drawAt(LOD1_ZOOM * 0.75);
-    expect(drawn.some((d) => d.text.includes('REEF-GAMMA'))).toBe(false);
+  it('names the rig at the default home framing (~0.5), so projects read without deep zoom', () => {
+    const drawn = drawAt(0.5);
+    expect(drawn.some((d) => d.text === 'REEF-GAMMA · 46')).toBe(true);
   });
 
-  it('fades the rig name + open-bead count in at LOD1 (the map label arrives with zoom)', () => {
+  it('keeps the rig name + open-bead count on as the operator zooms further in', () => {
     const drawn = drawAt(1.0);
     expect(drawn.some((d) => d.text === 'REEF-GAMMA · 46')).toBe(true);
   });

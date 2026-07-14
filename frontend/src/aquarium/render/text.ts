@@ -14,7 +14,7 @@ import { CITY_KEY } from '../contracts';
 import { SPECIES } from './fishGeometry';
 import type { LayerTransform } from './layers';
 import { PARALLAX, applyScreenSpace, layerTransform, worldToScreen } from './layers';
-import { lod1Fade, lod2Fade } from './lod';
+import { lod2Fade, rigLabelFade } from './lod';
 import type { Pt } from './mathUtil';
 
 export function paintTextLayers(
@@ -27,15 +27,16 @@ export function paintTextLayers(
 ): void {
   applyScreenSpace(ctx, viewport);
   ctx.textBaseline = 'alphabetic';
-  const f1 = lod1Fade(camera.zoom);
+  const fRig = rigLabelFade(camera.zoom);
   const f2 = lod2Fade(camera.zoom);
   const mid = layerTransform(camera, viewport, PARALLAX.mid);
   const act = layerTransform(camera, viewport, PARALLAX.actors);
-  // rig names/counts are the strongest "axis label" tell: withheld entirely at
-  // the LOD0 overview, faded in only as the camera approaches a rig
-  if (f1 > 0.01) {
-    paintRigLabels(ctx, snapshot, palette, mid, viewport, f1);
-    paintOverflow(ctx, snapshot, palette, mid, viewport, f1);
+  // rig names/counts are the tank's map: present at the default overview so an
+  // operator can tell projects apart, faded out only at the fully zoomed-out
+  // whole-tank view (where they would read as categorical bars)
+  if (fRig > 0.01) {
+    paintRigLabels(ctx, snapshot, palette, mid, viewport, fRig);
+    paintOverflow(ctx, snapshot, palette, mid, viewport, fRig);
   }
   if (f2 > 0.01) {
     paintCaptions(ctx, snapshot, sim, palette, act, viewport, f2);

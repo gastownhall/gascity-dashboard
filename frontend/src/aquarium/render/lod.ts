@@ -1,7 +1,7 @@
 // LOD fades computed locally from the pinned zoom thresholds. Text layers
 // fade in across a window around each threshold instead of popping.
 
-import { LOD1_ZOOM, LOD2_ZOOM } from '../contracts';
+import { LOD2_ZOOM } from '../contracts';
 import { clamp01 } from './mathUtil';
 
 /** Smoothstep 0→1 across [0.8·threshold, 1.1·threshold]. */
@@ -12,16 +12,22 @@ export function fadeAcross(zoom: number, threshold: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/** Rig names + open-bead counts fade in across LOD1. At the LOD0 overview
- * (fit zoom ≈ 0.36) this is 0: the tank is an unlabeled reef, so the scene
- * never reads as labeled categorical bars. Labels appear only as the operator
- * zooms toward a rig (the "map label" arrives with proximity). */
-export function lod1Fade(zoom: number): number {
-  return fadeAcross(zoom, LOD1_ZOOM);
+/** Zoom at which rig names + open-bead counts have faded fully in. Sits just
+ * above the whole-tank fit floor (≈ 0.36) and below the default home framing
+ * (≈ 0.5·1.4·fit): the fully zoomed-out reef stays unlabeled (clean, no
+ * categorical-bar read), but the default working view names every rig so an
+ * operator can tell projects apart without hunting for the zoom. */
+export const RIG_LABEL_ZOOM = 0.46;
+
+/** Rig names + open-bead counts (the tank's map labels) fade in across
+ * RIG_LABEL_ZOOM — present at the default overview, gone only when the operator
+ * zooms all the way out to the whole tank. */
+export function rigLabelFade(zoom: number): number {
+  return fadeAcross(zoom, RIG_LABEL_ZOOM);
 }
 
 /** Full captions and pellet id labels fade in across LOD2. Fish identity text
- * appears only here (deep zoom) — never as floating name tags at LOD0/LOD1. */
+ * appears only here (deep zoom) — never as floating name tags at the overview. */
 export function lod2Fade(zoom: number): number {
   return fadeAcross(zoom, LOD2_ZOOM);
 }
