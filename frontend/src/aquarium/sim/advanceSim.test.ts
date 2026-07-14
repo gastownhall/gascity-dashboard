@@ -43,7 +43,7 @@ function formation(overrides: Partial<RigFormation> & { key: string }): RigForma
 function pellet(
   overrides: Partial<PelletEntity> & { beadId: string; rigKey: string },
 ): PelletEntity {
-  return { label: overrides.beadId, state: 'drifting', ...overrides };
+  return { label: overrides.beadId, title: overrides.beadId, state: 'drifting', ...overrides };
 }
 
 function snapshot(overrides: Partial<WorldSnapshot> = {}): WorldSnapshot {

@@ -4,6 +4,7 @@
 // trap; it disappears the moment the hover target changes.
 
 import type { FishEntity, PelletEntity } from '../contracts';
+import { PELLET_STATE_WORD } from '../contracts';
 import type { HitResult } from './hitTest';
 
 export interface HoverTooltipProps {
@@ -41,9 +42,10 @@ function FishSummary({ fish }: { fish: FishEntity }) {
 }
 
 function PelletSummary({ pellet }: { pellet: PelletEntity }) {
+  const name = pellet.title.length > 0 ? pellet.title : pellet.label;
   return (
     <>
-      {pellet.label} · {pellet.state}
+      {name} · {PELLET_STATE_WORD[pellet.state]}
     </>
   );
 }

@@ -27,6 +27,7 @@ export function diffEatenPellets(
     return {
       beadId,
       label: pelletLabel(beadId),
+      title: holder.title,
       rigKey: holder.rigKey,
       state: 'eaten',
       gulpMsLeft: GULP_MS,

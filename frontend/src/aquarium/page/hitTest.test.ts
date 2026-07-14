@@ -26,6 +26,7 @@ function pellet(overrides: Partial<PelletEntity> = {}): PelletEntity {
   return {
     beadId: 'td-1',
     label: 'td-1',
+    title: 'test bead',
     rigKey: 'reef-alpha',
     state: 'drifting',
     ...overrides,

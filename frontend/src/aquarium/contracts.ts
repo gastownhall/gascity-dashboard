@@ -78,10 +78,22 @@ export interface FishEntity {
 
 export type PelletState = 'drifting' | 'held' | 'sunken' | 'eaten';
 
+/** User-facing status word for a pellet's internal physics state — the hover
+ * tooltip and click card show this, never the raw enum ('drifting' read as the
+ * status of nearly every open bead). Maps the sim vocabulary to bead vocabulary. */
+export const PELLET_STATE_WORD: Record<PelletState, string> = {
+  drifting: 'open',
+  held: 'in progress',
+  sunken: 'blocked',
+  eaten: 'closed',
+};
+
 export interface PelletEntity {
   beadId: string;
   /** short display id for LOD2 labels */
   label: string;
+  /** the bead's human title, for the hover/click card (may be '' if unset) */
+  title: string;
   rigKey: string;
   state: PelletState;
   /** fish holding it (state 'held') or that ate it (state 'eaten') */

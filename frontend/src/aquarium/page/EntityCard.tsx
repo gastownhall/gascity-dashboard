@@ -7,6 +7,7 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { FishEntity, PelletEntity } from '../contracts';
+import { PELLET_STATE_WORD } from '../contracts';
 import type { HitResult } from './hitTest';
 
 export interface EntityCardProps {
@@ -82,10 +83,14 @@ function FishCardBody({ fish }: { fish: FishEntity }) {
 }
 
 function PelletCardBody({ pellet }: { pellet: PelletEntity }) {
+  const hasTitle = pellet.title.length > 0;
   return (
     <dl className="space-y-1">
-      <dd className="text-title font-semibold text-fg">{pellet.label}</dd>
-      <div className="text-label uppercase tracking-wider text-fg-muted">{pellet.state}</div>
+      <dd className="text-title font-semibold text-fg">{hasTitle ? pellet.title : pellet.label}</dd>
+      <div className="text-label uppercase tracking-wider text-fg-muted">
+        {PELLET_STATE_WORD[pellet.state]}
+      </div>
+      {hasTitle && <div className="text-fg-muted">bead {pellet.beadId}</div>}
     </dl>
   );
 }

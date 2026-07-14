@@ -3,13 +3,13 @@ import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
 import { PELLET_RENDER_CAP_PER_RIG } from '../contracts';
 import { buildPellets, type BuildPelletsInputs } from './pellets';
 
-function bead(id: string, status: string, assignee?: string): Bead {
+function bead(id: string, status: string, assignee?: string, title?: string): Bead {
   return {
     id,
     created_at: '2026-01-01T00:00:00Z',
     issue_type: 'task',
     status,
-    title: id,
+    title: title ?? id,
     ...(assignee === undefined ? {} : { assignee }),
   };
 }
@@ -87,21 +87,40 @@ describe('buildPellets', () => {
     expect(buildPellets(inputs).pelletOverflow.alpha).toBeUndefined();
   });
 
-  it('labels a short bead id verbatim and truncates a long one to its last 12 chars with an ellipsis', () => {
+  it('keeps the front (and a disambiguating tail) of a long bead id, not just the last chars', () => {
     const inputs: BuildPelletsInputs = {
       beadsByRig: {
         alpha: {
-          items: [bead('gc-123', 'open'), bead('gascity-dashboard-mwx0-extra-long-id', 'open')],
-          total: 2,
+          items: [
+            bead('gc-123', 'open'),
+            bead('l-digest-dv0.3', 'open'),
+            bead('gascity-dashboard-mwx0-extra-long-id', 'open'),
+          ],
+          total: 3,
         },
       },
       sessionIdsByFishId: new Map(),
     };
     const byId = new Map(buildPellets(inputs).pellets.map((p) => [p.beadId, p]));
+    // short ids are shown verbatim
     expect(byId.get('gc-123')?.label).toBe('gc-123');
-    const longLabel = byId.get('gascity-dashboard-mwx0-extra-long-id')?.label;
-    expect(longLabel).toBe('…xtra-long-id');
-    expect(longLabel?.length).toBe(13);
+    // a just-too-long id keeps its readable front and its version tail
+    expect(byId.get('l-digest-dv0.3')?.label).toBe('l-digest…v0.3');
+    // a very long id keeps the FRONT (the rig-prefixed name), middle-elided —
+    // the old leading-ellipsis dropped the front entirely
+    const long = byId.get('gascity-dashboard-mwx0-extra-long-id')?.label;
+    expect(long).toBe('gascity-…g-id');
+    expect(long?.startsWith('gascity-')).toBe(true);
+  });
+
+  it('carries the bead title onto the pellet for the hover/click card', () => {
+    const inputs: BuildPelletsInputs = {
+      beadsByRig: {
+        alpha: { items: [bead('a-1', 'open', undefined, 'wire the reef legend')], total: 1 },
+      },
+      sessionIdsByFishId: new Map(),
+    };
+    expect(buildPellets(inputs).pellets[0]?.title).toBe('wire the reef legend');
   });
 
   it('stamps every pellet with its owning rig key', () => {

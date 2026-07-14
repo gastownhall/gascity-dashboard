@@ -19,10 +19,12 @@ export interface BuildPelletsInputs {
   sessionIdsByFishId: ReadonlyMap<string, string>;
 }
 
-/** Where a live (non-eaten) pellet lives, for the next call's diff-eater. */
+/** Where a live (non-eaten) pellet lives, for the next call's diff-eater. Carries
+ * the title so an eaten pellet's gulp card still names its bead. */
 export interface BeadHolder {
   rigKey: string;
   fishId: string | undefined;
+  title: string;
 }
 
 export interface BuildPelletsResult {
@@ -35,7 +37,12 @@ export interface BuildPelletsResult {
   beadHolders: Record<string, BeadHolder>;
 }
 
-const LABEL_MAX_LEN = 12;
+/** total kept characters when a bead id is middle-elided, split front-heavy so
+ * the meaningful, rig-prefixed name survives and a short tail still disambiguates
+ * sibling ids. */
+const LABEL_HEAD_LEN = 8;
+const LABEL_TAIL_LEN = 4;
+const LABEL_MAX_LEN = LABEL_HEAD_LEN + LABEL_TAIL_LEN;
 
 export function buildPellets(inputs: BuildPelletsInputs): BuildPelletsResult {
   const sessionIdToFishId = invert(inputs.sessionIdsByFishId);
@@ -45,7 +52,8 @@ export function buildPellets(inputs: BuildPelletsInputs): BuildPelletsResult {
 
   for (const [rigKey, entry] of sortedEntries(inputs.beadsByRig)) {
     const rigPellets = entry.items.flatMap((bead) => toPellet(bead, rigKey, sessionIdToFishId));
-    for (const p of rigPellets) beadHolders[p.beadId] = { rigKey: p.rigKey, fishId: p.fishId };
+    for (const p of rigPellets)
+      beadHolders[p.beadId] = { rigKey: p.rigKey, fishId: p.fishId, title: p.title };
     const { rendered, overflow } = capPerRig(rigPellets);
     pellets.push(...rendered);
     if (overflow > 0) pelletOverflow[rigKey] = overflow;
@@ -69,6 +77,7 @@ function toPellet(
     {
       beadId: bead.id,
       label: pelletLabel(bead.id),
+      title: bead.title,
       rigKey,
       state,
       ...(fishId !== undefined ? { fishId } : {}),
@@ -83,12 +92,14 @@ function pelletStateForStatus(status: string): PelletState | undefined {
   return undefined;
 }
 
-/** Short display id for LOD2 labels: verbatim if short, else the last 12
- * characters with a leading ellipsis. Also reused by the diff-eater so an
- * 'eaten' pellet's label is derived the same way as a live one's. */
+/** Short display id for LOD2 labels: verbatim if short, else a middle-ellipsis
+ * that keeps the meaningful front (the rig-prefixed name) AND a disambiguating
+ * tail — a leading ellipsis cut the front off entirely, hiding the very part
+ * that names the bead. Also reused by the diff-eater so an 'eaten' pellet's
+ * label is derived the same way as a live one's. */
 export function pelletLabel(beadId: string): string {
   if (beadId.length <= LABEL_MAX_LEN) return beadId;
-  return `…${beadId.slice(-LABEL_MAX_LEN)}`;
+  return `${beadId.slice(0, LABEL_HEAD_LEN)}…${beadId.slice(-LABEL_TAIL_LEN)}`;
 }
 
 /** Rendered-pellet priority: held (visible work) > sunken (blocked, needs
