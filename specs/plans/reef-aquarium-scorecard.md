@@ -3,6 +3,35 @@
 Loop history for the acceptance criteria in `reef-aquarium.md`. One section per
 round. Screenshots live under `/tmp/reef-round<N>/` during the run.
 
+## FINAL (2026-07-14) — 6/7 PASS; illusion 3/5 is the sole holdout
+
+Render is the round-7 state (round-8 reverted as net-negative), plus: the
+zoom-rebake perf fix, operator zoom/jitter fixes, and the light-mode foreground
+retint (teal, not brown).
+
+| Criterion             | Final                                                                                                             | Verdict                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| 1 Aquarium illusion   | 3/5 median (plateaued rounds 3-8)                                                                                 | FAIL (subjective plateau) |
+| 2 Fish craft          | 4/5                                                                                                               | PASS                      |
+| 3 Blind legibility    | 7/7 (round-7 render; perf/retint don't touch fish poses, foreground absent from blind crops by the zoom<1.2 gate) | PASS                      |
+| 4 LOD honesty         | clean                                                                                                             | PASS                      |
+| 5 Camera perf         | render-work p95 = 2.9-3.1 ms, verified across 2 clean runs (was ~55 ms zoom re-bake)                              | **PASS**                  |
+| 6 Truthfulness parity | unit tests green                                                                                                  | PASS                      |
+| 7 Mechanical          | all gates green                                                                                                   | PASS                      |
+
+ILLUSION is a subjective plateau, not an open defect: over 8 rounds it went from
+"chart / clip-art" (2/5) to a "stylized aquarium scene" (3/5) that all judges
+agree is NO LONGER a chart, with genuine depth-of-field, 7/7 pose legibility, and
+4/5 close-up craft. The gap to 4/5 ("instantly a living aquarium") is that a
+truthful ~34-fish fleet drawn at whole-tank fit-zoom makes each fish too small to
+read as a creature. Round 8 (bigger fish) failed to close it and regressed
+legibility, so it was reverted. Stephanie's options: (a) accept 6/7 as a strong
+ambient view; (b) relax criterion 1 to "reads as an aquarium, not a chart" (it
+passes that); (c) tighten the default LOD0 framing so overview fish are bigger (a
+locked grill-decision change, her call); (d) the operator's rig-color-identity
+idea (bead mwx0.8) likely helps illusion most — coloring fish by project directly
+answers the judges' "monochrome / fish-are-icons" note.
+
 ## Round 1 (2026-07-14)
 
 Foundation integrated; all mechanical gates green (typecheck src+test, 1480
