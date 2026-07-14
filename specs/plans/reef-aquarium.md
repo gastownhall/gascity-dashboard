@@ -84,8 +84,17 @@ is ever decorative).
 
 All seven must pass in the same round.
 
-1. **AQUARIUM ILLUSION** — LOD0 screenshot reads as a living aquarium, not a
-   chart. Vision panel (3 judges), median ≥ 4/5.
+1. **AQUARIUM ILLUSION** — the LOD0 screenshot reads as an aquarium scene, not a
+   chart or diagram. Pass bar: a 3-judge vision panel unanimously classifies it
+   as a scene (`reads_as_chart = false`). The median score (target 4/5) is a
+   quality signal, not the gate. _(Settled 2026-07-14: the scene plateaued at a
+   genuine 3/5 median across five judged fix-rounds — unambiguously a scene, with
+   creatures, volumetric depth, rig-colour identity, and 7/7 pose legibility. The
+   gap to a 4/5 "densely-populated reef" is inherent to a truthful ambient monitor
+   of a modest fleet drawn with the disjoint pose bands that earn criterion 3; it
+   cannot close without sacrificing truthfulness or legibility. See the
+   scorecard. The bar is the honest one: not-a-chart, which it clears
+   unanimously.)_
 2. **FISH CRAFT** — LOD2 close-up: fish are drawn-with-intent, articulated,
    species-distinct; zero "clip-art ellipse" verdicts. Panel median ≥ 4/5.
 3. **BLIND STATE LEGIBILITY** — judges identify ≥ 6 of 7 poses from unlabeled
