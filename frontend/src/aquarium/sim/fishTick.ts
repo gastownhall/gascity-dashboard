@@ -5,6 +5,7 @@
 
 import { WORLD, type AquariumPose, type FishKinematics } from '../contracts';
 import { hashRange } from '../derive/hash';
+import { type ShoalAccum } from './grid';
 import { restPosition, type HomeAnchor } from './restPositions';
 import { clampPoint, headingTo, limitTurn, seekTarget, type Pt } from './steer';
 import {
@@ -20,6 +21,10 @@ import {
   IDLE_SPEED_MIN,
   MAX_TURN_RATE_RAD_PER_S,
   MAYOR_SPEED,
+  SHOAL_ALIGN_LOOKAHEAD_WU,
+  SHOAL_MIN_HALF_SPREAD_WU,
+  SHOAL_SEPARATION_SCALE,
+  SHOAL_SPREAD_RADIUS_FACTOR,
   WALL_MARGIN_WU,
 } from './constants';
 
@@ -33,15 +38,6 @@ const APPROACH_SPEED = 30;
  * offset (<= BOB_AMPLITUDE_WU) and arrival stays latched. */
 const ARRIVAL_EPSILON_WU = 10;
 
-/** A boids neighbor: another working fish's last-tick position AND heading.
- * Heading feeds alignment (the shoal swims a shared direction); position
- * feeds cohesion + separation. FishKinematics is structurally assignable. */
-export interface Neighbor {
-  x: number;
-  y: number;
-  heading: number;
-}
-
 export interface FishTickInputs {
   seed: number;
   pose: AquariumPose;
@@ -51,8 +47,9 @@ export interface FishTickInputs {
   homeAnchor: HomeAnchor;
   /** own task-bead pellet's last-known position, working pose only. */
   taskTarget: Pt | undefined;
-  /** other working-pose fish sharing this fish's home formation (prev tick). */
-  neighbors: readonly Neighbor[];
+  /** pre-reduced boids pull from the spatial grid (working pose only); zeroed
+   * accumulator when the fish has no shoalmates or is not working. */
+  shoal: ShoalAccum;
   clockMs: number;
   dtS: number;
 }
@@ -194,20 +191,35 @@ function tickIdle(
   return { x: clamped.x, y: clamped.y, heading, speed, phase };
 }
 
-/** Neighbourhood radii: the wide one gathers the shoal (cohesion +
- * alignment); the tight one is personal space (separation). */
-const NEIGHBOR_RADIUS_WU = 360;
-const SEPARATION_RADIUS_WU = 64;
-const SEPARATION_SCALE = 5200;
-/** How far ahead the alignment steer projects along the shoal's mean heading. */
-const ALIGN_LOOKAHEAD_WU = 130;
+// Boids blend weights (unchanged from round 2). Kept as named constants so
+// the balance between "hold station over my rig" and "flock with whoever is
+// near" is legible and tunable in one place.
+const W_WANDER = 0.12;
+const W_COHESION = 0.22;
+const W_SEPARATION = 0.34;
+const W_HOME = 0.2;
+const W_ALIGN = 0.18;
+const W_TASK = 0.35;
 
-/** A working fish cruises the mid-water pellet band as part of a loose shoal:
- * cohesion toward nearby shoalmates (falling back to the band home so the
- * school stays above its own reef), separation for personal space, alignment
- * to the shoal's mean heading, a per-fish wander for heading variance, and a
- * pull toward its own task pellet. Never sinks to the seabed — the band home
- * tethers it to BAND_WORKING_Y. */
+/** The wandering shoal centre for a working fish. Round-3 FIX 2: the home
+ * spread is wide (>= SHOAL_MIN_HALF_SPREAD_WU, and scaling up with formation
+ * size) so a rig's school fans across neighbouring formations and the open
+ * mid-water instead of stacking in a tight vertical column over its own
+ * labelled mound. The y-tether to BAND_WORKING_Y still keeps it off the
+ * seabed; the x still centres on the fish's own rig (truthful membership). */
+function shoalHomeX(inputs: FishTickInputs): number {
+  const spread = Math.max(
+    inputs.homeAnchor.radius * SHOAL_SPREAD_RADIUS_FACTOR,
+    SHOAL_MIN_HALF_SPREAD_WU,
+  );
+  return inputs.homeAnchor.x + hashRange(inputs.seed + 11, -spread, spread);
+}
+
+/** A working fish cruises the mid-water pellet band as part of a loose shoal.
+ * Cohesion/separation/alignment come pre-reduced from the spatial grid (see
+ * sim/grid.ts) — one allocation-free scalar blend here instead of the old
+ * per-neighbour array/centroid churn. The wide `home` term keeps a lone fish
+ * loosely over its own reef; a task pellet pulls hardest. */
 function tickWorking(
   inputs: FishTickInputs,
   prevPos: Pt,
@@ -215,34 +227,7 @@ function tickWorking(
   phase: number,
 ): FishKinematics {
   const speed = hashRange(inputs.seed + 7, CRUISE_SPEED_MIN, CRUISE_SPEED_MAX);
-  // Per-fish home column: a strong y-tether to the band, a loose x-slot spread
-  // across the reef so the shoal fills the water above its formation rather
-  // than collapsing into one clump over the centre.
-  const homeSpread = inputs.homeAnchor.radius * 0.7;
-  const shoalHome: Pt = {
-    x: inputs.homeAnchor.x + hashRange(inputs.seed + 11, -homeSpread, homeSpread),
-    y: BAND_WORKING_Y,
-  };
-  const nearby = neighborsWithin(prevPos, inputs.neighbors, NEIGHBOR_RADIUS_WU);
-
-  const wanderAngle = inputs.clockMs / 4000 + phase;
-  const wander: Pt = {
-    x: prevPos.x + Math.cos(wanderAngle) * 40,
-    y: prevPos.y + Math.sin(wanderAngle) * 40,
-  };
-  const cohesion = neighborCentroid(nearby) ?? shoalHome;
-  const separation = separationPush(prevPos, inputs.neighbors);
-  const alignment = alignmentTarget(prevPos, nearby);
-
-  const target = weightedBlend([
-    [wander, 0.12],
-    [cohesion, 0.22],
-    [separation, 0.34],
-    [shoalHome, 0.2],
-    ...(alignment !== undefined ? ([[alignment, 0.18]] as const) : []),
-    ...(inputs.taskTarget !== undefined ? ([[inputs.taskTarget, 0.35]] as const) : []),
-  ]);
-
+  const target = blendWorkingTarget(inputs, prevPos, phase);
   const { pos, heading } = seekTarget(
     prevPos,
     prevHeading,
@@ -255,69 +240,43 @@ function tickWorking(
   return { x: clamped.x, y: clamped.y, heading, speed, phase };
 }
 
-/** Neighbors within `radius` of `pos` — the boids neighbourhood filter. */
-function neighborsWithin(pos: Pt, neighbors: readonly Neighbor[], radius: number): Neighbor[] {
-  const r2 = radius * radius;
-  return neighbors.filter((n) => {
-    const dx = n.x - pos.x;
-    const dy = n.y - pos.y;
-    return dx * dx + dy * dy <= r2;
-  });
-}
+/** Weighted blend of the boids pulls into one steering target, in scalars —
+ * no intermediate Pt/array allocation per pull. */
+function blendWorkingTarget(inputs: FishTickInputs, prevPos: Pt, phase: number): Pt {
+  const homeX = shoalHomeX(inputs);
+  const sh = inputs.shoal;
+  // No shoalmates in range => cohesion is neutral (hold the current band spot),
+  // NOT a yank back to the wide random home. The lone `home` term (below) still
+  // tethers a solo fish loosely to its rig; letting cohesion fall back to the
+  // wide home instead would overpower a fish's own task-pellet pull.
+  const cohX = sh.cohCount > 0 ? sh.cohX / sh.cohCount : prevPos.x;
+  const cohY = sh.cohCount > 0 ? sh.cohY / sh.cohCount : BAND_WORKING_Y;
+  const wanderAngle = inputs.clockMs / 4000 + phase;
 
-function neighborCentroid(neighbors: readonly Neighbor[]): Pt | undefined {
-  if (neighbors.length === 0) return undefined;
-  const sum = neighbors.reduce((acc, n) => ({ x: acc.x + n.x, y: acc.y + n.y }), { x: 0, y: 0 });
-  return { x: sum.x / neighbors.length, y: sum.y / neighbors.length };
-}
+  let tx = (prevPos.x + Math.cos(wanderAngle) * 40) * W_WANDER;
+  let ty = (prevPos.y + Math.sin(wanderAngle) * 40) * W_WANDER;
+  tx +=
+    cohX * W_COHESION +
+    (prevPos.x + sh.sepX * SHOAL_SEPARATION_SCALE) * W_SEPARATION +
+    homeX * W_HOME;
+  ty +=
+    cohY * W_COHESION +
+    (prevPos.y + sh.sepY * SHOAL_SEPARATION_SCALE) * W_SEPARATION +
+    BAND_WORKING_Y * W_HOME;
+  let tw = W_WANDER + W_COHESION + W_SEPARATION + W_HOME;
 
-/** A point a fixed distance ahead along the shoal's mean heading (circular
- * mean of the neighbours' headings) — steers the fish to swim WITH the
- * school instead of merely toward its centre, so the shoal reads as a moving
- * body, not a clump orbiting a point. */
-function alignmentTarget(pos: Pt, neighbors: readonly Neighbor[]): Pt | undefined {
-  if (neighbors.length === 0) return undefined;
-  let cx = 0;
-  let cy = 0;
-  for (const n of neighbors) {
-    cx += Math.cos(n.heading);
-    cy += Math.sin(n.heading);
+  if (sh.alignCount > 0 && (sh.alignCos !== 0 || sh.alignSin !== 0)) {
+    const meanHeading = Math.atan2(sh.alignSin, sh.alignCos);
+    tx += (prevPos.x + Math.cos(meanHeading) * SHOAL_ALIGN_LOOKAHEAD_WU) * W_ALIGN;
+    ty += (prevPos.y + Math.sin(meanHeading) * SHOAL_ALIGN_LOOKAHEAD_WU) * W_ALIGN;
+    tw += W_ALIGN;
   }
-  if (cx === 0 && cy === 0) return undefined;
-  const meanHeading = Math.atan2(cy, cx);
-  return {
-    x: pos.x + Math.cos(meanHeading) * ALIGN_LOOKAHEAD_WU,
-    y: pos.y + Math.sin(meanHeading) * ALIGN_LOOKAHEAD_WU,
-  };
-}
-
-/** A point pushed away from any neighbor closer than SEPARATION_RADIUS_WU —
- * loose organic shoals instead of fish stacking on one point. */
-function separationPush(pos: Pt, neighbors: readonly Neighbor[]): Pt {
-  let sx = 0;
-  let sy = 0;
-  for (const n of neighbors) {
-    const dx = pos.x - n.x;
-    const dy = pos.y - n.y;
-    const distSq = dx * dx + dy * dy;
-    if (distSq > 0 && distSq < SEPARATION_RADIUS_WU * SEPARATION_RADIUS_WU) {
-      sx += dx / distSq;
-      sy += dy / distSq;
-    }
+  if (inputs.taskTarget !== undefined) {
+    tx += inputs.taskTarget.x * W_TASK;
+    ty += inputs.taskTarget.y * W_TASK;
+    tw += W_TASK;
   }
-  return { x: pos.x + sx * SEPARATION_SCALE, y: pos.y + sy * SEPARATION_SCALE };
-}
-
-function weightedBlend(pairs: ReadonlyArray<readonly [Pt, number]>): Pt {
-  let sx = 0;
-  let sy = 0;
-  let sw = 0;
-  for (const [p, w] of pairs) {
-    sx += p.x * w;
-    sy += p.y * w;
-    sw += w;
-  }
-  return sw === 0 ? { x: 0, y: 0 } : { x: sx / sw, y: sy / sw };
+  return { x: tx / tw, y: ty / tw };
 }
 
 function mayorPatrolPoint(clockMs: number, phase: number): Pt {

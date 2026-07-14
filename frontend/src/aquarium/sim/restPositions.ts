@@ -10,7 +10,7 @@
 // formation x, so a rig is always a place you can find on the reef.
 
 import { WORLD, type AquariumPose } from '../contracts';
-import { hashRange } from '../derive/hash';
+import { hashRange, hashUnit } from '../derive/hash';
 import {
   BAND_AWAITING_Y,
   BAND_ERRORED_Y,
@@ -26,8 +26,6 @@ export interface HomeAnchor {
    * CITY_KEY fish (mayor / city-stratum) which have no formation. */
   radius: number;
 }
-
-const TAU = Math.PI * 2;
 
 /** A pose-specific salt keeps two poses from resolving to the exact same
  * scatter point for the same fish id (e.g. asleep vs rate-limited). */
@@ -83,11 +81,21 @@ function bandScatter(
   return { x, y: Math.max(y, WORLD.waterlineY + 20) };
 }
 
+/** FIX 3: asleep rests OUT on the open sand, clearly clear of the rock — one
+ * deterministic side, offset well beyond the silhouette footprint. Reads as
+ * "sleeping in the open", the deliberate opposite of rate-limited's tuck HARD
+ * under the overhang, so the two seabed poses never blur together. Clamped
+ * into the world so a rig near an edge can't sleep off-tank. */
+const OPEN_SAND_MARGIN_WU = 40;
 function settledOnSeabed(anchor: HomeAnchor, seed: number): { x: number; y: number } {
-  const angle = hashRange(seed, 0, TAU);
-  const x = anchor.x + Math.cos(angle) * anchor.radius * 0.75;
-  const y = anchor.y + hashRange(seed + 1, 10, 60);
-  return { x, y: Math.min(y, WORLD.height - 20) };
+  const side = hashUnit(seed) < 0.5 ? -1 : 1;
+  const offset = anchor.radius * 0.9 + hashRange(seed + 1, 60, 130);
+  const x = anchor.x + side * offset;
+  const y = anchor.y + hashRange(seed + 2, 6, 44);
+  return {
+    x: Math.min(Math.max(x, OPEN_SAND_MARGIN_WU), WORLD.width - OPEN_SAND_MARGIN_WU),
+    y: Math.min(y, WORLD.height - 20),
+  };
 }
 
 /** Risen to the surface band near the home x, with a little horizontal
@@ -100,8 +108,12 @@ function surfaceBand(anchor: HomeAnchor, seed: number, bandY: number): { x: numb
   };
 }
 
+/** FIX 3: rate-limited jams HARD up under the overhang — a tight central x
+ * (deep inside the footprint, in the rock's shadow) and high up under the
+ * crest. Maximally unlike asleep's open-sand rest, so one reads "jammed under
+ * a rock" and the other "sleeping in the open". */
 function tuckedUnderFormation(anchor: HomeAnchor, seed: number): { x: number; y: number } {
-  const x = anchor.x + hashRange(seed, -anchor.radius * 0.4, anchor.radius * 0.4);
-  const y = anchor.y - hashRange(seed + 1, 40, 100);
+  const x = anchor.x + hashRange(seed, -anchor.radius * 0.28, anchor.radius * 0.28);
+  const y = anchor.y - hashRange(seed + 1, 70, 140);
   return { x, y };
 }

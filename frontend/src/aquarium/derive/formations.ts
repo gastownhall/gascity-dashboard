@@ -2,11 +2,14 @@
 // same anchors, every derive call — the operator's spatial memory of "where
 // the rig lives" must never drift while the fleet composition is unchanged.
 //
-// Placement is deliberately IRREGULAR (round-2 fix): even spacing + one flat
-// baseline read as a bar chart, not a reef. Each formation gets a
-// deterministic horizontal jitter and a seabed-depth offset, and adjacency is
-// gated on non-overlapping CORES (not full silhouettes) so neighbours may
-// gently overlap and cluster while every rig still keeps a distinct home.
+// Placement is deliberately IRREGULAR (round-2 fix, sharpened round-3): even
+// spacing + one flat baseline read as a bar chart, not a reef. Each formation
+// gets a deterministic per-formation SLOT WEIGHT (so gaps vary a lot — some
+// rigs near, some far), a horizontal jitter, and a wide seabed-depth offset.
+// Adjacency is gated on non-overlapping CORES (not full silhouettes), so
+// neighbours may gently overlap and cluster while every rig still keeps a
+// distinct, findable home. The per-adjacent-pair CORE-gap floor is a hard
+// invariant the blind fixture's single-crop camera math depends on — keep it.
 
 import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
 import { CITY_KEY, UNRIGGED_KEY, WORLD, type RigFormation } from '../contracts';
@@ -30,15 +33,21 @@ const SEABED_MARGIN_X = 200;
 export const CORE_RADIUS_FRACTION = 0.6;
 /** Minimum world-unit gap enforced between adjacent formation CORES. */
 const MIN_CORE_GAP_WU = 40;
-/** Horizontal jitter, as a fraction of a nominal slot width, that breaks the
- * even left-to-right spacing so formations don't read as evenly-spaced bars. */
-const JITTER_FRACTION = 0.32;
+/** Absolute horizontal jitter (world units) on each weighted slot centre —
+ * an extra break on top of the varied slot widths. */
+const JITTER_MAX_WU = 150;
 /** Seabed-depth spread: a formation's base sits this many world units below
  * the nominal seabed line at most, so bases aren't all on one baseline. */
-const DEPTH_BAND_WU = 130;
+const DEPTH_BAND_WU = 220;
+/** Per-formation slot WEIGHT range: adjacent formations draw widely different
+ * spacing (some near, some far), so the row never reads as evenly-spaced bars.
+ * Weights are normalised across the reef, so the total span is unchanged. */
+const SLOT_WEIGHT_MIN = 0.5;
+const SLOT_WEIGHT_MAX = 1.75;
 
 const JITTER_SALT = 0x2545f491;
 const DEPTH_SALT = 0x9e3779b1;
+const WEIGHT_SALT = 0x27d4eb2f;
 
 /** A formation's core radius (see CORE_RADIUS_FRACTION). */
 export function formationCoreRadius(radius: number): number {
@@ -104,20 +113,26 @@ function depthOffset(seed: number): number {
 
 /**
  * Irregular left-to-right placement across the seabed band. Each formation
- * starts at its nominal slot centre plus a deterministic jitter, then a
- * left-to-right sweep pushes any formation right only far enough to clear the
- * minimum CORE gap from its left neighbour — so silhouettes may gently
- * overlap and cluster, but cores never do, and the spacing stays uneven.
+ * gets a deterministic slot WEIGHT, so the reef is carved into wide and narrow
+ * slots (varied spacing) rather than equal columns; its centre lands at the
+ * weighted cumulative position plus a jitter. A left-to-right sweep then
+ * pushes any formation right only far enough to clear the minimum CORE gap
+ * from its left neighbour — so silhouettes may gently overlap and cluster, but
+ * cores never do, the spacing stays uneven, and adjacent anchors keep the
+ * hard per-pair gap floor the blind fixture relies on.
  */
 function placeAlongSeabed(radii: readonly number[], seeds: readonly number[]): number[] {
-  const count = radii.length;
   const usableWidth = WORLD.width - 2 * SEABED_MARGIN_X;
-  const slot = usableWidth / count;
-  const jitterMax = slot * JITTER_FRACTION;
+  const weights = seeds.map((s) => hashRange(s ^ WEIGHT_SALT, SLOT_WEIGHT_MIN, SLOT_WEIGHT_MAX));
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
   const xs: number[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const slotCenter = SEABED_MARGIN_X + slot * (i + 0.5);
-    const jitter = hashRange(seeds[i]! ^ JITTER_SALT, -jitterMax, jitterMax);
+  let cumBefore = 0;
+  for (let i = 0; i < radii.length; i += 1) {
+    const w = weights[i]!;
+    const centreFrac = (cumBefore + w / 2) / totalWeight;
+    cumBefore += w;
+    const slotCenter = SEABED_MARGIN_X + centreFrac * usableWidth;
+    const jitter = hashRange(seeds[i]! ^ JITTER_SALT, -JITTER_MAX_WU, JITTER_MAX_WU);
     const base = slotCenter + jitter;
     const prevX = xs[i - 1];
     const prevRadius = radii[i - 1];

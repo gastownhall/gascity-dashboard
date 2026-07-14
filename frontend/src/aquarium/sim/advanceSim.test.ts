@@ -11,6 +11,7 @@ import {
   type WorldSnapshot,
 } from '../contracts';
 import { BAND_WORKING_Y } from './constants';
+import { shoalComparisonCount } from './grid';
 import { advanceSim } from './advanceSim';
 
 function fish(overrides: Partial<FishEntity> & { id: string }): FishEntity {
@@ -203,6 +204,42 @@ describe('advanceSim — schooling', () => {
     expect(after.max).toBeLessThan(before.max * 0.5);
     // Separation: it never collapses onto one point.
     expect(after.min).toBeGreaterThan(25);
+  });
+});
+
+describe('advanceSim — perf hot path (200 working fish)', () => {
+  const RIGS = ['r0', 'r1', 'r2', 'r3', 'r4', 'r5'];
+
+  function bigWorld(): WorldSnapshot {
+    const formations = RIGS.map((key, i) =>
+      formation({ key, anchorX: 400 + i * 600, radius: 260 }),
+    );
+    const fishList = Array.from({ length: 200 }, (_, i) =>
+      fish({ id: `w${i}`, pose: 'working', homeKey: RIGS[i % RIGS.length]! }),
+    );
+    return snapshot({ formations, fish: fishList });
+  }
+
+  function runChain(ticks: number): SimState {
+    const world = bigWorld();
+    let s = EMPTY_STATE;
+    for (let i = 0; i < ticks; i += 1) s = advanceSim(world, s, 16, false);
+    return s;
+  }
+
+  it('is deterministic across a 10-tick chain at 200 fish', () => {
+    expect(runChain(10)).toEqual(runChain(10));
+  });
+
+  it('neighbour queries go through the spatial grid, not an all-pairs O(n^2) scan', () => {
+    const world = bigWorld();
+    const tick1 = advanceSim(world, EMPTY_STATE, 16, false); // no prev positions yet
+    advanceSim(world, tick1, 16, false); // tick 2: grid now populated from tick 1
+    const comparisons = shoalComparisonCount();
+    expect(comparisons).toBeGreaterThan(0); // the grid is actually exercised
+    // An all-pairs scan would be 200*199 = 39800 comparisons per tick; the
+    // 3x3 grid neighbourhood keeps it well under half of that.
+    expect(comparisons).toBeLessThan(200 * 199 * 0.5);
   });
 });
 

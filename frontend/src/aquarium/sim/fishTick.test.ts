@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WORLD } from '../contracts';
 import { BAND_WORKING_Y } from './constants';
+import { createShoalAccum } from './grid';
 import type { HomeAnchor } from './restPositions';
 import { tickFish, type FishTickInputs } from './fishTick';
 
@@ -15,7 +16,7 @@ function baseInputs(overrides: Partial<FishTickInputs>): FishTickInputs {
     prevKin: undefined,
     homeAnchor: ANCHOR,
     taskTarget: undefined,
-    neighbors: [],
+    shoal: createShoalAccum(),
     clockMs: 0,
     dtS: 1 / 60,
     ...overrides,
@@ -101,8 +102,11 @@ describe('tickFish — working', () => {
 
 describe('tickFish — hold poses', () => {
   it('asleep speed trends to zero once it reaches its rest point', () => {
+    // FIX 3 pushed the asleep rest point OUT onto the open sand (clear of the
+    // rock), so a fish transitioning from the formation base has farther to
+    // swim before it settles — give it the ticks to arrive.
     let kin = { x: ANCHOR.x, y: ANCHOR.y, heading: 0, speed: 0, phase: 0 };
-    for (let i = 0; i < 300; i += 1) {
+    for (let i = 0; i < 900; i += 1) {
       kin = tickFish(baseInputs({ pose: 'asleep', prevKin: kin, clockMs: i * 16 }));
     }
     expect(kin.speed).toBeCloseTo(0, 1);

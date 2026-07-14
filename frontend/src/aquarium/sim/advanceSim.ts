@@ -14,7 +14,14 @@ import {
 } from '../contracts';
 import { hashString, hashUnit } from '../derive/hash';
 import { DT_CLAMP_MS, MOUTH_OFFSET_WU } from './constants';
-import { tickFish, type FishTickInputs, type Neighbor } from './fishTick';
+import { tickFish, type FishTickInputs } from './fishTick';
+import {
+  buildShoalGrid,
+  createShoalAccum,
+  gatherShoal,
+  resetShoalAccum,
+  type ShoalAccum,
+} from './grid';
 import { tickPellet, type FormationAnchor } from './pelletTick';
 import { type Pt } from './steer';
 
@@ -36,14 +43,18 @@ export const advanceSim: AdvanceSim = (snapshot, prev, dtMs, reducedMotion) => {
   const tickClockMs = reducedMotion ? 0 : clockMs;
 
   const anchorByKey = formationAnchors(snapshot.formations);
-  const workingGroups = groupWorkingFishByHome(snapshot.fish);
+  // Bucket working fish into the spatial grid ONCE per tick (O(n)); each fish
+  // then gathers its shoal pull from the 3x3 cell neighbourhood. Reduced
+  // motion holds every fish still, so it needs no grid at all.
+  if (!reducedMotion) buildShoalGrid(snapshot.fish, prev);
+  const shoal = createShoalAccum();
 
   const fish: Record<string, FishKinematics> = {};
   for (const entity of snapshot.fish) {
     fish[entity.id] = advanceOneFish(entity, {
       prev,
       anchorByKey,
-      workingGroups,
+      shoal,
       dtS,
       clockMs: tickClockMs,
       reducedMotion,
@@ -70,22 +81,12 @@ function formationAnchors(formations: readonly RigFormation[]): Map<string, Form
   return map;
 }
 
-/** homeKey -> ids of its non-tombstoned working-pose fish (boids neighbors). */
-function groupWorkingFishByHome(fish: readonly FishEntity[]): Map<string, string[]> {
-  const groups = new Map<string, string[]>();
-  for (const f of fish) {
-    if (f.pose !== 'working' || f.tombstoned) continue;
-    const list = groups.get(f.homeKey);
-    if (list === undefined) groups.set(f.homeKey, [f.id]);
-    else list.push(f.id);
-  }
-  return groups;
-}
-
 interface FishTickContext {
   prev: SimState;
   anchorByKey: ReadonlyMap<string, FormationAnchor>;
-  workingGroups: ReadonlyMap<string, string[]>;
+  /** Reused per-fish scratch: gatherShoal fills it, tickFish reads it before
+   * the next fish overwrites it (the loop is strictly sequential). */
+  shoal: ShoalAccum;
   dtS: number;
   clockMs: number;
   reducedMotion: boolean;
@@ -96,7 +97,7 @@ function advanceOneFish(entity: FishEntity, ctx: FishTickContext): FishKinematic
   const anchor = ctx.anchorByKey.get(entity.homeKey) ?? DEFAULT_ANCHOR;
   const prevKin = ctx.prev.fish[entity.id];
   const taskTarget = taskPelletTarget(entity, ctx.prev);
-  const neighbors = neighborPositions(entity, ctx);
+  gatherShoalPull(entity, ctx, prevKin);
 
   const inputs: FishTickInputs = {
     seed,
@@ -106,7 +107,7 @@ function advanceOneFish(entity: FishEntity, ctx: FishTickContext): FishKinematic
     prevKin: ctx.reducedMotion ? undefined : prevKin,
     homeAnchor: anchor,
     taskTarget,
-    neighbors,
+    shoal: ctx.shoal,
     clockMs: ctx.clockMs,
     dtS: ctx.dtS,
   };
@@ -136,14 +137,26 @@ function taskPelletTarget(entity: FishEntity, prev: SimState): Pt | undefined {
   return prev.pellets[entity.taskBeadId];
 }
 
-function neighborPositions(entity: FishEntity, ctx: FishTickContext): Neighbor[] {
-  if (entity.pose !== 'working' || entity.tombstoned) return [];
-  const groupIds = ctx.workingGroups.get(entity.homeKey) ?? [];
-  return groupIds.flatMap((id) => {
-    if (id === entity.id) return [];
-    const kin = ctx.prev.fish[id];
-    return kin !== undefined ? [kin] : [];
-  });
+/** Populate ctx.shoal for a working fish from the spatial grid (queried at its
+ * previous position, so cohesion/alignment/separation reference last tick's
+ * settled shoal). Any non-working / tombstoned / first-frame / reduced-motion
+ * fish gets a zeroed accumulator, so tickWorking's cohesion falls back to the
+ * shoal home — matching the old "no neighbours yet" behaviour. */
+function gatherShoalPull(
+  entity: FishEntity,
+  ctx: FishTickContext,
+  prevKin: FishKinematics | undefined,
+): void {
+  if (
+    entity.pose === 'working' &&
+    !entity.tombstoned &&
+    !ctx.reducedMotion &&
+    prevKin !== undefined
+  ) {
+    gatherShoal(prevKin.x, prevKin.y, entity.id, ctx.shoal);
+  } else {
+    resetShoalAccum(ctx.shoal);
+  }
 }
 
 interface PelletTickContext {

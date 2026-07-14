@@ -61,10 +61,12 @@ describe('restPosition — vertical bands (the shared pose table)', () => {
     expect(stalled.y).toBeLessThan(BAND_WORKING_Y - 100);
   });
 
-  it('asleep settles on the seabed at the formation base, within its footprint', () => {
+  it('asleep settles OUT on the open sand, clear of the formation footprint', () => {
     const p = restPosition('asleep', ANCHOR, 7);
     expect(p.y).toBeGreaterThanOrEqual(ANCHOR.y);
-    expect(Math.abs(p.x - ANCHOR.x)).toBeLessThanOrEqual(ANCHOR.radius);
+    // FIX 3: asleep is offset beyond the silhouette radius — "sleeping in the
+    // open", never touching the rock.
+    expect(Math.abs(p.x - ANCHOR.x)).toBeGreaterThan(ANCHOR.radius);
   });
 
   it('awaiting-input rises to touch the waterline band near the home x', () => {
@@ -87,6 +89,43 @@ describe('restPosition — vertical bands (the shared pose table)', () => {
     expect(rl.y).toBeLessThan(ANCHOR.y);
     expect(rl.y).toBeGreaterThan(BAND_IDLE_Y);
     expect(rl.y).toBeLessThan(asleep.y);
-    expect(Math.abs(rl.x - ANCHOR.x)).toBeLessThanOrEqual(ANCHOR.radius);
+    // FIX 3: jammed deep inside the footprint (in the rock's shadow).
+    expect(Math.abs(rl.x - ANCHOR.x)).toBeLessThan(ANCHOR.radius * 0.4);
+  });
+});
+
+describe('restPosition — FIX 3 legibility separation', () => {
+  const SEEDS = [1, 42, 99, 12345, 777];
+
+  it('asleep sits on the open sand, rate-limited jams under the rock — max horizontal separation', () => {
+    for (const seed of SEEDS) {
+      const asleep = restPosition('asleep', ANCHOR, seed);
+      const rl = restPosition('rate-limited', ANCHOR, seed);
+      const asleepOffset = Math.abs(asleep.x - ANCHOR.x);
+      const rlOffset = Math.abs(rl.x - ANCHOR.x);
+      // asleep clear of the silhouette, rate-limited deep in the footprint,
+      // and asleep is unambiguously the farther of the two from the rock core.
+      expect(asleepOffset).toBeGreaterThan(ANCHOR.radius);
+      expect(rlOffset).toBeLessThanOrEqual(ANCHOR.radius * 0.4);
+      expect(asleepOffset).toBeGreaterThan(rlOffset);
+    }
+  });
+
+  it('rate-limited rides up under the overhang; asleep rests on the floor below the base', () => {
+    for (const seed of SEEDS) {
+      const asleep = restPosition('asleep', ANCHOR, seed);
+      const rl = restPosition('rate-limited', ANCHOR, seed);
+      expect(rl.y).toBeLessThan(ANCHOR.y);
+      expect(asleep.y).toBeGreaterThanOrEqual(ANCHOR.y);
+    }
+  });
+
+  it('awaiting-input touches the waterline; stalled treads far below (height alone separates them)', () => {
+    for (const seed of SEEDS) {
+      const awaiting = restPosition('awaiting-input', ANCHOR, seed);
+      const stalled = restPosition('stalled', ANCHOR, seed);
+      expect(awaiting.y).toBeLessThan(WORLD.waterlineY + 60);
+      expect(stalled.y - awaiting.y).toBeGreaterThan(300);
+    }
   });
 });
