@@ -190,6 +190,8 @@ export interface ScenePalette {
   waterline: string;
   ok: string;
   warn: string;
+  /** canvas font family; mirrors the app's single typeface */
+  fontFamily: string;
 }
 
 export type ThemeMood = 'light' | 'dark';
@@ -231,6 +233,8 @@ export interface FixtureManifest {
   }>;
   pelletBeadIds: string[];
   needsAttention: number;
+  /** blind fixture only: camera per fish (same order as fish[]) for unlabeled crops */
+  blindCams?: Array<{ x: number; y: number; zoom: number }>;
 }
 
 declare global {
