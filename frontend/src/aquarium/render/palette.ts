@@ -11,16 +11,20 @@ type AquaticPalette = Omit<
   'text' | 'textMuted' | 'waterline' | 'ok' | 'warn' | 'fontFamily'
 >;
 
-/** sunlit shallows: pale warm aqua over warm sand, bright shafts — sits
- * beside the warm-paper editorial chrome without fighting it */
+/** sunlit shallows: a warm turquoise surface deepening to a saturated teal-blue
+ * — bright and sunlit, but with real vertical depth and chroma so the column
+ * reads as a lit body of water, not a pale monochrome-cyan wash (round-9 judges:
+ * "pale / washed-out / low-contrast, leans monochrome-cyan"). Still sits beside
+ * the warm-paper editorial chrome without fighting it. */
 const LIGHT: AquaticPalette = {
-  waterTop: 'oklch(92% 0.035 195)',
-  waterBottom: 'oklch(70% 0.07 220)',
-  hazeFar: 'oklch(86% 0.04 205)',
+  waterTop: 'oklch(88% 0.058 192)',
+  waterBottom: 'oklch(57% 0.09 228)',
+  hazeFar: 'oklch(76% 0.058 203)',
   // warm-gold sunbeams (hue pulled off the blue-green toward amber, a touch
   // more chroma) so the shafts read as warm sunlight cutting the aqua — hue
-  // range under the blue tint, not a monochrome-blue column
-  lightShaft: 'oklch(97% 0.042 86 / 0.32)',
+  // range under the blue tint, not a monochrome-blue column. Read stronger now
+  // against the deeper water.
+  lightShaft: 'oklch(97% 0.05 88 / 0.36)',
   formation: 'oklch(45% 0.055 65)',
   formationEdge: 'oklch(33% 0.05 60)',
   kelp: 'oklch(52% 0.075 150)',

@@ -27,6 +27,23 @@ export function fitTankCamera(viewport: Viewport): Camera {
   return { x: WORLD.width / 2, y: WORLD.height / 2, zoom };
 }
 
+/** How much closer than the whole-tank fit the default framing sits. Chosen so
+ * overview fish read as creatures and the empty margins crop away, while the
+ * full surface→seabed pose column still shows and the view stays below the
+ * LOD1 label threshold (an unlabelled overview, not a chart). */
+export const HOME_ZOOM_FACTOR = 1.4;
+
+/** The default and reset framing: closer than the whole-tank fit so overview
+ * fish read as creatures and the wide empty water crops away. Capped just below
+ * LOD1 so the default view never shows rig labels regardless of viewport, and
+ * clamped to the world bounds. The full tank stays reachable by zooming out —
+ * fitTankCamera remains the zoom-out floor. */
+export function homeCamera(viewport: Viewport): Camera {
+  const fit = fitTankCamera(viewport);
+  const zoom = Math.min(fit.zoom * HOME_ZOOM_FACTOR, LOD1_ZOOM * 0.98);
+  return clampCamera({ x: WORLD.width / 2, y: WORLD.height / 2, zoom }, viewport);
+}
+
 /** Clamp zoom to [tank-fit, MAX_ZOOM], then clamp x/y so the visible rect
  * never crosses the world bounds. When the visible rect is wider/taller than
  * the world on an axis, that axis is forced to the world midpoint. */

@@ -12,6 +12,7 @@ import {
   buildFixtureInputs,
   buildPerfFixture,
 } from './index';
+import { RICH_FISH_BUDGET } from '../render/fishPainter';
 
 function posesOf(fish: readonly { pose: AquariumPose }[]): Set<AquariumPose> {
   return new Set(fish.map((f) => f.pose));
@@ -27,9 +28,13 @@ describe("'aquarium' fixture", () => {
     }
   });
 
-  it('has 32-40 fish (a real population, not a handful of solitary fish)', () => {
+  it('has a dense-but-rich population: a real crowd, capped so every fish still shades', () => {
+    // lower bound: a real populated reef, not a handful of solitary fish.
     expect(manifest.fish.length).toBeGreaterThanOrEqual(32);
-    expect(manifest.fish.length).toBeLessThanOrEqual(40);
+    // upper bound: must stay within the rich-shading budget, or the whole
+    // aquarium drops to the cheap flat path and fish read as flat icons again
+    // (fishPainter.paintFishLayer gates the rich path on this count).
+    expect(manifest.fish.length).toBeLessThanOrEqual(RICH_FISH_BUDGET);
   });
 
   it('most fish are working, so each rig schools a visible crew', () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WORLD, LOD1_ZOOM, LOD2_ZOOM, CAMERA_HASH_PREFIX, type Camera } from '../contracts';
 import {
   fitTankCamera,
+  homeCamera,
   clampCamera,
   zoomAtCursor,
   panCamera,
@@ -29,6 +30,31 @@ describe('fitTankCamera', () => {
   it('picks the tighter axis so nothing is cropped, for a portrait viewport', () => {
     const cam = fitTankCamera({ cssWidth: 900, cssHeight: 1440, dpr: 1 });
     expect(cam.zoom).toBeCloseTo(900 / WORLD.width, 5);
+  });
+});
+
+describe('homeCamera (default / reset framing)', () => {
+  it('sits closer than the whole-tank fit so overview fish read bigger', () => {
+    const home = homeCamera(VIEWPORT_1440);
+    const fit = fitTankCamera(VIEWPORT_1440);
+    expect(home.zoom).toBeGreaterThan(fit.zoom);
+  });
+
+  it('stays below the LOD1 label threshold at any viewport (an unlabelled overview)', () => {
+    for (const vp of [
+      VIEWPORT_1440,
+      { cssWidth: 1920, cssHeight: 1080, dpr: 1 },
+      { cssWidth: 3440, cssHeight: 1440, dpr: 1 },
+    ]) {
+      expect(homeCamera(vp).zoom, `${vp.cssWidth}x${vp.cssHeight}`).toBeLessThan(LOD1_ZOOM);
+    }
+  });
+
+  it('never zooms out past the fit floor and stays within world bounds', () => {
+    const home = homeCamera(VIEWPORT_1440);
+    // clamped through clampCamera, so it equals its own clamp (in-bounds)
+    expect(home).toEqual(clampCamera(home, VIEWPORT_1440));
+    expect(home.zoom).toBeGreaterThanOrEqual(fitTankCamera(VIEWPORT_1440).zoom);
   });
 });
 

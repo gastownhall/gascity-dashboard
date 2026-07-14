@@ -61,6 +61,31 @@ aquarium, not a chart" — now passes unanimously; (c) one targeted round on the
 light-water palette + density (a concrete lever, no longer a blind shot) —
 overlaps mwx0.11; (d) make the dark tank the default framing.
 
+### Closer-framing round — water + default framing + density — 2026-07-14
+
+Stephanie's pick after the water-only re-judge stayed 3/5: tighten the default
+LOD0 framing (not fish geometry — that regressed legibility in round 8). Three
+changes, all keepers: (1) richer light water (deeper turquoise→teal-blue, more
+contrast/chroma); (2) `homeCamera` — the default + reset framing now sits ~1.4×
+closer than the whole-tank fit (capped below LOD1 so it stays an unlabelled
+overview; the full tank remains the zoom-out floor); (3) fixture density 34→43
+working fish (capped at RICH_FISH_BUDGET so every fish still shades richly).
+
+Two 3-judge panels (water-only, then combined). Combined verdict: still **3/5**
+(3,3,3) — but the framing **fixed the creature read**: `fish_read_as_creatures=
+true ×3` and `depth_reads_volumetric=true ×3` (both were the holdouts). All three
+judges then named the **same single remaining flaw, unanimously**: _"all fish
+strung along one horizontal mid-water band"_ — the working schools sit at one
+depth, leaving the upper and lower water empty.
+
+That flaw is the legibility↔illusion tension made concrete: the disjoint vertical
+pose bands that earn the 7/7 blind legibility (criterion 3) are exactly what reads
+as "one horizontal row." Closing it means widening the WORKING school's vertical
+scatter (a sim change) while keeping the bands disjoint (guard margins) so
+legibility holds — precisely the round-8 failure mode if done carelessly, so it's
+a deliberate, Stephanie-gated call, not an autonomous round. Gates green
+(typecheck src+test, lint, prettier, 1600 FE tests, render-work p95 2.9 ms).
+
 ## Round 1 (2026-07-14)
 
 Foundation integrated; all mechanical gates green (typecheck src+test, 1480

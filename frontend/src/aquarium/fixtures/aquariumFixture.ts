@@ -286,6 +286,19 @@ const ALPHA_CREW: readonly CrewMember[] = [
     beadTitle: 'Dedupe webhook retries',
     beadAgedMinutes: 62,
   },
+  {
+    name: 'marlin',
+    bellyPct: 66,
+    beadId: 'aq-alpha-marlin',
+    beadTitle: 'Guard double-submit on checkout',
+    beadAgedMinutes: 22,
+  },
+  {
+    name: 'pearl',
+    beadId: 'aq-alpha-pearl',
+    beadTitle: 'Trim cart payload size',
+    beadAgedMinutes: 47,
+  },
 ];
 
 const BETA_CREW: readonly CrewMember[] = [
@@ -336,6 +349,19 @@ const BETA_CREW: readonly CrewMember[] = [
     beadTitle: 'Backfill dunning metrics',
     beadAgedMinutes: 52,
   },
+  {
+    name: 'tide',
+    bellyPct: 58,
+    beadId: 'aq-beta-tide',
+    beadTitle: 'Cache tax-rate lookups',
+    beadAgedMinutes: 31,
+  },
+  {
+    name: 'crest',
+    beadId: 'aq-beta-crest',
+    beadTitle: 'Backfill invoice PDF cache',
+    beadAgedMinutes: 49,
+  },
 ];
 
 const GAMMA_CREW: readonly CrewMember[] = [
@@ -373,6 +399,26 @@ const GAMMA_CREW: readonly CrewMember[] = [
     beadTitle: 'Compact event log segment',
     beadAgedMinutes: 38,
   },
+  {
+    name: 'kelp',
+    bellyPct: 72,
+    beadId: 'aq-gamma-kelp',
+    beadTitle: 'Shard the event index',
+    beadAgedMinutes: 27,
+  },
+  {
+    name: 'mica',
+    beadId: 'aq-gamma-mica',
+    beadTitle: 'Drain dead-letter queue',
+    beadAgedMinutes: 53,
+  },
+  {
+    name: 'brine',
+    bellyPct: 45,
+    beadId: 'aq-gamma-brine',
+    beadTitle: 'Compress cold log tier',
+    beadAgedMinutes: 19,
+  },
 ];
 
 const UNRIGGED_CREW: readonly CrewMember[] = [
@@ -402,6 +448,19 @@ const UNRIGGED_CREW: readonly CrewMember[] = [
     beadId: 'aq-unrigged-otter',
     beadTitle: 'Sweep stale feature flags',
     beadAgedMinutes: 33,
+  },
+  {
+    name: 'fen',
+    bellyPct: 50,
+    beadId: 'aq-unrigged-fen',
+    beadTitle: 'Prune stale CI caches',
+    beadAgedMinutes: 40,
+  },
+  {
+    name: 'gull',
+    beadId: 'aq-unrigged-gull',
+    beadTitle: 'Rotate staging credentials',
+    beadAgedMinutes: 24,
   },
 ];
 

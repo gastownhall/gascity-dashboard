@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { KeyboardEvent, MouseEvent, MutableRefObject, PointerEvent, WheelEvent } from 'react';
 import {
   clampCamera,
-  fitTankCamera,
+  homeCamera,
   lodTier,
   panCamera,
   parseCameraHash,
@@ -87,7 +87,7 @@ export function useAquariumCamera(viewport: Viewport, onChange?: () => void): Aq
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  const cameraRef = useRef<Camera>(fitTankCamera(viewport));
+  const cameraRef = useRef<Camera>(homeCamera(viewport));
   const lodTierRef = useRef<LodTier>(lodTier(cameraRef.current.zoom));
   const dragRef = useRef<DragState | null>(null);
   const hashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -204,7 +204,7 @@ export function useAquariumCamera(viewport: Viewport, onChange?: () => void): Aq
   const zoomOut = useCallback(() => zoomAtCenter(1 / BUTTON_ZOOM_FACTOR), [zoomAtCenter]);
 
   const resetCamera = useCallback(() => {
-    commit(fitTankCamera(viewportRef.current));
+    commit(homeCamera(viewportRef.current));
     writeHashThrottled();
   }, [commit, writeHashThrottled]);
 
