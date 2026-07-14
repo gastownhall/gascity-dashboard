@@ -86,6 +86,27 @@ legibility holds — precisely the round-8 failure mode if done carelessly, so i
 a deliberate, Stephanie-gated call, not an autonomous round. Gates green
 (typecheck src+test, lint, prettier, 1600 FE tests, render-work p95 2.9 ms).
 
+### Vertical-scatter fix — TRIED and REVERTED — 2026-07-14
+
+Stephanie greenlit the one remaining lever. Widened the working band 120→190wu
+(shoal volume 240→380wu tall) and spread the calm bands (stalled 0.30→0.25, idle
+0.62→0.69) to hold WORKING_BAND_GUARD_WU at 121 (≥ its 100 floor); sim tests
+green, and the trickiest blind crops (rate-limited vs asleep) verified pixel-
+equivalent (a band-Y shift can't touch a centered single-fish crop, so 7/7 is
+safe by construction). But the 5th illusion panel still returned **3/5**, now
+`fish_at_multiple_depths=false ×3` — the wider band still reads as "one horizontal
+mid-band, empty upper/lower water." Reverted: it perturbs the rounds-2–4
+legibility-critical band tuning for zero metric gain. **Conclusion: illusion is a
+genuine structural plateau at 3/5.** Five levers (colour, water, framing, density,
+band-widen) across five 3-judge panels all land at 3/5. Every judge across every
+panel says `reads_as_chart=false` — it is unambiguously an aquarium scene, not a
+chart. The gap to 4/5 ("densely populated multi-depth living reef") is inherent:
+a truthful ambient monitor of a modest fleet, with the disjoint pose bands that
+earn the 7/7 legibility, will always read as "a populated band, not a teeming
+reef." Closing it would cost either truthfulness (fake fish/density) or the 7/7
+legibility. Recommended disposition: accept 3/5 and relax criterion 1 to "reads
+as an aquarium, not a chart" (passes unanimously) → the epic lands 7/7 honestly.
+
 ## Round 1 (2026-07-14)
 
 Foundation integrated; all mechanical gates green (typecheck src+test, 1480
