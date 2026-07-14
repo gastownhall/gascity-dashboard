@@ -176,6 +176,43 @@ softened, real overlap; (c) formations CLUSTERED at varied depths with overlap,
 not one baseline. PERF: shave ~1 ms off the dynamic draw + kill the zoom-frame
 spike to get p95 < 16. Must NOT regress craft (4/5), legibility (7/7), honesty.
 
+## Round 7 (2026-07-14) — 6/7 PASS (illusion still 3/5)
+
+One render agent (un-flatten LOD0 fish, reef color accents, themed legible
+foreground, warmer palette). All mechanical gates green (1581 frontend tests).
+
+| Criterion             | Result                                                                                               | Verdict     |
+| --------------------- | ---------------------------------------------------------------------------------------------------- | ----------- |
+| 1 Aquarium illusion   | 3/5 median (judges 3,3,3)                                                                            | FAIL        |
+| 2 Fish craft          | 4/5 spot-check (no regression)                                                                       | PASS        |
+| 3 Blind legibility    | 7/7 median (judges 7,5,7)                                                                            | PASS (held) |
+| 4 LOD honesty         | clean (auditor's "+6" flag was a crop artifact; verified +6 is on reef-gamma, alpha has no overflow) | PASS        |
+| 5 Camera perf         | render-work p95 = 11.2 ms (richer aquarium fish; 200-fish case count-gated cheap)                    | PASS        |
+| 6 Truthfulness parity | unit tests green                                                                                     | PASS        |
+| 7 Mechanical          | all gates green                                                                                      | PASS        |
+
+ILLUSION held at 3/5 (structural ceiling). All three judges: depth now reads
+(real DOF), scene reads as a "stylized aquarium scene" (not chart/diagram), but
+`fish_read_as_creatures = FALSE` — un-flattening didn't help because at whole-tank
+fit-zoom the ~34 fish draw at only ~10-30px, too small for the (now-present)
+shading/fins to register, so all but the big hero fish read as flat silhouettes.
+Other converged notes: population sparse/evenly-spaced ("plotted data markers");
+reef color "barely registers, especially light mode"; light palette "washed-out
+pastel cyan / wellness-app." The craft is genuinely good up close (blind crops
+4/5) — the gap is specifically the LOD0 overview where fish are tiny.
+
+Round-8 (final, cap) mandate: BIGGER fish at LOD0 (bump base render scale + widen
+near/far depth-scale so foreground fish are large enough for their shading/fins
+to read as creatures); richer/warmer/more-saturated palette (kill the washed-out
+cyan); stronger, more-legible reef color; break the even-pod x-spacing. Keep
+legibility 7/7 (blind crops are zoom ~1.71, unaffected by LOD0 scale), craft,
+perf (count-gate), honesty. If still 3/5 at the cap → HALT with the 6/7 result
+for Stephanie: the illusion bar ("beautiful enough for a wall", median >=4/5) is
+subjective and the residual is the tiny-fish-at-whole-tank-zoom tension with a
+truthful ~34-fish fleet; options = accept 6/7, relax the illusion criterion to
+"not a chart" (which it PASSES), or make the default LOD0 framing tighter (a
+locked-decision change that needs her call).
+
 ## Round 6 (2026-07-14) — 6/7 PASS
 
 One render agent (REAL ctx.filter blur foreground baked in the offscreen cache +
