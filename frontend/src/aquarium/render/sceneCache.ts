@@ -1,15 +1,16 @@
 // Offscreen cache for the slow/static scene layers. The seabed, light shafts,
-// deep drift, formations (rock / coral / kelp / speckle / contact shadow), the
-// water surface AND the near-foreground silhouettes only change when the CAMERA
-// moves or the palette / viewport / formation set changes — never per animation
-// frame. Baking them once into an offscreen buffer (sized to the viewport plus a
-// pan margin) and blitting that buffer each frame turns "redraw the whole reef
-// every frame" into one drawImage over the per-frame water-column base. The
-// buffer is transparent above the seabed so the water column shows through.
-// Fish, pellets and the near motes stay dynamic on top.
+// deep drift, formations (rock / coral / kelp / speckle / contact shadow) and
+// the water surface only change when the CAMERA moves or the palette / viewport
+// / formation set changes — never per animation frame. Baking them once into an
+// offscreen buffer (sized to the viewport plus a pan margin) and blitting that
+// buffer each frame turns "redraw the whole reef every frame" into one drawImage
+// over the per-frame water-column base. The buffer is transparent above the
+// seabed so the water column shows through. Fish, pellets and the near motes
+// stay dynamic on top.
 //
-// A bake is EXPENSIVE (it includes a real gaussian `ctx.filter` blur on the
-// near-foreground), so it must not run on every frame of a continuous zoom.
+// A bake redraws every static layer (seabed texture, shafts, per-rig
+// formations), which costs far more than a blit, so it must not run on every
+// frame of a continuous zoom.
 //
 // INVALIDATION RULE — the buffer is re-baked only when one of:
 //   STRUCTURAL (needsRebake): no bake yet, viewport css size / dpr changed,
@@ -22,7 +23,7 @@
 //   reduced motion is active (no autonomous loop → settle the discrete paint
 //   now). While a zoom is ACTIVE the buffer is instead blitted SCALED by
 //   zoom/bakedZoom about the baked camera centre — momentarily soft, but a
-//   cheap drawImage instead of a ~55ms re-bake.
+//   cheap drawImage instead of a full re-bake of every static layer.
 // Within the pan margin the buffer is blitted at the camera delta; the ambient
 // sway baked into it (shafts, kelp, surface, drift) is frozen until the next
 // re-bake.
@@ -38,7 +39,7 @@ export const CACHE_MARGIN = 320;
 export const ZOOM_SETTLE_MS = 120;
 
 /** max |ln(zoom / bakedZoom)| tolerated on the scaled blit before a re-bake is
- * forced — beyond this the up/down-scale of the blurred buffer reads as mush.
+ * forced — beyond this the up/down-scale of the baked buffer reads as soft.
  * ~0.35 ≈ a 1.42×/0.70× scale window. */
 export const ZOOM_SCALE_CAP_LN = 0.35;
 

@@ -6,18 +6,27 @@ round. Screenshots live under `/tmp/reef-round<N>/` during the run.
 ## FINAL (2026-07-14) — 6/7 PASS; illusion 3/5 is the sole holdout
 
 Render is the round-7 state (round-8 reverted as net-negative), plus: the
-zoom-rebake perf fix, operator zoom/jitter fixes, and the light-mode foreground
-retint (teal, not brown).
+zoom-rebake perf fix and operator zoom/jitter fixes.
 
-| Criterion             | Final                                                                                                             | Verdict                   |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| 1 Aquarium illusion   | 3/5 median (plateaued rounds 3-8)                                                                                 | FAIL (subjective plateau) |
-| 2 Fish craft          | 4/5                                                                                                               | PASS                      |
-| 3 Blind legibility    | 7/7 (round-7 render; perf/retint don't touch fish poses, foreground absent from blind crops by the zoom<1.2 gate) | PASS                      |
-| 4 LOD honesty         | clean                                                                                                             | PASS                      |
-| 5 Camera perf         | render-work p95 = 2.9-3.1 ms, verified across 2 clean runs (was ~55 ms zoom re-bake)                              | **PASS**                  |
-| 6 Truthfulness parity | unit tests green                                                                                                  | PASS                      |
-| 7 Mechanical          | all gates green                                                                                                   | PASS                      |
+**Foreground removed (mwx0.13, operator decision, post-FINAL):** the near
+out-of-focus kelp/rock silhouettes (rounds 4–7's depth cue) were deleted
+entirely — they read as odd smudges in light mode and only okay in dark. The
+`render/foreground.ts` module, its parallax layer, and its blind-crop zoom gate
+are gone; the zoom-rebake debounce stays (still valuable). Trade-off: the real
+`ctx.filter` blur was what got all 3 illusion judges to see genuine DOF, so
+illusion may regress from 3/5 toward 2/5 — **re-judge illusion before treating
+that row as still 3/5.** Depth is to be re-approached via rig-color-identity
+(mwx0.8) + palette, not smudges.
+
+| Criterion             | Final                                                                                         | Verdict                   |
+| --------------------- | --------------------------------------------------------------------------------------------- | ------------------------- |
+| 1 Aquarium illusion   | 3/5 median (plateaued rounds 3-8); re-judge after mwx0.13 foreground removal                  | FAIL (subjective plateau) |
+| 2 Fish craft          | 4/5                                                                                           | PASS                      |
+| 3 Blind legibility    | 7/7 (round-7 render; perf fix doesn't touch fish poses; no foreground to occlude blind crops) | PASS                      |
+| 4 LOD honesty         | clean                                                                                         | PASS                      |
+| 5 Camera perf         | render-work p95 = 2.9-3.1 ms, verified across 2 clean runs (was ~55 ms zoom re-bake)          | **PASS**                  |
+| 6 Truthfulness parity | unit tests green                                                                              | PASS                      |
+| 7 Mechanical          | all gates green                                                                               | PASS                      |
 
 ILLUSION is a subjective plateau, not an open defect: over 8 rounds it went from
 "chart / clip-art" (2/5) to a "stylized aquarium scene" (3/5) that all judges

@@ -71,9 +71,10 @@ is ever decorative).
   deterministic hash of rig name into stable slots (same rig, same place,
   every session — geography is muscle memory). Formation size scales gently
   with crew count.
-- 3–4 parallax layers: far water haze, mid formations, near fish/pellets,
-  foreground occasional kelp/particulate. Camera parallax on pan; fog with
-  layer depth.
+- 3 parallax layers: far water haze, mid formations, near fish/pellets +
+  particulate motes. Camera parallax on pan; fog with layer depth. (A nearer
+  out-of-focus foreground layer was tried rounds 4–7 as a depth cue and removed
+  per operator decision mwx0.13 — see the scorecard.)
 - Camera: `{x, y, zoom}`, wheel zoom anchored at cursor, drag pan, pinch on
   touch, double-click zoom-in, Home/Esc reset, keyboard arrows + `+`/`-`.
   Clamped to tank bounds. LOD thresholds are zoom values; text layers fade

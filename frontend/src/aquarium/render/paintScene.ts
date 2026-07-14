@@ -1,22 +1,21 @@
 // One full frame. The SLOW layers — seabed, light shafts, deep drift,
-// formations (rock / coral / kelp / speckle / contact shadow), the water surface
-// AND the near-foreground silhouettes — are baked ONCE into an offscreen buffer
-// (sceneCache.ts) and blitted each frame under the camera delta; they re-bake
-// only when the camera pans past the margin or the viewport / palette /
-// formation set changes, or when a zoom SETTLES. During an active zoom the bake
-// is not repeated (it carries an expensive gaussian blur) — the buffer is
-// blitted scaled by zoom/bakedZoom instead, so a zoom frame stays a cheap
-// drawImage rather than a ~55ms re-bake. The water-column gradient is drawn
-// fresh as the opaque base (cheap, and it keeps its true world-depth anchoring
-// under a pan, and — being a per-frame 1440×900 fill rather than an in-bake
-// 2080×1540 one — it keeps the re-bake as light as possible). Fish, pellets and
-// the near motes are dynamic on top every frame. reduced-motion freezes the
-// ambient clock; poses and positions stay truthful facts.
+// formations (rock / coral / kelp / speckle / contact shadow) and the water
+// surface — are baked ONCE into an offscreen buffer (sceneCache.ts) and blitted
+// each frame under the camera delta; they re-bake only when the camera pans past
+// the margin or the viewport / palette / formation set changes, or when a zoom
+// SETTLES. During an active zoom the bake is not repeated (redrawing every
+// static layer costs far more than a blit) — the buffer is blitted scaled by
+// zoom/bakedZoom instead, so a zoom frame stays a cheap drawImage. The
+// water-column gradient is drawn fresh as the opaque base (cheap, and it keeps
+// its true world-depth anchoring under a pan, and — being a per-frame 1440×900
+// fill rather than an in-bake 2080×1540 one — it keeps the re-bake as light as
+// possible). Fish, pellets and the near motes are dynamic on top every frame.
+// reduced-motion freezes the ambient clock; poses and positions stay truthful
+// facts.
 
 import type { Camera, PaintScene, ScenePalette, Viewport, WorldSnapshot } from '../contracts';
 import { paintFormations } from './formations';
 import { paintFishLayer } from './fishPainter';
-import { foregroundVisibleAtZoom, paintForeground } from './foreground';
 import { PARALLAX, applyLayer, applyScreenSpace, layerTransform, visibleWorldRect } from './layers';
 import { paintPellets } from './pellets';
 import {
@@ -45,9 +44,6 @@ import {
 
 /** world-unit cull padding: covers a grouper (160) plus caudal fan + labels */
 const CULL_MARGIN = 250;
-/** the near-foreground silhouettes are large (tall kelp / wide rock) — a bigger
- * cull pad so a partially-onscreen silhouette is never dropped whole */
-const FG_CULL_MARGIN = 700;
 
 export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, palette, opts) => {
   const clockMs = opts.reducedMotion ? 0 : sim.clockMs;
@@ -61,9 +57,9 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
   paintWaterColumn(ctx, palette, far, viewport);
 
   const cache = getStaticCache(ctx.canvas);
-  // The bake carries an expensive gaussian blur, so a re-bake runs only on a
-  // structural change or a SETTLED zoom (raw sim.clockMs, not the zeroed ambient
-  // clock, times the debounce); an active zoom scales the existing bake instead.
+  // The bake redraws every static layer, so a re-bake runs only on a structural
+  // change or a SETTLED zoom (raw sim.clockMs, not the zeroed ambient clock,
+  // times the debounce); an active zoom scales the existing bake instead.
   if (resolveRebake(cache, snapshot, camera, viewport, palette, opts.reducedMotion, sim.clockMs)) {
     bakeStaticLayers(cache, snapshot, palette, camera, viewport, opts.reducedMotion, clockMs);
   }
@@ -145,11 +141,9 @@ function bakeStaticLayers(
   const far = layerTransform(camera, bufViewport, PARALLAX.far);
   const mid = layerTransform(camera, bufViewport, PARALLAX.mid);
   const actors = layerTransform(camera, bufViewport, PARALLAX.actors);
-  const fg = layerTransform(camera, bufViewport, PARALLAX.foreground);
   const farView = visibleWorldRect(far, bufViewport, CULL_MARGIN);
   const midView = visibleWorldRect(mid, bufViewport, CULL_MARGIN);
   const actorView = visibleWorldRect(actors, bufViewport, CULL_MARGIN);
-  const fgView = visibleWorldRect(fg, bufViewport, FG_CULL_MARGIN);
 
   applyLayer(bctx, far);
   paintSeabed(bctx, palette, farView);
@@ -161,17 +155,6 @@ function bakeStaticLayers(
 
   applyLayer(bctx, actors);
   paintWaterSurface(bctx, palette, actorView, clockMs);
-
-  // Near-foreground silhouettes at the near parallax (they slide fast on a pan),
-  // filled under a real out-of-focus blur. Baked in front of the reef so they
-  // occlude the background; the dynamic fish then draw over them. Baked here →
-  // the banned per-frame `ctx.filter` costs nothing per frame. Only at the
-  // overview / near-tank zooms: it fades out well below the blind-crop (~1.71)
-  // and LOD2 (2.4) zooms so it can never occlude a fish being judged close-up.
-  if (foregroundVisibleAtZoom(camera.zoom)) {
-    applyLayer(bctx, fg);
-    paintForeground(bctx, palette, fgView, bufViewport.dpr);
-  }
 
   cache.key = {
     camX: camera.x,
