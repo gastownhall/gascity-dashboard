@@ -49,3 +49,53 @@ Judge-derived round-2 mandate (three parallel fix agents):
 - POPULATION (fixtures/): raise the hero fixture to ~32-40 fish, mostly
   working, so the mid-water fills with schools; keep all 7 poses + truthful
   manifest + a cap-overflowing rig.
+
+## Round 2 (2026-07-14)
+
+Three parallel fix agents landed (craft rebuild, vertical-banding + schooling,
+population 34 fish); all mechanical gates green (typecheck src+test, 1495
+frontend + 618 backend + 356 shared tests, lint, prettier, build). Re-judged.
+
+| Criterion             | Result                                                                                    | Verdict        |
+| --------------------- | ----------------------------------------------------------------------------------------- | -------------- |
+| 1 Aquarium illusion   | 2/5 median (judges 3,2,2)                                                                 | FAIL           |
+| 2 Fish craft          | 3/5 median (3,3,4); clip-art = FALSE (all 3)                                              | FAIL (close)   |
+| 3 Blind legibility    | 4/7 median (judges 5,4,3)                                                                 | FAIL           |
+| 4 LOD honesty         | 1 mismatch (manifest omits unrigged rig rollup; on-screen "· 6" truthful but unvalidated) | FAIL (trivial) |
+| 5 Camera perf         | p95 33.3 ms @ 200 fish / 1000 pellets (budget < 16)                                       | FAIL           |
+| 6 Truthfulness parity | unit tests green                                                                          | PASS           |
+| 7 Mechanical          | all gates green                                                                           | PASS           |
+
+Big step up from round 1: fish are no longer clip-art (continuous spine hull,
+fins emerge from the outline, faces read), the tank is populated with visible
+schools, seabed is warm sand with contact shadows, light shafts feathered.
+
+Persistent / new blockers for round 3:
+
+- ILLUSION still reads as a BAR CHART: each school sits directly above its own
+  reef mound with a "REEF-KEY · COUNT" label beneath it, evenly spaced (pods
+  map 1:1 to labeled categories); the full-width dashed waterline reads as a
+  gridline; mounds are texture-less blobs; "UNRIGGED" leaks software vocab;
+  upper water still sparse; light shafts evenly spaced.
+- CRAFT one notch from passing: countershading reads FLAT (dark-back/light-belly
+  gradient not landing at crop scale) on all four fish; some near-straight
+  spines; awaiting-input silhouette reads needle-thin; thin tails; weak species
+  differentiation.
+- PERF fails: p95 33 ms (likely O(n^2) boids neighbor search at 200 fish +
+  per-fish gradient allocation; needs a spatial grid + cheaper hot path).
+- HONESTY: add the unrigged bucket to manifest.rigs[] so its on-screen count
+  validates.
+- LEGIBILITY residue: only two confusions remain (round-1 was a 7-way muddle).
+  Median-wrong indices: asleep(2) <-> rate-limited(5) swapped (seabed pair),
+  and awaiting-input(3) -> stalled (surface nose-up). Working, idle, stalled,
+  errored now read. Also: the idle blind crop framed two fish, forcing a guess.
+
+Round-3 mandate (three parallel fix agents): RENDER (labels off at LOD0 / fade
+at LOD1; soft rippled waterline; coral texture + variety; fill upper water +
+vary shafts; organic sunken pellets; STRONG countershading; more spine bow;
+fix needle-thin nose-up fish; sharpen asleep-vs-rate-limited and the surface
+nose-up trio; zero per-frame allocation in the 200-fish path). SIM (spatial-grid
+boids for O(n) neighbors + no hot-path allocation to beat 16ms; widen school
+roam + cluster/vary formations to kill the bar-chart read; asleep-open vs
+rate-limited-tucked and awaiting-at-surface vs stalled-lower position
+separation). FIXTURES (unrigged in manifest.rigs[]; single-fish blind crops).
