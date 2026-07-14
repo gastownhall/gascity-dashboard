@@ -11,6 +11,7 @@ import {
   type AgentNeedsYou,
   type AgentPendingSignal,
 } from 'gas-city-dashboard-shared';
+import { formatAgentName } from '../../lib/agentName';
 import { resolveRigName, type RigNameSource } from '../../lib/rigNames';
 import { CITY_KEY, UNRIGGED_KEY, type FishEntity } from '../contracts';
 import { derivePose, poseWord } from './pose';
@@ -127,12 +128,14 @@ function fishFromSession(
     primaryName: session.session_name,
     displayName: session.display_name,
   });
-  const name = session.alias ?? session.session_name;
+  // rawName routes (stable identity); the DISPLAY name is normalized so a
+  // worktree-path alias reads as "rig · agent", not a filesystem path.
+  const rawName = session.alias ?? session.session_name;
   const taskBeadId = session.active_bead ?? taskBeadIdBySessionId.get(session.id);
   const pose = derivePose(distress, session, nowMs);
   return {
     id: session.session_name,
-    name,
+    name: formatAgentName(rawName),
     species,
     isMayor,
     pose,
@@ -140,7 +143,7 @@ function fishFromSession(
     bellyPct: effectiveContextPct(session),
     homeKey: homeKeyFor(isMayor, session.rig, rigs),
     ...(taskBeadId !== undefined ? { taskBeadId } : {}),
-    linkTo: `/agents/${encodeURIComponent(name)}`,
+    linkTo: `/agents/${encodeURIComponent(rawName)}`,
     tombstoned: false,
   };
 }
@@ -160,7 +163,7 @@ function fishFromAgent(
   const pose = derivePose(distress, undefined, nowMs);
   return {
     id: agent.name,
-    name: agent.name,
+    name: formatAgentName(agent.name),
     species,
     isMayor,
     pose,

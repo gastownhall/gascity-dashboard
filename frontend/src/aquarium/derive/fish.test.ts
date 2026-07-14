@@ -58,6 +58,26 @@ describe('buildFish — session-backed fish', () => {
     expect(fish.every((f) => f.tombstoned === false)).toBe(true);
   });
 
+  it('normalizes a worktree-path alias to a "rig · agent" display name, keeping linkTo on the raw alias', () => {
+    const s = session({
+      session_name: 'gascity-maintenance-pl-gc-1',
+      id: 'gc-1',
+      alias: '/home/ds/gascity-main/gascity-maintenance-pl',
+    });
+    const { fish } = buildFish(inputs({ sessions: [s] }));
+    expect(fish[0]?.name).toBe('gascity · gascity-maintenance-pl');
+    // routing/identity stays the raw alias, never the display form
+    expect(fish[0]?.linkTo).toBe(
+      `/agents/${encodeURIComponent('/home/ds/gascity-main/gascity-maintenance-pl')}`,
+    );
+  });
+
+  it('passes a clean alias through as the display name unchanged', () => {
+    const s = session({ session_name: 'codex-gc-1', id: 'gc-1', alias: 'codex-1' });
+    const { fish } = buildFish(inputs({ sessions: [s] }));
+    expect(fish[0]?.name).toBe('codex-1');
+  });
+
   it('is calm-idle by default with no distress and no in-turn activity', () => {
     const s = session({
       session_name: 'sess-1',
