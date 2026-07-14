@@ -10,6 +10,12 @@ export { MOUTH_OFFSET_WU };
 const TAU = Math.PI * 2;
 const DRIFT_BOB_AMPLITUDE_WU = 10;
 const DRIFT_BOB_PERIOD_MS = 3400;
+// A held pellet tracks its holder's mouth, but the holder is a working fish
+// doing boids — its heading + position twitch every frame, and snapping the
+// pellet exactly onto the mouth each tick makes the bead jitter. Damp toward
+// the mouth with a short time constant instead (frame-rate independent), so
+// the pellet follows smoothly and filters the high-frequency shoal jitter.
+const HELD_FOLLOW_TIME_CONSTANT_S = 0.11;
 /** Fallback gulp duration for a defensively-malformed 'eaten' pellet with no
  * gulpMsLeft (never emitted this way by derive/eating.ts, but sim must not
  * divide-by/compare against undefined). */
@@ -60,9 +66,15 @@ function mouthPhase(seed: number): number {
 function atMouth(inputs: PelletTickInputs, phase: number): PelletKinematics {
   if (inputs.holderKin === undefined) return crestPoint(inputs.formationAnchor, inputs.seed, phase);
   const h = inputs.holderKin;
+  const targetX = h.x + Math.cos(h.heading) * MOUTH_OFFSET_WU;
+  const targetY = h.y + Math.sin(h.heading) * MOUTH_OFFSET_WU;
+  // First frame (no prev) snaps to the mouth; afterward, exponentially damp
+  // toward it so the bead does not twitch with the holder's shoal jitter.
+  if (inputs.prevKin === undefined) return { x: targetX, y: targetY, phase };
+  const alpha = 1 - Math.exp(-inputs.dtS / HELD_FOLLOW_TIME_CONSTANT_S);
   return {
-    x: h.x + Math.cos(h.heading) * MOUTH_OFFSET_WU,
-    y: h.y + Math.sin(h.heading) * MOUTH_OFFSET_WU,
+    x: inputs.prevKin.x + (targetX - inputs.prevKin.x) * alpha,
+    y: inputs.prevKin.y + (targetY - inputs.prevKin.y) * alpha,
     phase,
   };
 }

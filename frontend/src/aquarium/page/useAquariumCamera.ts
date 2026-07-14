@@ -26,6 +26,15 @@ import type { Camera, LodTier, Viewport } from '../contracts';
 
 const BUTTON_ZOOM_FACTOR = 1.4;
 const DOUBLE_CLICK_ZOOM_FACTOR = 2;
+// Wheel zoom is PROPORTIONAL to the scroll delta, not a fixed step per event:
+// trackpads and momentum scroll fire many events, and a fixed 1.4x per event
+// compounds to an uncontrollable 1.4^N. `exp(-normalizedPx * sensitivity)`
+// gives a gentle, delta-proportional zoom; clamped per event so one big notch
+// can't jump. Tuned for ~1.12x per typical 100px mouse notch.
+const WHEEL_ZOOM_SENSITIVITY = 0.0011;
+const WHEEL_ZOOM_MIN_FACTOR = 0.5;
+const WHEEL_ZOOM_MAX_FACTOR = 2;
+const LINE_HEIGHT_PX = 16;
 const KEYBOARD_PAN_PX = 60;
 const HASH_WRITE_THROTTLE_MS = 400;
 
@@ -50,6 +59,26 @@ interface DragState {
   pointerId: number;
   lastX: number;
   lastY: number;
+}
+
+/**
+ * Zoom multiplier for one wheel event, proportional to the scroll delta and
+ * normalized across deltaMode (pixel / line / page), clamped so a single large
+ * event can't jump. Exported for tests. deltaY < 0 (scroll up) zooms in (>1).
+ */
+export function wheelZoomFactor(
+  deltaY: number,
+  deltaMode: number,
+  viewportHeightPx: number,
+): number {
+  const px =
+    deltaMode === 1
+      ? deltaY * LINE_HEIGHT_PX
+      : deltaMode === 2
+        ? deltaY * viewportHeightPx
+        : deltaY;
+  const factor = Math.exp(-px * WHEEL_ZOOM_SENSITIVITY);
+  return Math.min(WHEEL_ZOOM_MAX_FACTOR, Math.max(WHEEL_ZOOM_MIN_FACTOR, factor));
 }
 
 export function useAquariumCamera(viewport: Viewport, onChange?: () => void): AquariumCameraApi {
@@ -103,7 +132,7 @@ export function useAquariumCamera(viewport: Viewport, onChange?: () => void): Aq
     (e: WheelEvent<HTMLCanvasElement>) => {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
-      const factor = e.deltaY < 0 ? BUTTON_ZOOM_FACTOR : 1 / BUTTON_ZOOM_FACTOR;
+      const factor = wheelZoomFactor(e.deltaY, e.deltaMode, viewportRef.current.cssHeight);
       commit(
         zoomAtCursor(
           cameraRef.current,

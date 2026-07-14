@@ -40,6 +40,27 @@ describe('tickPellet — held', () => {
     expect(Number.isFinite(kin.x)).toBe(true);
     expect(Math.hypot(kin.x - ANCHOR.x, kin.y - ANCHOR.y)).toBeLessThan(ANCHOR.radius * 2);
   });
+
+  it('damps toward the mouth instead of snapping when the holder jitters (anti-jitter)', () => {
+    const holderKin = { x: 100, y: 200, heading: 0, speed: 70, phase: 0 };
+    const target = 100 + MOUTH_OFFSET_WU;
+    // Pellet was lagging behind at x=0; one tick moves it PART of the way, not
+    // all the way, to the mouth — that partial follow is what kills the twitch.
+    const prevKin = { x: 0, y: 200, phase: 0 };
+    const kin = tickPellet(baseInputs({ state: 'held', holderKin, prevKin }));
+    expect(kin.x).toBeGreaterThan(prevKin.x);
+    expect(kin.x).toBeLessThan(target);
+  });
+
+  it('converges to the mouth over many ticks (smoothing is stable, not lossy)', () => {
+    const holderKin = { x: 100, y: 200, heading: 0, speed: 70, phase: 0 };
+    const target = 100 + MOUTH_OFFSET_WU;
+    let kin = { x: 0, y: 200, phase: 0 };
+    for (let i = 0; i < 120; i += 1) {
+      kin = tickPellet(baseInputs({ state: 'held', holderKin, prevKin: kin }));
+    }
+    expect(kin.x).toBeCloseTo(target, 2);
+  });
 });
 
 describe('tickPellet — sunken', () => {
