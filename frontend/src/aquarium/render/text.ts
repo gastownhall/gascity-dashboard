@@ -16,6 +16,8 @@ import type { LayerTransform } from './layers';
 import { PARALLAX, applyScreenSpace, layerTransform, worldToScreen } from './layers';
 import { lod2Fade, rigLabelFade } from './lod';
 import type { Pt } from './mathUtil';
+import { withHueChroma } from './oklch';
+import { RIG_CHROMA, rigHue } from './rigHue';
 
 export function paintTextLayers(
   ctx: CanvasRenderingContext2D,
@@ -69,17 +71,27 @@ function paintRigLabels(
 ): void {
   ctx.font = `600 11px ${palette.fontFamily}`;
   ctx.textAlign = 'center';
-  ctx.fillStyle = palette.textMuted;
   ctx.globalAlpha = alpha;
   setLetterSpacing(ctx, '1px');
   for (const formation of snapshot.formations) {
     if (formation.key === CITY_KEY) continue;
     const pos = worldToScreen(mid, formation.anchorX, formation.anchorY);
     if (offscreen(pos, viewport, 140)) continue;
+    ctx.fillStyle = rigLabelColor(formation.key, palette);
     ctx.fillText(`${formation.key.toUpperCase()} · ${formation.openBeadTotal}`, pos.x, pos.y + 26);
   }
   setLetterSpacing(ctx, '0px');
   ctx.globalAlpha = 1;
+}
+
+/** The rig's own hue as a legible label colour, so the operator reads a rig's
+ * identity straight off its overview label — no zooming to a school to learn
+ * which colour is which. Neutral strata (the mayor's city / unrigged) keep the
+ * muted text colour. Shares the fish-flank chroma (RIG_CHROMA) so a label reads
+ * as the same colour as its school. */
+function rigLabelColor(key: string, palette: ScenePalette): string {
+  const hue = rigHue(key);
+  return hue === null ? palette.textMuted : withHueChroma(palette.textMuted, hue, RIG_CHROMA);
 }
 
 function paintOverflow(
