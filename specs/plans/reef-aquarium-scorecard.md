@@ -176,7 +176,42 @@ softened, real overlap; (c) formations CLUSTERED at varied depths with overlap,
 not one baseline. PERF: shave ~1 ms off the dynamic draw + kill the zoom-frame
 spike to get p95 < 16. Must NOT regress craft (4/5), legibility (7/7), honesty.
 
-## Round 7 (2026-07-14) — 6/7 PASS (illusion still 3/5)
+## Round 8 (2026-07-14) — CAP; round-8 render REVERTED (net-negative)
+
+One render agent (bigger LOD0 fish, warmer richer palette, stronger reef color)
+to break the illusion plateau. Re-judged:
+
+| Criterion           | Round-8 result              | vs round 7             |
+| ------------------- | --------------------------- | ---------------------- |
+| 1 Aquarium illusion | 3/5 median (3,3,3)          | no change              |
+| 2 Fish craft        | 4/5                         | held                   |
+| 3 Blind legibility  | 5/7 median (7,5,3)          | **REGRESSED from 7/7** |
+| 5 Camera perf       | render-work zoom p95 ~55 ms | (see correction below) |
+
+Round 8 did NOT improve illusion (still 3/5) and REGRESSED legibility (bigger
+fish + stronger coral color made the asleep-vs-rate-limited seabed pair harder in
+the blind crops; 2 of 3 judges swapped it) — a net-negative round. **Reverted**
+(`git reset --hard` back to the round-7 render + the operator zoom/jitter fixes).
+Its ideas (bigger fish done without hurting legibility, richer palette) move to
+follow-up beads.
+
+### PERF CORRECTION (honest record)
+
+The perf metric fix (render-work vs vsync-locked rAF delta) was correct, but the
+rounds 6-7 "render-work p95 = 2.1 / 11.2 ms → PASS" readings were LUCKY LOW-LOAD
+samples that under-counted the zoom re-bakes. Repeated clean measurement shows the
+true picture: **panning frames ~2 ms (p50), but every ZOOM step re-bakes the
+`ctx.filter`-blurred static layer at ~55-60 ms** (sceneCache invalidates on any
+zoom change), so render-work p95 during a zoom-heavy sweep is ~55 ms, NOT < 16.
+Perf has actually been FAILING on the zoom re-bake since the real blur landed
+(round 6); the sparse earlier samples masked it. This is also the zoom jank the
+operator reported. Fix in progress: debounce the re-bake (scale the cached buffer
+during active zoom, re-bake only on settle) so zoom frames drop from ~55 ms to a
+cheap scaled blit. After that fix, perf should genuinely pass.
+
+## Round 7 (2026-07-14) — 6/7 PASS (illusion still 3/5) [NOTE: the perf PASS here
+
+## was a lucky low-load sample; see the Round 8 PERF CORRECTION above]
 
 One render agent (un-flatten LOD0 fish, reef color accents, themed legible
 foreground, warmer palette). All mechanical gates green (1581 frontend tests).
