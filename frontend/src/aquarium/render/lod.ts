@@ -1,7 +1,7 @@
 // LOD fades computed locally from the pinned zoom thresholds. Text layers
 // fade in across a window around each threshold instead of popping.
 
-import { LOD2_ZOOM } from '../contracts';
+import { LOD1_ZOOM, LOD2_ZOOM } from '../contracts';
 import { clamp01 } from './mathUtil';
 
 /** Smoothstep 0→1 across [0.8·threshold, 1.1·threshold]. */
@@ -10,6 +10,14 @@ export function fadeAcross(zoom: number, threshold: number): number {
   const hi = threshold * 1.1;
   const t = clamp01((zoom - lo) / (hi - lo));
   return t * t * (3 - 2 * t);
+}
+
+/** Rig names + open-bead counts fade in across LOD1. At the LOD0 overview
+ * (fit zoom ≈ 0.36) this is 0: the tank is an unlabeled reef, so the scene
+ * never reads as labeled categorical bars. Labels appear only as the operator
+ * zooms toward a rig (the "map label" arrives with proximity). */
+export function lod1Fade(zoom: number): number {
+  return fadeAcross(zoom, LOD1_ZOOM);
 }
 
 /** Full captions and pellet id labels fade in across LOD2. Fish identity text

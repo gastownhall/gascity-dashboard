@@ -45,8 +45,9 @@ export function paintFishLayer(
   view: ViewRect,
   clockMs: number,
 ): void {
-  const normal = countershadeColors(palette, false);
-  const dim = countershadeColors(palette, true);
+  const normal = countershadeColors(palette, 'normal');
+  const dim = countershadeColors(palette, 'dim');
+  const tense = countershadeColors(palette, 'tense');
   const drawnPx = 85 * layer.scale;
   const richBudget = fishList.length <= RICH_FISH_BUDGET && drawnPx >= RICH_MIN_PX;
   for (const fish of fishList) {
@@ -55,8 +56,9 @@ export function paintFishLayer(
     // yet is skipped rather than painted at an invented position
     if (kin === undefined) continue;
     if (!rectContains(view, kin.x, kin.y)) continue;
-    const dimmed = attitudeForPose(fish.pose).dimmed || fish.tombstoned;
-    paintFish(ctx, fish, kin, dimmed ? dim : normal, layer, clockMs, richBudget);
+    const attitude = attitudeForPose(fish.pose);
+    const colors = attitude.dimmed || fish.tombstoned ? dim : attitude.tense ? tense : normal;
+    paintFish(ctx, fish, kin, colors, layer, clockMs, richBudget);
   }
   applyLayer(ctx, layer);
 }

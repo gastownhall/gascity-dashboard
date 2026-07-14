@@ -25,7 +25,9 @@ const DEG = Math.PI / 180;
 
 export function fishFins(spine: FishSpine, hull: FishHull, swimPhase: number): FishFins {
   const p = SPECIES[spine.species];
-  const fold = spine.attitude.finsFolded ? 0.28 : 1;
+  // finClamp is 1 for a spread fish and the pose's clamp fraction when folded;
+  // rate-limited clamps hardest (fins pinned to the body), stalled less so
+  const fold = spine.attitude.finClamp;
   return {
     dorsal: buildDorsal(spine, hull, p, fold, swimPhase),
     pectoral: buildPectoral(spine, hull, p, fold, swimPhase),

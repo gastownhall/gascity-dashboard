@@ -1,9 +1,10 @@
 // Water atmosphere: the one licensed vertical water-column gradient, a warm
 // sand (light) / muted deep (dark) seabed with a dune ridge + speckle grain +
-// contact darkening, soft volumetric light shafts that feather with depth,
-// drifting particulate, a depth vignette, and the dashed waterline. All
-// variation is deterministic (hash + clockMs); Math.random never appears here.
-// reduced-motion arrives as a frozen clock upstream.
+// contact darkening, soft volumetric light shafts (irregular spacing/width/
+// angle) that feather with depth, multi-depth drifting particulate, a depth
+// vignette, and a soft rippled water surface with faint caustic shimmer (no
+// hard dashed rule). All variation is deterministic (hash + clockMs);
+// Math.random never appears here. reduced-motion arrives as a frozen clock.
 
 import type { ScenePalette, Viewport } from '../contracts';
 import { WORLD } from '../contracts';
@@ -15,7 +16,10 @@ import { adjustL, mixOklch, parseOklch, withAlpha } from './oklch';
 
 interface WaterDerived {
   mote: string;
+  deepDrift: string;
   vignette: string;
+  /** opaque bright surface hue; alpha applied per gradient/shimmer stop */
+  surfaceHue: string;
 }
 
 const derivedCache = new WeakMap<ScenePalette, WaterDerived>();
@@ -25,7 +29,9 @@ function derived(palette: ScenePalette): WaterDerived {
   if (hit !== undefined) return hit;
   const built: WaterDerived = {
     mote: withAlpha(adjustL(palette.hazeFar, 10), 0.4),
+    deepDrift: withAlpha(adjustL(palette.hazeFar, 6), 0.22),
     vignette: withAlpha(adjustL(palette.waterBottom, -10), 0.32),
+    surfaceHue: adjustL(palette.waterTop, 12),
   };
   derivedCache.set(palette, built);
   return built;
@@ -173,12 +179,13 @@ function paintGrain(
 // ---------------------------------------------------------------------------
 // Light shafts
 
-const SHAFT_COUNT = 4;
+const SHAFT_COUNT = 6;
 
 /** Soft volumetric light shafts from the waterline: a vertical gradient fades
  * each beam into depth (no hard triangle edge), and a wide faint halo + narrow
- * bright core feather the sides. Width/angle vary per shaft. Far layer must be
- * installed. */
+ * bright core feather the sides. Spacing, width, and angle are irregular per
+ * shaft (stratified slice + hashed jitter) so the beams never read as a
+ * mechanical evenly-spaced comb. Far layer must be installed. */
 export function paintLightShafts(
   ctx: CanvasRenderingContext2D,
   palette: ScenePalette,
@@ -188,11 +195,13 @@ export function paintLightShafts(
   const baseA = parseOklch(palette.lightShaft).alpha;
   const topY = WORLD.waterlineY;
   for (let i = 0; i < SHAFT_COUNT; i += 1) {
-    const anchorX = (0.1 + 0.26 * i + hash01(i * 11 + 3) * 0.12) * WORLD.width;
-    const topWidth = 150 + hash01(i * 17 + 5) * 190;
+    // irregular gaps: each shaft owns a slice but jitters hard within it
+    const anchorX = ((i + 0.1 + hash01(i * 31 + 5) * 0.85) / SHAFT_COUNT) * WORLD.width;
+    const topWidth = 80 + hash01(i * 17 + 5) * 260;
     const sway = Math.sin((clockMs / 1000) * 0.03 * TAU + i * 2.1) * 90;
-    const slant = 260 + hash01(i * 23 + 7) * 260 + sway;
-    const depth = WORLD.height * (0.62 + hash01(i * 19 + 2) * 0.22);
+    // angle spans near-vertical to steeply raked (some negative-leaning)
+    const slant = (hash01(i * 23 + 7) - 0.32) * 640 + sway;
+    const depth = WORLD.height * (0.5 + hash01(i * 19 + 2) * 0.36);
     if (anchorX + topWidth * 2 + Math.abs(slant) < view.left) continue;
     if (anchorX - topWidth - Math.abs(slant) > view.right) continue;
     // wide faint halo, then a narrow bright core — soft feathered sides
@@ -279,21 +288,101 @@ export function paintDepthVignette(
   ctx.fillRect(0, top, viewport.cssWidth, viewport.cssHeight - top);
 }
 
-/** Dashed waterline at WORLD.waterlineY. Actors layer must be installed;
- * dash rhythm and stroke stay ~constant in css px at any zoom. */
-export function paintWaterline(
+const SURFACE_BAND_DEPTH = 220; // world units the brighter surface fades over
+const SURFACE_RIPPLE_AMP = 10;
+
+/** rippled surface height at world x (two harmonics + slow clock drift) */
+function surfaceRippleY(x: number, t: number): number {
+  return (
+    WORLD.waterlineY -
+    SURFACE_RIPPLE_AMP * Math.sin(x * 0.0052 + t * 0.5) -
+    0.4 * SURFACE_RIPPLE_AMP * Math.sin(x * 0.017 + t * 0.9)
+  );
+}
+
+/** Soft rendered water surface: a brighter band under a gentle sine ripple with
+ * faint caustic shimmer, fading into depth — NOT a hard full-width dashed rule
+ * (which read as a chart gridline). Actors layer must be installed. */
+export function paintWaterSurface(
   ctx: CanvasRenderingContext2D,
   palette: ScenePalette,
   view: ViewRect,
-  zoom: number,
+  clockMs: number,
 ): void {
-  if (WORLD.waterlineY < view.top || WORLD.waterlineY > view.bottom) return;
-  ctx.strokeStyle = palette.waterline;
-  ctx.lineWidth = 1.25 / zoom;
-  ctx.setLineDash([9 / zoom, 7 / zoom]);
+  const top = WORLD.waterlineY - SURFACE_RIPPLE_AMP * 1.5;
+  const bottom = WORLD.waterlineY + SURFACE_BAND_DEPTH;
+  if (bottom < view.top || top > view.bottom) return;
+  const left = Math.max(view.left, 0);
+  const right = Math.min(view.right, WORLD.width);
+  if (right <= left) return;
+  const hue = derived(palette).surfaceHue;
+  const t = clockMs / 1000;
+  const step = Math.max(22, (right - left) / 90);
+
+  const grad = ctx.createLinearGradient(0, top, 0, bottom);
+  grad.addColorStop(0, withAlpha(hue, 0.5));
+  grad.addColorStop(0.4, withAlpha(hue, 0.14));
+  grad.addColorStop(1, withAlpha(hue, 0));
+  ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.moveTo(Math.max(view.left, 0), WORLD.waterlineY);
-  ctx.lineTo(Math.min(view.right, WORLD.width), WORLD.waterlineY);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  ctx.moveTo(left, bottom);
+  ctx.lineTo(left, surfaceRippleY(left, t));
+  for (let x = left; x <= right; x += step) ctx.lineTo(x, surfaceRippleY(x, t));
+  ctx.lineTo(right, surfaceRippleY(right, t));
+  ctx.lineTo(right, bottom);
+  ctx.closePath();
+  ctx.fill();
+  paintCaustics(ctx, hue, left, right, step, t);
 }
+
+/** faint wavy bright lines drifting just under the surface — light dappling */
+function paintCaustics(
+  ctx: CanvasRenderingContext2D,
+  hue: string,
+  left: number,
+  right: number,
+  step: number,
+  t: number,
+): void {
+  ctx.strokeStyle = withAlpha(hue, 0.16);
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  for (let band = 0; band < 3; band += 1) {
+    const baseY = WORLD.waterlineY + 26 + band * 34;
+    const drift = t * (0.6 + band * 0.2) + band * 2.1;
+    ctx.beginPath();
+    ctx.moveTo(left, baseY);
+    for (let x = left; x <= right; x += step) {
+      ctx.lineTo(x, baseY + 7 * Math.sin(x * 0.006 + drift) + 3 * Math.sin(x * 0.02 - drift));
+    }
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+}
+
+/** Far-layer suspended plankton/marine-snow: large, faint, slow motes that fill
+ * the upper water column with depth-life (no fish-shaped decoys — the
+ * truthfulness rule forbids anything mistakable for a session). Far layer must
+ * be installed. Deterministic per mote index. */
+export function paintDeepDrift(
+  ctx: CanvasRenderingContext2D,
+  palette: ScenePalette,
+  view: ViewRect,
+  clockMs: number,
+): void {
+  ctx.fillStyle = derived(palette).deepDrift;
+  ctx.beginPath();
+  const t = clockMs / 1000;
+  for (let i = 0; i < DEEP_DRIFT_COUNT; i += 1) {
+    const drift = 3 + hash01(i * 13 + 4) * 5;
+    const x = hash01(i * 2 + 9) * WORLD.width + Math.sin(t * 0.12 + i * 0.9) * 22;
+    const y = (hash01(i * 3 + 5) * WORLD.height + t * drift) % WORLD.height;
+    if (x < view.left || x > view.right || y < view.top || y > view.bottom) continue;
+    const r = 2.5 + hash01(i * 5 + 2) * 4.5;
+    ctx.moveTo(x + r, y);
+    ctx.arc(x, y, r, 0, TAU);
+  }
+  ctx.fill();
+}
+
+const DEEP_DRIFT_COUNT = 140;

@@ -14,7 +14,7 @@ import { CITY_KEY } from '../contracts';
 import { SPECIES } from './fishGeometry';
 import type { LayerTransform } from './layers';
 import { PARALLAX, applyScreenSpace, layerTransform, worldToScreen } from './layers';
-import { lod2Fade } from './lod';
+import { lod1Fade, lod2Fade } from './lod';
 import type { Pt } from './mathUtil';
 
 export function paintTextLayers(
@@ -27,11 +27,16 @@ export function paintTextLayers(
 ): void {
   applyScreenSpace(ctx, viewport);
   ctx.textBaseline = 'alphabetic';
+  const f1 = lod1Fade(camera.zoom);
   const f2 = lod2Fade(camera.zoom);
   const mid = layerTransform(camera, viewport, PARALLAX.mid);
   const act = layerTransform(camera, viewport, PARALLAX.actors);
-  paintRigLabels(ctx, snapshot, palette, mid, viewport);
-  paintOverflow(ctx, snapshot, palette, mid, viewport);
+  // rig names/counts are the strongest "axis label" tell: withheld entirely at
+  // the LOD0 overview, faded in only as the camera approaches a rig
+  if (f1 > 0.01) {
+    paintRigLabels(ctx, snapshot, palette, mid, viewport, f1);
+    paintOverflow(ctx, snapshot, palette, mid, viewport, f1);
+  }
   if (f2 > 0.01) {
     paintCaptions(ctx, snapshot, sim, palette, act, viewport, f2);
     paintPelletLabels(ctx, snapshot, sim, palette, act, viewport, f2);
@@ -59,10 +64,12 @@ function paintRigLabels(
   palette: ScenePalette,
   mid: LayerTransform,
   viewport: Viewport,
+  alpha: number,
 ): void {
   ctx.font = `600 11px ${palette.fontFamily}`;
   ctx.textAlign = 'center';
   ctx.fillStyle = palette.textMuted;
+  ctx.globalAlpha = alpha;
   setLetterSpacing(ctx, '1px');
   for (const formation of snapshot.formations) {
     if (formation.key === CITY_KEY) continue;
@@ -71,6 +78,7 @@ function paintRigLabels(
     ctx.fillText(`${formation.key.toUpperCase()} · ${formation.openBeadTotal}`, pos.x, pos.y + 26);
   }
   setLetterSpacing(ctx, '0px');
+  ctx.globalAlpha = 1;
 }
 
 function paintOverflow(
@@ -79,10 +87,12 @@ function paintOverflow(
   palette: ScenePalette,
   mid: LayerTransform,
   viewport: Viewport,
+  alpha: number,
 ): void {
   ctx.font = `600 11px ${palette.fontFamily}`;
   ctx.textAlign = 'center';
   ctx.fillStyle = palette.textMuted;
+  ctx.globalAlpha = alpha;
   for (const formation of snapshot.formations) {
     if (formation.key === CITY_KEY) continue;
     const overflow = snapshot.pelletOverflow[formation.key];
@@ -95,6 +105,7 @@ function paintOverflow(
     if (offscreen(pos, viewport, 60)) continue;
     ctx.fillText(`+${overflow}`, pos.x, pos.y);
   }
+  ctx.globalAlpha = 1;
 }
 
 interface FishAnchor {

@@ -65,30 +65,18 @@ function paintMouth(
   ctx.lineCap = 'butt';
 }
 
-/** upward gape: a dark rounded mouth cavity opening off the nose */
+/** big upward gape: a round open mouth cavity at the snout — the "feed me"
+ * tell, deliberately oversized so it separates from the closed-mouth stalled
+ * pose at a ~150px crop */
 function paintGape(ctx: CanvasRenderingContext2D, head: FishHead, outline: string): void {
-  const r = head.eyeRadius;
+  const r = head.eyeRadius * 1.6;
   const dir = head.mouthDir;
-  const px = -dir.y;
-  const py = dir.x;
-  const cx = head.mouth.x - dir.x * r * 0.6;
-  const cy = head.mouth.y - dir.y * r * 0.6;
+  const angle = Math.atan2(dir.y, dir.x);
+  const cx = head.mouth.x + dir.x * r * 0.2;
+  const cy = head.mouth.y + dir.y * r * 0.2;
   ctx.fillStyle = outline;
   ctx.beginPath();
-  ctx.moveTo(head.mouth.x + dir.x * r * 0.5, head.mouth.y + dir.y * r * 0.5);
-  ctx.quadraticCurveTo(
-    cx + px * r * 1.3,
-    cy + py * r * 1.3,
-    cx - dir.x * r * 1.4,
-    cy - dir.y * r * 1.4,
-  );
-  ctx.quadraticCurveTo(
-    cx - px * r * 1.3,
-    cy - py * r * 1.3,
-    head.mouth.x + dir.x * r * 0.5,
-    head.mouth.y + dir.y * r * 0.5,
-  );
-  ctx.closePath();
+  ctx.ellipse(cx, cy, r * 1.18, r * 0.86, angle, 0, TAU);
   ctx.fill();
 }
 
@@ -123,19 +111,38 @@ function paintEye(
     ctx.fill();
     return;
   }
-  ctx.strokeStyle = colors.outline;
-  ctx.beginPath();
   if (attitude.eye === 'hollow') {
+    ctx.strokeStyle = colors.outline;
+    ctx.beginPath();
     ctx.arc(eye.x, eye.y, r * 0.9, 0, TAU);
     ctx.stroke();
-  } else if (attitude.eye === 'closed') {
-    ctx.arc(eye.x, eye.y - r * 0.3, r, TAU * 0.06, TAU * 0.44);
-    ctx.stroke();
-  } else {
-    ctx.moveTo(eye.x - r * 0.8, eye.y - r * 0.8);
-    ctx.lineTo(eye.x + r * 0.8, eye.y + r * 0.8);
-    ctx.moveTo(eye.x + r * 0.8, eye.y - r * 0.8);
-    ctx.lineTo(eye.x - r * 0.8, eye.y + r * 0.8);
-    ctx.stroke();
+    return;
   }
+  if (attitude.eye === 'closed') {
+    // a heavy lidded crescent — an unmistakable shut eye for the sleeper
+    ctx.strokeStyle = colors.outline;
+    ctx.lineWidth = lineWidth * 1.7;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(eye.x, eye.y - r * 0.25, r * 1.2, TAU * 0.07, TAU * 0.43);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    return;
+  }
+  // cross: a dead fish — a pale blind disc under an oversized, heavy X
+  const k = r * 1.15;
+  ctx.fillStyle = colors.belly;
+  ctx.beginPath();
+  ctx.arc(eye.x, eye.y, r * 1.1, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = colors.outline;
+  ctx.lineWidth = lineWidth * 1.8;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(eye.x - k, eye.y - k);
+  ctx.lineTo(eye.x + k, eye.y + k);
+  ctx.moveTo(eye.x + k, eye.y - k);
+  ctx.lineTo(eye.x - k, eye.y + k);
+  ctx.stroke();
+  ctx.lineCap = 'butt';
 }

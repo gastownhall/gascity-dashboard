@@ -23,37 +23,61 @@ function palette(mood: ThemeMood): ScenePalette {
 function L(color: string): number {
   return parseOklch(color).l;
 }
+function C(color: string): number {
+  return parseOklch(color).c;
+}
 
 describe('countershadeColors', () => {
   it('runs dark dorsal → light ventral in both moods (kills the flat clip-art read)', () => {
     for (const mood of ['light', 'dark'] as const) {
-      const c = countershadeColors(palette(mood), false);
+      const c = countershadeColors(palette(mood), 'normal');
       expect(L(c.dorsal), `${mood} dorsal<mid`).toBeLessThan(L(c.mid));
       expect(L(c.mid), `${mood} mid<ventral`).toBeLessThan(L(c.ventral));
       expect(L(c.ventral), `${mood} ventral≤belly`).toBeLessThanOrEqual(L(c.belly));
     }
   });
 
-  it('the dorsal→ventral lightness delta is large enough to read at ~150px', () => {
+  it('the dorsal→ventral lightness delta is large enough to read strongly at ~150px', () => {
+    // round-2 delta (~31 on navy) read flat; round-3 demands a much bigger gap
     for (const mood of ['light', 'dark'] as const) {
-      const c = countershadeColors(palette(mood), false);
-      expect(L(c.ventral) - L(c.dorsal), mood).toBeGreaterThan(20);
+      const c = countershadeColors(palette(mood), 'normal');
+      expect(L(c.ventral) - L(c.dorsal), mood).toBeGreaterThan(38);
     }
   });
 
-  it('the dimmed (asleep/tombstone) variant is muted: lower contrast than normal', () => {
+  it('the lit belly is genuinely desaturated relative to the dark back (not just lighter navy)', () => {
+    for (const mood of ['light', 'dark'] as const) {
+      const c = countershadeColors(palette(mood), 'normal');
+      expect(C(c.belly), `${mood} belly chroma`).toBeLessThan(C(c.dorsal));
+      expect(C(c.ventral), `${mood} ventral chroma`).toBeLessThan(C(c.dorsal));
+    }
+  });
+
+  it('the dimmed (asleep/tombstone) variant is muted: lower contrast AND lower chroma than normal', () => {
     for (const mood of ['light', 'dark'] as const) {
       const p = palette(mood);
-      const normal = countershadeColors(p, false);
-      const dim = countershadeColors(p, true);
+      const normal = countershadeColors(p, 'normal');
+      const dim = countershadeColors(p, 'dim');
       const normalDelta = L(normal.ventral) - L(normal.dorsal);
       const dimDelta = L(dim.ventral) - L(dim.dorsal);
       expect(dimDelta, mood).toBeLessThan(normalDelta);
+      // asleep reads washed-out, never a vivid dark fish
+      expect(C(dim.mid), `${mood} dim chroma`).toBeLessThan(C(normal.mid));
+    }
+  });
+
+  it('the tense (rate-limited) variant is darker AND more saturated than normal — awake, held', () => {
+    for (const mood of ['light', 'dark'] as const) {
+      const p = palette(mood);
+      const normal = countershadeColors(p, 'normal');
+      const tense = countershadeColors(p, 'tense');
+      expect(L(tense.mid), `${mood} tense darker`).toBeLessThan(L(normal.mid));
+      expect(C(tense.dorsal), `${mood} tense saturated`).toBeGreaterThan(C(normal.dorsal));
     }
   });
 
   it('the pectoral light tone is brighter than the dark back (fin catches light)', () => {
-    const c = countershadeColors(palette('light'), false);
+    const c = countershadeColors(palette('light'), 'normal');
     expect(L(c.finLight)).toBeGreaterThan(L(c.finRoot));
   });
 });

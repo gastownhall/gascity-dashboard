@@ -272,10 +272,15 @@ describe('attitudes', () => {
     expect(attitudeForPose('errored').eye).toBe('cross');
   });
 
-  it('rate-limited compresses the body to 0.8 and folds the fins', () => {
-    const spine = spineFor('rate-limited', 'role', 0, 0);
-    const length = at(spine.points, 0).x - at(spine.points, spine.points.length - 1).x;
-    expect(length).toBeCloseTo(SPECIES.role.length * 0.8, 6);
+  it('rate-limited hard-compresses the body and clamps the fins tight', () => {
+    const bodyLen = (pose: AquariumPose): number => {
+      const s = spineFor(pose, 'role', 0, 0);
+      return dist(at(s.points, 0), at(s.points, s.points.length - 1));
+    };
+    // squeezed: the nose→tail span collapses well below a swimming fish
+    const ratio = bodyLen('rate-limited') / bodyLen('working');
+    expect(ratio).toBeLessThan(0.72);
+    expect(ratio).toBeGreaterThan(0.5);
     // perpendicular height of the fin peak above its base chord
     const peakHeight = (pose: AquariumPose): number => {
       const s = spineFor(pose, 'role', 0, 0);
@@ -290,10 +295,31 @@ describe('attitudes', () => {
         chord
       );
     };
-    expect(peakHeight('rate-limited')).toBeLessThan(0.5 * peakHeight('working'));
+    // fins clamped harder than the (already folded) stalled fish
+    expect(peakHeight('rate-limited')).toBeLessThan(0.4 * peakHeight('working'));
+    expect(peakHeight('rate-limited')).toBeLessThan(peakHeight('stalled'));
   });
 
-  it('asleep lies straight and still with closed eyes, dimmed', () => {
+  it('asleep and rate-limited (the seabed pair) read distinctly, not alike', () => {
+    const asleep = attitudeForPose('asleep');
+    const rl = attitudeForPose('rate-limited');
+    // asleep: becalmed sleeper — dimmed, eyes shut, full-length, level
+    expect(asleep.dimmed).toBe(true);
+    expect(asleep.eye).toBe('closed');
+    expect(asleep.tense).toBe(false);
+    expect(asleep.xScale).toBe(1);
+    // rate-limited: squeezed & held — NOT dimmed, tense/darker, awake eye, short
+    expect(rl.dimmed).toBe(false);
+    expect(rl.tense).toBe(true);
+    expect(rl.eye).toBe('hollow');
+    expect(rl.xScale).toBeLessThan(0.7);
+    // they must not share the tell-tale signals
+    expect(asleep.dimmed).not.toBe(rl.dimmed);
+    expect(asleep.eye).not.toBe(rl.eye);
+    expect(asleep.finClamp).not.toBe(rl.finClamp);
+  });
+
+  it('asleep lies level and still with closed eyes, dimmed, no resting bow', () => {
     const spine = spineFor('asleep', 'pool', 2.1, 1);
     for (const p of spine.points) {
       expect(Math.abs(p.y)).toBeLessThan(1e-9);
@@ -302,5 +328,74 @@ describe('attitudes', () => {
     expect(attitude.eye).toBe('closed');
     expect(attitude.dimmed).toBe(true);
     expect(attitude.finsFolded).toBe(true);
+    expect(attitude.restBow).toBe(0);
+  });
+});
+
+describe('resting spine bow (findings: near-straight calm poses)', () => {
+  const L = SPECIES.role.length;
+  const maxChordOffset = (spine: FishSpine): number => {
+    const nose = at(spine.points, 0);
+    const tail = at(spine.points, spine.points.length - 1);
+    const dx = tail.x - nose.x;
+    const dy = tail.y - nose.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return Math.max(
+      ...spine.points.map((p) => Math.abs(((p.x - nose.x) * dy - (p.y - nose.y) * dx) / len)),
+    );
+  };
+
+  it('calm poses carry a positive resting bow, phase-independent', () => {
+    for (const pose of ['working', 'idle'] as const) {
+      expect(attitudeForPose(pose).restBow).toBeGreaterThan(0);
+      // at EVERY swim-cycle instant the body keeps a readable S — never a stick
+      let minBow = Infinity;
+      for (let k = 0; k < 48; k += 1) {
+        const spine = fishSpine('role', attitudeForPose(pose), (k / 48) * TAU, 0.4);
+        minBow = Math.min(minBow, maxChordOffset(spine));
+      }
+      expect(minBow, pose).toBeGreaterThan(0.02 * L);
+    }
+  });
+});
+
+describe('surface cluster separability (awaiting-input / stalled / errored)', () => {
+  it('awaiting-input gapes open; stalled holds a closed mouth, steeper', () => {
+    const awaiting = attitudeForPose('awaiting-input');
+    const stalled = attitudeForPose('stalled');
+    expect(awaiting.mouthOpen).toBe(true);
+    expect(stalled.mouthOpen).toBe(false);
+    // stalled noses higher than awaiting so the two never overlap at the surface
+    expect(bodyAngle(spineFor('stalled', 'role', 0, 0))).toBeGreaterThan(
+      bodyAngle(spineFor('awaiting-input', 'role', 0, 0)),
+    );
+    // awaiting keeps spread fins (not clamped) so its silhouette stays fish-wide
+    expect(awaiting.finClamp).toBe(1);
+    expect(stalled.finClamp).toBeLessThan(1);
+  });
+
+  it('awaiting-input keeps a full-width, non-needle body and a broad tail', () => {
+    const spine = spineFor('awaiting-input', 'role', 0.6, 1);
+    const hull = fishHull(spine, 'role', 1);
+    // mid-body width is a real fraction of length, not a sliver
+    const mid = Math.floor(spine.points.length / 2);
+    const width = dist(at(hull.dorsal, mid), at(hull.ventral, mid));
+    expect(width).toBeGreaterThan(0.18 * SPECIES.role.length);
+    // caudal fan spans real area (outer tip to outer tip), not a thread
+    const caudal = fishFins(spine, hull, 0.6).caudal;
+    const span = dist(at(caudal, 1), at(caudal, caudal.length - 2));
+    expect(span).toBeGreaterThan(0.12 * SPECIES.role.length);
+  });
+
+  it('errored is unmistakably belly-up with a crossed eye and limp fins', () => {
+    const errored = attitudeForPose('errored');
+    expect(errored.flipVertical).toBe(true);
+    expect(errored.eye).toBe('cross');
+    expect(errored.finsFolded).toBe(true);
+    // the pale belly rides on top: dorsal offsets invert vs an upright fish
+    const flipped = spineFor('errored', 'role', 0, 0);
+    const upright = spineFor('working', 'role', 0, 0);
+    expect(flipped.dorsalSign).toBe(-1);
+    expect(upright.dorsalSign).toBe(1);
   });
 });

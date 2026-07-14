@@ -59,8 +59,8 @@ export const SPECIES: Record<FishSpecies, SpeciesProfile> = {
     tailAmplitude: 0.14,
     cruiseSpeed: 90,
     caudal: 'forked',
-    caudalLength: 0.26,
-    caudalSpreadDeg: 28,
+    caudalLength: 0.31,
+    caudalSpreadDeg: 33,
     dorsalStart: 0.3,
     dorsalEnd: 0.56,
     dorsalHeight: 0.085,
@@ -78,8 +78,8 @@ export const SPECIES: Record<FishSpecies, SpeciesProfile> = {
     tailAmplitude: 0.12,
     cruiseSpeed: 65,
     caudal: 'rounded',
-    caudalLength: 0.21,
-    caudalSpreadDeg: 18,
+    caudalLength: 0.28,
+    caudalSpreadDeg: 27,
     dorsalStart: 0.26,
     dorsalEnd: 0.62,
     dorsalHeight: 0.11,
@@ -97,8 +97,8 @@ export const SPECIES: Record<FishSpecies, SpeciesProfile> = {
     tailAmplitude: 0.09,
     cruiseSpeed: 40,
     caudal: 'broad',
-    caudalLength: 0.2,
-    caudalSpreadDeg: 24,
+    caudalLength: 0.26,
+    caudalSpreadDeg: 30,
     dorsalStart: 0.28,
     dorsalEnd: 0.76,
     dorsalHeight: 0.1,
@@ -126,6 +126,11 @@ export interface FishSpine {
  * frame lands on an S (front and back bow opposite ways), not a bland C */
 const BODY_WAVE_RAD = 3.2;
 
+/** spatial frequency of the phase-independent resting S-bow (radians nose→tail).
+ * Deliberately ≠ BODY_WAVE_RAD so the static bow can never cancel the traveling
+ * wave: a calm fish keeps a visible S at every swim-cycle instant. */
+const REST_BOW_RAD = Math.PI * 1.7;
+
 /** tailPhase = phase + clockMs·frequency (the swim-cycle clock for one fish) */
 export function swimPhaseFor(species: FishSpecies, phase: number, clockMs: number): number {
   return phase + (clockMs / 1000) * SPECIES[species].tailFrequencyHz * TAU;
@@ -145,6 +150,7 @@ export function fishSpine(
   const p = SPECIES[species];
   const beat = clamp(speedFactor, 0, 2);
   const amp = p.tailAmplitude * p.length * attitude.tailBeat * (0.5 + 0.6 * Math.min(beat, 1.5));
+  const restAmp = attitude.restBow * p.length;
   const rot = -attitude.pitch;
   const cos = Math.cos(rot);
   const sin = Math.sin(rot);
@@ -152,7 +158,9 @@ export function fishSpine(
   const points = p.stations.map((s) => {
     const x = (0.5 - s) * p.length * attitude.xScale;
     const envelope = 0.12 + 0.88 * s * s;
-    const y = amp * envelope * Math.sin(swimPhase - s * BODY_WAVE_RAD);
+    const ySwim = amp * envelope * Math.sin(swimPhase - s * BODY_WAVE_RAD);
+    const yRest = restAmp * Math.sin(s * REST_BOW_RAD);
+    const y = ySwim + yRest;
     return { x: x * cos - y * sin, y: flip * (x * sin + y * cos) };
   });
   return {

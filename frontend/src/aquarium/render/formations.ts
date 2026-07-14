@@ -1,14 +1,23 @@
 // Procedural rig formations: layered rounded-rock clusters in 3 depth tones
-// with per-seed-unique silhouettes (formationShapes.ts), thin crown spurs, a
-// soft contact shadow where the rock meets the seabed, and kelp fronds with a
-// slow clock sway. Silhouettes are seed-deterministic (same rig, same shape,
-// every session) and cached as world-space Path2D per tone so a frame costs a
-// handful of fills. There is deliberately NO flat shelf/plank bar — that read
-// as a diagram baseline; fish perch on the irregular rock instead.
+// with per-seed-unique silhouettes and dramatic height/width variance
+// (formationShapes.ts), light/dark texture speckle, thin crown spurs, forking
+// coral branches, a soft contact shadow where the rock meets the seabed, and
+// kelp fronds with a slow clock sway. Silhouettes are seed-deterministic (same
+// rig, same shape, every session) and cached as world-space Path2D per tone so
+// a frame costs a handful of fills/strokes. There is deliberately NO flat
+// shelf/plank bar — that read as a diagram baseline; fish perch on rock.
 
 import type { RigFormation, ScenePalette } from '../contracts';
 import { CITY_KEY } from '../contracts';
-import { buildLobes, buildSpurs, blobRing, traceSmoothRing } from './formationShapes';
+import {
+  buildBranches,
+  buildLobes,
+  buildSpeckle,
+  buildSpurs,
+  blobRing,
+  traceSmoothRing,
+} from './formationShapes';
+import type { Pt } from './mathUtil';
 import { mulberry32 } from './hash';
 import type { ViewRect } from './layers';
 import { TAU, at } from './mathUtil';
@@ -33,6 +42,9 @@ interface Contact {
 interface FormationGeometry {
   tonePaths: readonly Path2D[];
   edgePath: Path2D;
+  /** forking coral limbs, stroked as one batched path */
+  coralPath: Path2D;
+  speckle: { light: readonly Pt[]; dark: readonly Pt[] };
   contact: Contact;
   fronds: readonly Frond[];
   cullLeft: number;
@@ -77,9 +89,16 @@ function buildGeometry(formation: RigFormation): FormationGeometry {
     front.lineTo(spur.baseX - nx, spur.baseY - ny);
     front.closePath();
   }
+  const coralPath = new Path2D();
+  for (const seg of buildBranches(formation, rnd)) {
+    coralPath.moveTo(seg.x1, seg.y1);
+    coralPath.lineTo(seg.x2, seg.y2);
+  }
   return {
     tonePaths,
     edgePath,
+    coralPath,
+    speckle: buildSpeckle(lobes, rnd),
     contact: { cx: (minX + maxX) / 2, cy: formation.anchorY + 6, halfWidth: (maxX - minX) / 2 },
     fronds: buildFronds(formation, rnd),
     cullLeft: minX - formation.radius * 0.3,
@@ -107,6 +126,9 @@ interface FormationColors {
   tones: readonly string[];
   edge: string;
   contact: string;
+  coral: string;
+  speckleLight: string;
+  speckleDark: string;
 }
 
 const colorCache = new WeakMap<ScenePalette, FormationColors>();
@@ -123,6 +145,10 @@ function formationColors(palette: ScenePalette): FormationColors {
     ],
     edge: withAlpha(palette.formationEdge, 0.85),
     contact: withAlpha(adjustL(palette.formationEdge, -10), 1),
+    // a warmer, brighter accent than the rock — reads as living coral
+    coral: adjustL(mixOklch(palette.formation, palette.pellet, 0.42), 6),
+    speckleLight: withAlpha(adjustL(palette.formation, 13), 0.5),
+    speckleDark: withAlpha(adjustL(palette.formationEdge, -6), 0.42),
   };
   colorCache.set(palette, built);
   return built;
@@ -151,11 +177,60 @@ export function paintFormations(
     ctx.fillStyle = at(colors.tones, tone);
     for (const f of visible) ctx.fill(at(formationGeometry(f).tonePaths, tone));
   }
+  paintSpeckle(ctx, visible, colors, zoom);
   ctx.strokeStyle = colors.edge;
   ctx.lineWidth = 1.25 / zoom;
   ctx.lineJoin = 'round';
   for (const f of visible) ctx.stroke(formationGeometry(f).edgePath);
+  paintCoral(ctx, visible, colors);
   paintKelp(ctx, visible, palette, zoom, clockMs);
+}
+
+/** Forking coral limbs over the crown, one batched stroke, round-capped.
+ * Width is world-unit (scales with the reef), so it needs no zoom. */
+function paintCoral(
+  ctx: CanvasRenderingContext2D,
+  visible: readonly RigFormation[],
+  colors: FormationColors,
+): void {
+  ctx.strokeStyle = colors.coral;
+  ctx.lineWidth = Math.max(3.5, 0.06 * averageRadius(visible));
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const f of visible) ctx.stroke(formationGeometry(f).coralPath);
+  ctx.lineCap = 'butt';
+}
+
+function averageRadius(visible: readonly RigFormation[]): number {
+  let sum = 0;
+  for (const f of visible) sum += f.radius;
+  return visible.length === 0 ? 0 : sum / visible.length;
+}
+
+/** Two batched grain passes (light + dark speckle dots) so rock reads as
+ * textured stone, not a flat blob. Dot radius stays ~constant in css px. */
+function paintSpeckle(
+  ctx: CanvasRenderingContext2D,
+  visible: readonly RigFormation[],
+  colors: FormationColors,
+  zoom: number,
+): void {
+  const r = Math.max(1.4, 2.4 / zoom);
+  const passes: Array<[string, (g: FormationGeometry) => readonly { x: number; y: number }[]]> = [
+    [colors.speckleDark, (g) => g.speckle.dark],
+    [colors.speckleLight, (g) => g.speckle.light],
+  ];
+  for (const [color, pick] of passes) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (const f of visible) {
+      for (const p of pick(formationGeometry(f))) {
+        ctx.moveTo(p.x + r, p.y);
+        ctx.arc(p.x, p.y, r, 0, TAU);
+      }
+    }
+    ctx.fill();
+  }
 }
 
 /** soft ambient-occlusion darkening at the rock/seabed contact: nested flat

@@ -1,8 +1,8 @@
-// One full frame, back to front: clear + water column, far haze and light
-// shafts (parallax 0.85), formations + kelp (0.95), waterline + pellets +
-// fish (1.0), particulate (1.06), depth vignette, then all text layers in
-// screen space. Everything culls against its own layer's view rect (with
-// margin) before any geometry work. reduced-motion freezes the ambient
+// One full frame, back to front: clear + water column, far haze, light shafts
+// and deep drift (parallax 0.85), formations + kelp (0.95), soft water surface
+// + pellets + fish (1.0), particulate (1.06), depth vignette, then all text
+// layers in screen space. Everything culls against its own layer's view rect
+// (with margin) before any geometry work. reduced-motion freezes the ambient
 // clock; poses and positions stay truthful facts.
 
 import type { PaintScene } from '../contracts';
@@ -12,12 +12,13 @@ import { PARALLAX, applyLayer, applyScreenSpace, layerTransform, visibleWorldRec
 import { paintPellets } from './pellets';
 import { paintTextLayers } from './text';
 import {
+  paintDeepDrift,
   paintDepthVignette,
   paintLightShafts,
   paintParticulate,
   paintSeabed,
   paintWaterColumn,
-  paintWaterline,
+  paintWaterSurface,
 } from './water';
 
 /** world-unit cull padding: covers a grouper (160) plus caudal fan + labels */
@@ -41,12 +42,13 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
   applyLayer(ctx, far);
   paintSeabed(ctx, palette, farView);
   paintLightShafts(ctx, palette, farView, clockMs);
+  paintDeepDrift(ctx, palette, farView, clockMs);
 
   applyLayer(ctx, mid);
   paintFormations(ctx, snapshot.formations, palette, midView, camera.zoom, clockMs);
 
   applyLayer(ctx, actors);
-  paintWaterline(ctx, palette, actorView, camera.zoom);
+  paintWaterSurface(ctx, palette, actorView, clockMs);
   paintPellets(ctx, snapshot.pellets, sim, palette, actorView);
   paintFishLayer(ctx, snapshot.fish, sim, palette, actors, actorView, clockMs);
 

@@ -42,6 +42,20 @@ export function adjustL(color: string, deltaPct: number): string {
   return formatOklch({ ...o, l: clamp(o.l + deltaPct, 0, 100) });
 }
 
+/**
+ * Shift lightness by deltaPct and scale chroma by chromaScale (both preserving
+ * hue/alpha). A lit belly is lighter AND less saturated than the flank; a tense
+ * body is darker AND more saturated. One pass, no color library.
+ */
+export function adjustLC(color: string, deltaPct: number, chromaScale: number): string {
+  const o = parseOklch(color);
+  return formatOklch({
+    ...o,
+    l: clamp(o.l + deltaPct, 0, 100),
+    c: Math.max(0, o.c * chromaScale),
+  });
+}
+
 /** Replace alpha outright. */
 export function withAlpha(color: string, alpha: number): string {
   const o = parseOklch(color);
