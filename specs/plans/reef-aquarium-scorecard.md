@@ -176,6 +176,44 @@ softened, real overlap; (c) formations CLUSTERED at varied depths with overlap,
 not one baseline. PERF: shave ~1 ms off the dynamic draw + kill the zoom-frame
 spike to get p95 < 16. Must NOT regress craft (4/5), legibility (7/7), honesty.
 
+## Round 5 (2026-07-14)
+
+One render agent (near-foreground layer + aggressive DOF + formation depth
+planes + tiny-fin perf shave); all mechanical gates green (typecheck src+test,
+1545 frontend + 618 backend + 356 shared tests, lint, prettier, build).
+
+| Criterion             | Result                             | Verdict                 |
+| --------------------- | ---------------------------------- | ----------------------- |
+| 1 Aquarium illusion   | 3/5 median (judges 3,3,2)          | FAIL (recovered from 2) |
+| 2 Fish craft          | 4/5 spot-check (no regression)     | PASS                    |
+| 3 Blind legibility    | 7/7 median (judges 7,5,7)          | PASS (held)             |
+| 4 LOD honesty         | clean                              | PASS (held)             |
+| 5 Camera perf         | p95 16.8 ms dev / 33 ms prod build | FAIL                    |
+| 6 Truthfulness parity | unit tests green                   | PASS                    |
+| 7 Mechanical          | all gates green                    | PASS                    |
+
+5 of 7, no regressions. Illusion recovered 2 -> 3 but all three judges still say
+depth_reads_volumetric = FALSE with ONE converged root cause: the near-foreground
+kelp/rock layer is rendered CRISP, not blurred (the fake-DOF from layered
+low-alpha fills does not read as out-of-focus). Also flagged: the flat sand line
+reads as a chart axis; the composition is near left-right symmetric.
+
+PERF METHODOLOGY FINDING: measured a PRODUCTION build (temporary
+VITE_ENABLE_FIXTURES opt-in, since fixtures are dev-only) via vite preview: p50
+identical to dev (16.7 ms), p95 WORSE (33 ms). Conclusion: the steady frame is
+native-canvas-bound (blit + 200 fish paths + 1000 pellet fills); minification
+does not help, so perf needs real DRAW-CALL reduction. Flag reverted (fixtures
+stay dev-only).
+
+Round-6 mandate (one render agent): ILLUSION — REAL `ctx.filter` blur on the
+foreground layer BAKED INTO the static offscreen cache (one-time per-camera
+cost, never per-frame; the fake-blur failed two rounds); RECEDING undulating
+seabed instead of a flat axis line; break left-right symmetry; real atmospheric
+haze (desaturate + fade) on the far plane. PERF — batch ~1000 pellets into one
+Path2D per fill-style + batch the fish cheap-path so the steady frame drops
+below 16 ms. Must NOT regress craft (4/5), legibility (7/7 — keep the foreground
+from occluding seabed-pose fish in blind crops), or honesty.
+
 ## (round-3 residual notes, superseded)
 
 - CRAFT (3/5): countershading + clip-art SOLVED. Residual: working/errored
