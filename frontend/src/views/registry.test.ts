@@ -44,6 +44,15 @@ describe('views/registry', () => {
     expect(maintainer?.nav?.label).toBe('Triage');
   });
 
+  it('reefView is core, mounts at /reef, is hidden from nav, and opts into full-bleed', () => {
+    const reef = ALL_VIEWS.find((v) => v.id === 'reef');
+    expect(reef).toBeDefined();
+    expect(reef?.kind).toBe('core');
+    expect(reef?.path).toBe('/reef');
+    expect(reef?.nav).toBeNull();
+    expect(reef?.fullBleed).toBe(true);
+  });
+
   it('every view exposes a renderable element (React.lazy result)', () => {
     for (const v of ALL_VIEWS) {
       // React.lazy returns an exotic object with a $$typeof symbol and a

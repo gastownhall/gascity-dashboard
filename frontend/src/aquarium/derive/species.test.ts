@@ -4,13 +4,23 @@ import { deriveSpecies } from './species';
 describe('deriveSpecies', () => {
   it('is "pool" whenever agent_kind is pool, even for a mayor-named identity', () => {
     expect(
-      deriveSpecies({ agentKind: 'pool', alias: 'mayor', primaryName: 'mayor', displayName: undefined }),
+      deriveSpecies({
+        agentKind: 'pool',
+        alias: 'mayor',
+        primaryName: 'mayor',
+        displayName: undefined,
+      }),
     ).toEqual({ species: 'pool', isMayor: false });
   });
 
   it('is "grouper" + isMayor when alias is exactly "mayor"', () => {
     expect(
-      deriveSpecies({ agentKind: undefined, alias: 'mayor', primaryName: 'sess-1', displayName: undefined }),
+      deriveSpecies({
+        agentKind: undefined,
+        alias: 'mayor',
+        primaryName: 'sess-1',
+        displayName: undefined,
+      }),
     ).toEqual({ species: 'grouper', isMayor: true });
   });
 

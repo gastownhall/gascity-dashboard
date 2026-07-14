@@ -150,17 +150,59 @@ export function attitudeForPose(pose: AquariumPose): FishAttitude {
     case 'working':
       return LEVEL;
     case 'idle':
-      return { ...LEVEL, pitch: -7 * DEG, tailBeat: 0.3, eye: 'hollow', maxHeadingTilt: 14 * DEG, swayAmp: 3.5 * DEG };
+      return {
+        ...LEVEL,
+        pitch: -7 * DEG,
+        tailBeat: 0.3,
+        eye: 'hollow',
+        maxHeadingTilt: 14 * DEG,
+        swayAmp: 3.5 * DEG,
+      };
     case 'asleep':
-      return { ...LEVEL, tailBeat: 0, finsFolded: true, eye: 'closed', dimmed: true, maxHeadingTilt: 4 * DEG };
+      return {
+        ...LEVEL,
+        tailBeat: 0,
+        finsFolded: true,
+        eye: 'closed',
+        dimmed: true,
+        maxHeadingTilt: 4 * DEG,
+      };
     case 'awaiting-input':
-      return { ...LEVEL, pitch: 30 * DEG, tailBeat: 0.5, mouthOpen: true, maxHeadingTilt: 6 * DEG, swayAmp: 2 * DEG };
+      return {
+        ...LEVEL,
+        pitch: 30 * DEG,
+        tailBeat: 0.5,
+        mouthOpen: true,
+        maxHeadingTilt: 6 * DEG,
+        swayAmp: 2 * DEG,
+      };
     case 'stalled':
-      return { ...LEVEL, pitch: 38 * DEG, tailBeat: 0.4, eye: 'hollow', maxHeadingTilt: 5 * DEG, swayAmp: 4 * DEG };
+      return {
+        ...LEVEL,
+        pitch: 38 * DEG,
+        tailBeat: 0.4,
+        eye: 'hollow',
+        maxHeadingTilt: 5 * DEG,
+        swayAmp: 4 * DEG,
+      };
     case 'rate-limited':
-      return { ...LEVEL, xScale: 0.85, finsFolded: true, tailBeat: 0.15, eye: 'hollow', maxHeadingTilt: 6 * DEG };
+      return {
+        ...LEVEL,
+        xScale: 0.85,
+        finsFolded: true,
+        tailBeat: 0.15,
+        eye: 'hollow',
+        maxHeadingTilt: 6 * DEG,
+      };
     case 'errored':
-      return { ...LEVEL, flipVertical: true, tailBeat: 0.1, eye: 'cross', maxHeadingTilt: 8 * DEG, swayAmp: 2 * DEG };
+      return {
+        ...LEVEL,
+        flipVertical: true,
+        tailBeat: 0.1,
+        eye: 'cross',
+        maxHeadingTilt: 8 * DEG,
+        swayAmp: 2 * DEG,
+      };
   }
 }
 

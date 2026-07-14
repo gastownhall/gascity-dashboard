@@ -88,14 +88,24 @@ function paintFish(
 ): void {
   const attitude = attitudeForPose(fish.pose);
   const swimPhase = swimPhaseFor(fish.species, kin.phase, clockMs);
-  const spine = fishSpine(fish.species, attitude, swimPhase, speedFactorFor(fish.species, kin.speed));
+  const spine = fishSpine(
+    fish.species,
+    attitude,
+    swimPhase,
+    speedFactorFor(fish.species, kin.speed),
+  );
   const hull = fishHull(spine, fish.species, bellyFactorFromPct(fish.bellyPct));
   const fins = fishFins(spine, hull, swimPhase);
   const head = fishHead(spine, hull);
   placeFish(ctx, kin, attitude, layer, clockMs);
   const dim = attitude.dimmed || fish.tombstoned;
   const body = dim
-    ? { dorsal: colors.dimDorsal, ventral: colors.dimVentral, fin: colors.dimFin, outline: colors.dimOutline }
+    ? {
+        dorsal: colors.dimDorsal,
+        ventral: colors.dimVentral,
+        fin: colors.dimFin,
+        outline: colors.dimOutline,
+      }
     : { dorsal: colors.dorsal, ventral: colors.ventral, fin: colors.fin, outline: colors.outline };
   const lineWidth = 1.25 / layer.scale;
   if (fish.tombstoned) ctx.globalAlpha = 0.4;
@@ -240,9 +250,18 @@ function paintFace(
     const px = -head.mouthDir.y;
     const py = head.mouthDir.x;
     ctx.beginPath();
-    ctx.moveTo(head.mouth.x + head.mouthDir.x * len * 0.35, head.mouth.y + head.mouthDir.y * len * 0.35);
-    ctx.lineTo(head.mouth.x - head.mouthDir.x * len + px * len * 0.45, head.mouth.y - head.mouthDir.y * len + py * len * 0.45);
-    ctx.lineTo(head.mouth.x - head.mouthDir.x * len - px * len * 0.45, head.mouth.y - head.mouthDir.y * len - py * len * 0.45);
+    ctx.moveTo(
+      head.mouth.x + head.mouthDir.x * len * 0.35,
+      head.mouth.y + head.mouthDir.y * len * 0.35,
+    );
+    ctx.lineTo(
+      head.mouth.x - head.mouthDir.x * len + px * len * 0.45,
+      head.mouth.y - head.mouthDir.y * len + py * len * 0.45,
+    );
+    ctx.lineTo(
+      head.mouth.x - head.mouthDir.x * len - px * len * 0.45,
+      head.mouth.y - head.mouthDir.y * len - py * len * 0.45,
+    );
     ctx.closePath();
     ctx.fill();
   } else if (SPECIES[spine.species].noseBlunt > 0.6) {

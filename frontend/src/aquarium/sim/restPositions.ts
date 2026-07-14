@@ -29,7 +29,11 @@ const POSE_SALT: Readonly<Record<AquariumPose, number>> = {
   errored: 0x7,
 };
 
-export function restPosition(pose: AquariumPose, anchor: HomeAnchor, seed: number): { x: number; y: number } {
+export function restPosition(
+  pose: AquariumPose,
+  anchor: HomeAnchor,
+  seed: number,
+): { x: number; y: number } {
   const s = seed ^ (POSE_SALT[pose] * 0x9e3779b1);
   switch (pose) {
     case 'asleep':
@@ -54,7 +58,11 @@ function settledOnSeabed(anchor: HomeAnchor, seed: number): { x: number; y: numb
   return { x, y: Math.min(y, WORLD.height - 20) };
 }
 
-function riskToWaterline(anchor: HomeAnchor, seed: number, targetY: number): { x: number; y: number } {
+function riskToWaterline(
+  anchor: HomeAnchor,
+  seed: number,
+  targetY: number,
+): { x: number; y: number } {
   return { x: anchor.x + hashRange(seed, -60, 60), y: targetY };
 }
 
@@ -69,5 +77,8 @@ function tuckedUnderFormation(anchor: HomeAnchor, seed: number): { x: number; y:
 function nearAnchorSpawn(anchor: HomeAnchor, seed: number): { x: number; y: number } {
   const angle = hashRange(seed, 0, TAU);
   const spread = hashRange(seed + 1, 0.2, 0.9) * anchor.radius;
-  return { x: anchor.x + Math.cos(angle) * spread, y: anchor.y - Math.abs(Math.sin(angle)) * spread * 0.6 };
+  return {
+    x: anchor.x + Math.cos(angle) * spread,
+    y: anchor.y - Math.abs(Math.sin(angle)) * spread * 0.6,
+  };
 }

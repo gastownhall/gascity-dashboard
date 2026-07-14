@@ -7,7 +7,9 @@ import { TOMBSTONE_WINDOW_MS } from './tombstones';
 const NOW = Date.parse('2026-07-13T12:00:00.000Z');
 const RIGS = [{ name: 'alpha-rig', path: '/home/ds/alpha' }];
 
-function session(overrides: Partial<SessionResponse> & { session_name: string; id: string }): SessionResponse {
+function session(
+  overrides: Partial<SessionResponse> & { session_name: string; id: string },
+): SessionResponse {
   return {
     attached: false,
     created_at: '2026-01-01T00:00:00Z',
@@ -43,7 +45,11 @@ function baseInputs(overrides: Partial<DeriveInputs> = {}): DeriveInputs {
 describe('deriveWorldSnapshot — pose SSOT parity', () => {
   it('a session in a failure state gets the errored pose from selectAgentsNeedingYou, not re-derived calm logic', () => {
     const s = session({ session_name: 'sess-1', id: 'gc-1', activity: 'in-turn' });
-    const a = agent({ name: 'agent-1', state: 'failed', session: { attached: true, name: 'sess-1' } });
+    const a = agent({
+      name: 'agent-1',
+      state: 'failed',
+      session: { attached: true, name: 'sess-1' },
+    });
     const { snapshot } = deriveWorldSnapshot(baseInputs({ sessions: [s], agents: [a] }), null, NOW);
     expect(snapshot.fish[0]?.pose).toBe('errored');
     expect(snapshot.needsAttention).toBe(1);
@@ -54,7 +60,9 @@ describe('deriveWorldSnapshot — pose SSOT parity', () => {
     const { snapshot: round1, memory } = deriveWorldSnapshot(
       baseInputs({
         sessions: [s],
-        agents: [agent({ name: 'a1', state: 'failed', session: { attached: true, name: 'sess-1' } })],
+        agents: [
+          agent({ name: 'a1', state: 'failed', session: { attached: true, name: 'sess-1' } }),
+        ],
       }),
       null,
       NOW,
@@ -107,7 +115,11 @@ describe('deriveWorldSnapshot — diff-eater', () => {
     expect(round2.pellets).toHaveLength(1);
     expect(round2.pellets[0]).toMatchObject({ beadId: 'b-1', state: 'eaten' });
 
-    const { snapshot: round3 } = deriveWorldSnapshot(baseInputs({ beadsByRig: {} }), memory2, NOW + 2000);
+    const { snapshot: round3 } = deriveWorldSnapshot(
+      baseInputs({ beadsByRig: {} }),
+      memory2,
+      NOW + 2000,
+    );
     expect(round3.pellets).toEqual([]);
   });
 
@@ -157,7 +169,11 @@ describe('deriveWorldSnapshot — tombstone window end to end', () => {
       NOW + TOMBSTONE_WINDOW_MS - 1,
     );
     expect(stillGhost.fish).toHaveLength(1);
-    const { snapshot: dropped } = deriveWorldSnapshot(baseInputs({}), memory, NOW + TOMBSTONE_WINDOW_MS);
+    const { snapshot: dropped } = deriveWorldSnapshot(
+      baseInputs({}),
+      memory,
+      NOW + TOMBSTONE_WINDOW_MS,
+    );
     expect(dropped.fish).toHaveLength(0);
   });
 });

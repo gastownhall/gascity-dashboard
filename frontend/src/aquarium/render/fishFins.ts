@@ -70,10 +70,8 @@ function buildVentralFin(
   };
   const down = { x: -sample.up.x * spine.dorsalSign, y: -sample.up.y * spine.dorsalSign };
   const flutter = 14 * DEG * spine.attitude.tailBeat * fold * Math.sin(swimPhase);
-  const angle = Math.atan2(
-    sample.toTail.y * 0.85 + down.y,
-    sample.toTail.x * 0.85 + down.x,
-  ) + flutter;
+  const angle =
+    Math.atan2(sample.toTail.y * 0.85 + down.y, sample.toTail.x * 0.85 + down.x) + flutter;
   const len = lengthFrac * p.length * fold;
   const tip = { x: root.x + Math.cos(angle) * len, y: root.y + Math.sin(angle) * len };
   const trail = {

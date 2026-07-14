@@ -10,30 +10,30 @@ does not exist on `main`, so this branch claims the route fresh.
 
 ## Product intent
 
-An ambient aquarium you look *through*, not a chart you read. The operator pans
+An ambient aquarium you look _through_, not a chart you read. The operator pans
 around a stable underwater geography and zooms from whole-tank overview down to
 individual fish, gaining truthful detail at every level: agents as fish whose
 species, size, pose, and behavior are all live facts; beads as food pellets the
-fish actually work; rigs as reef formations that are *places*.
+fish actually work; rigs as reef formations that are _places_.
 
 The previous strata scene answered "what states exist"; this scene must answer
-"what is the fleet *doing*" — and be beautiful enough to leave on a wall.
+"what is the fleet _doing_" — and be beautiful enough to leave on a wall.
 
 ## Locked decisions (grill 2026-07-13)
 
-| Decision | Choice |
-| --- | --- |
-| Relationship to h5rl work | Separate rebuild on own branch; strata preserved |
-| Substrate | Canvas 2D, procedural vector drawing (no WebGL dep, no image assets) |
-| Art direction | Atmospheric flat-vector: 3–4 parallax layers, water-column gradient, light shafts, fog-with-distance, articulated silhouette fish |
-| Zoom model | 3-tier semantic zoom — LOD0 TANK (default, fits all), LOD1 REEF (~1 rig), LOD2 FISH (close-up); continuous wheel/pinch zoom, drag pan; detail fades in by threshold |
-| Pellets | Every pellet IS a real bead (per-rig open list). open→drifting above formation; in_progress→held at assignee's mouth; blocked→dark, sunk to seabed; closed (snapshot diff)→gulp animation then gone. ≤40 rendered per rig + typeset "+N" overflow |
-| Grouping/behavior | Rig-home + state shoals. working=shoals pellet field oriented to own task pellet; idle=lazy wander; asleep=settled in crevice, dimmed; awaiting-input=risen to waterline, gaping; stalled=nose-up treading; rate-limited=tucked under overhang, fins folded; errored=belly-up slow rise; mayor=grouper patrolling whole tank |
-| Route/chrome | `/reef`, full-bleed canvas under slim header; overlay = "N need attention" ledger line, tank-light conn state, zoom controls |
-| Reduced motion | Frozen truthful frame: zero autonomous animation, instant state swaps, user pan/zoom still works with instant (non-eased) jumps |
-| Theme | Theme-keyed water moods — light: sunlit shallows; dark: midnight deep. Same geometry, two procedural palettes |
-| Loop exit | The 7 acceptance criteria below, all passing in a single round; cap 8 rounds then halt + scorecard report |
-| Publish | HALT branch-ready. No push, no PR — publish is mayor-gated |
+| Decision                  | Choice                                                                                                                                                                                                                                                                                                                       |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Relationship to h5rl work | Separate rebuild on own branch; strata preserved                                                                                                                                                                                                                                                                             |
+| Substrate                 | Canvas 2D, procedural vector drawing (no WebGL dep, no image assets)                                                                                                                                                                                                                                                         |
+| Art direction             | Atmospheric flat-vector: 3–4 parallax layers, water-column gradient, light shafts, fog-with-distance, articulated silhouette fish                                                                                                                                                                                            |
+| Zoom model                | 3-tier semantic zoom — LOD0 TANK (default, fits all), LOD1 REEF (~1 rig), LOD2 FISH (close-up); continuous wheel/pinch zoom, drag pan; detail fades in by threshold                                                                                                                                                          |
+| Pellets                   | Every pellet IS a real bead (per-rig open list). open→drifting above formation; in_progress→held at assignee's mouth; blocked→dark, sunk to seabed; closed (snapshot diff)→gulp animation then gone. ≤40 rendered per rig + typeset "+N" overflow                                                                            |
+| Grouping/behavior         | Rig-home + state shoals. working=shoals pellet field oriented to own task pellet; idle=lazy wander; asleep=settled in crevice, dimmed; awaiting-input=risen to waterline, gaping; stalled=nose-up treading; rate-limited=tucked under overhang, fins folded; errored=belly-up slow rise; mayor=grouper patrolling whole tank |
+| Route/chrome              | `/reef`, full-bleed canvas under slim header; overlay = "N need attention" ledger line, tank-light conn state, zoom controls                                                                                                                                                                                                 |
+| Reduced motion            | Frozen truthful frame: zero autonomous animation, instant state swaps, user pan/zoom still works with instant (non-eased) jumps                                                                                                                                                                                              |
+| Theme                     | Theme-keyed water moods — light: sunlit shallows; dark: midnight deep. Same geometry, two procedural palettes                                                                                                                                                                                                                |
+| Loop exit                 | The 7 acceptance criteria below, all passing in a single round; cap 8 rounds then halt + scorecard report                                                                                                                                                                                                                    |
+| Publish                   | HALT branch-ready. No push, no PR — publish is mayor-gated                                                                                                                                                                                                                                                                   |
 
 ## Semantic mapping (truthfulness contract)
 
@@ -102,6 +102,7 @@ All seven must pass in the same round.
 ## Loop protocol (rounds 1–8)
 
 Per round:
+
 1. Mechanical gates (criterion 7). Fix before proceeding.
 2. Dev server in worktree (dedicated port, fixture mode) → snapshot harness
    (`scripts/snap-reef-aquarium.mjs`): LOD0/LOD1/LOD2 shots per theme, 7
@@ -120,6 +121,7 @@ round's screenshots, and a forced structured verdict. Judges never see the
 implementation code and never see each other's scores.
 
 ### aquarium-illusion judge (criterion 1)
+
 You are a demanding visual critic evaluating whether a screenshot reads as a
 **living aquarium seen through glass**. You did not build this; do not be
 polite. Score 1–5: 5 = instantly an aquarium (depth, water, light, life);
@@ -131,6 +133,7 @@ population inhabiting a place), restraint (would look intentional on an
 office wall next to an editorial dashboard). Name the 3 weakest specifics.
 
 ### fish-craft judge (criterion 2)
+
 You are a character/creature designer reviewing close-up fish renders.
 Score 1–5 on craft: silhouette quality (species-distinct, elegant bezier
 outlines, not primitive-shape assemblies), anatomical intent (body/fin/tail
@@ -140,12 +143,14 @@ the scene). Explicitly answer: "does any fish read as clip-art or a stock
 ellipse-with-fins?" (yes = automatic fail flag). Name the 3 weakest specifics.
 
 ### blind-legibility judge (criterion 3)
+
 You are shown N unlabeled close-up crops, each one fish, no text. For each,
 pick exactly one state from: working / idle / asleep / awaiting-input /
 stalled / rate-limited / errored. Use only posture, position-in-frame, eye,
 fins, attitude. Answer as a list; no hedging, one choice each.
 
 ### honesty auditor (criterion 4)
+
 You receive screenshots plus the fixture manifest (the ground-truth entity
 table). Extract every legible label/number from the screenshots (rig names,
 fish names, state words, counts, bead ids, context percentages) and report

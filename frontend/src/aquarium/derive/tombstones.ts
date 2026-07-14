@@ -33,7 +33,8 @@ export function reconcileFishTombstones(
     lastKnown[f.id] = f;
   }
 
-  const ghosts = prevMemory === null ? [] : missingGhosts(prevMemory, liveIds, nowMs, lastSeenMs, lastKnown);
+  const ghosts =
+    prevMemory === null ? [] : missingGhosts(prevMemory, liveIds, nowMs, lastSeenMs, lastKnown);
 
   return { fish: [...liveFish, ...ghosts], memory: { lastSeenMs, lastKnown } };
 }

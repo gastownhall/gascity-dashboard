@@ -211,8 +211,7 @@ describe('attitudes', () => {
 
   it('rate-limited compresses the body to 0.85 and folds the fins', () => {
     const spine = spineFor('rate-limited', 'role', 0, 0);
-    const length =
-      at(spine.points, 0).x - at(spine.points, spine.points.length - 1).x;
+    const length = at(spine.points, 0).x - at(spine.points, spine.points.length - 1).x;
     expect(length).toBeCloseTo(SPECIES.role.length * 0.85, 6);
     // perpendicular height of the fin peak above its base chord
     const peakHeight = (pose: AquariumPose): number => {
@@ -224,9 +223,8 @@ describe('attitudes', () => {
       const peak = at(dorsal, 1);
       const chord = dist(base, aft) || 1;
       return (
-        Math.abs(
-          (aft.x - base.x) * (base.y - peak.y) - (base.x - peak.x) * (aft.y - base.y),
-        ) / chord
+        Math.abs((aft.x - base.x) * (base.y - peak.y) - (base.x - peak.x) * (aft.y - base.y)) /
+        chord
       );
     };
     expect(peakHeight('rate-limited')).toBeLessThan(0.5 * peakHeight('working'));

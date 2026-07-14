@@ -11,11 +11,7 @@ function distress(reason: AgentNeedsYou['reason']): AgentNeedsYou {
 describe('derivePose', () => {
   it('returns the distress reason verbatim when one is supplied, regardless of session facts', () => {
     for (const reason of ['awaiting-input', 'errored', 'rate-limited', 'stalled'] as const) {
-      const pose = derivePose(
-        distress(reason),
-        { activity: 'in-turn', state: 'active' },
-        NOW,
-      );
+      const pose = derivePose(distress(reason), { activity: 'in-turn', state: 'active' }, NOW);
       expect(pose).toBe(reason);
     }
   });

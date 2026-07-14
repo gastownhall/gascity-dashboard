@@ -173,7 +173,11 @@ function fishFromAgent(
   };
 }
 
-function homeKeyFor(isMayor: boolean, rig: string | undefined, rigs: ReadonlyArray<RigNameSource>): string {
+function homeKeyFor(
+  isMayor: boolean,
+  rig: string | undefined,
+  rigs: ReadonlyArray<RigNameSource>,
+): string {
   if (isMayor) return CITY_KEY;
   return resolveRigName(rig, rigs) ?? UNRIGGED_KEY;
 }

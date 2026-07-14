@@ -83,11 +83,31 @@ describe('tickPellet — eaten', () => {
 
   it('accumulates elapsed time in phase across ticks, capped at gulpMsLeft', () => {
     const holderKin = { x: 0, y: 0, heading: 0, speed: 0, phase: 0 };
-    let kin = tickPellet(baseInputs({ state: 'eaten', holderKin, gulpMsLeft: 1200, dtS: 0.5, clockMs: 500 }));
+    let kin = tickPellet(
+      baseInputs({ state: 'eaten', holderKin, gulpMsLeft: 1200, dtS: 0.5, clockMs: 500 }),
+    );
     expect(kin.phase).toBeCloseTo(500, 6);
-    kin = tickPellet(baseInputs({ state: 'eaten', holderKin, gulpMsLeft: 1200, prevKin: kin, dtS: 0.5, clockMs: 1000 }));
+    kin = tickPellet(
+      baseInputs({
+        state: 'eaten',
+        holderKin,
+        gulpMsLeft: 1200,
+        prevKin: kin,
+        dtS: 0.5,
+        clockMs: 1000,
+      }),
+    );
     expect(kin.phase).toBeCloseTo(1000, 6);
-    kin = tickPellet(baseInputs({ state: 'eaten', holderKin, gulpMsLeft: 1200, prevKin: kin, dtS: 0.5, clockMs: 1500 }));
+    kin = tickPellet(
+      baseInputs({
+        state: 'eaten',
+        holderKin,
+        gulpMsLeft: 1200,
+        prevKin: kin,
+        dtS: 0.5,
+        clockMs: 1500,
+      }),
+    );
     expect(kin.phase).toBeLessThanOrEqual(1200);
   });
 

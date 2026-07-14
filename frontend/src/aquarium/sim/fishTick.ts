@@ -68,9 +68,25 @@ export function tickFish(inputs: FishTickInputs): FishKinematics {
     case 'asleep':
       return tickHold(inputs, prevPos, prevHeading, phase, spawn, 0);
     case 'awaiting-input':
-      return tickHold(inputs, prevPos, prevHeading, phase, spawn, BOB_AMPLITUDE_WU, AWAITING_INPUT_RISE_SPEED);
+      return tickHold(
+        inputs,
+        prevPos,
+        prevHeading,
+        phase,
+        spawn,
+        BOB_AMPLITUDE_WU,
+        AWAITING_INPUT_RISE_SPEED,
+      );
     case 'errored':
-      return tickHold(inputs, prevPos, prevHeading, phase, spawn, BOB_AMPLITUDE_WU * 0.4, ERRORED_RISE_SPEED);
+      return tickHold(
+        inputs,
+        prevPos,
+        prevHeading,
+        phase,
+        spawn,
+        BOB_AMPLITUDE_WU * 0.4,
+        ERRORED_RISE_SPEED,
+      );
     case 'rate-limited':
       return tickHold(inputs, prevPos, prevHeading, phase, spawn, 0);
     case 'stalled':
@@ -87,7 +103,13 @@ function frozenTombstone(inputs: FishTickInputs, phase: number): FishKinematics 
 }
 
 function clampToWorld(p: Pt): Pt {
-  return clampPoint(p, WALL_MARGIN_WU, WORLD.width - WALL_MARGIN_WU, WORLD.waterlineY, WORLD.height - 20);
+  return clampPoint(
+    p,
+    WALL_MARGIN_WU,
+    WORLD.width - WALL_MARGIN_WU,
+    WORLD.waterlineY,
+    WORLD.height - 20,
+  );
 }
 
 /** Seek toward `target` at `approachSpeed`; once arrived, report speed 0 and
@@ -109,25 +131,51 @@ function tickHold(
   if (arrived) {
     const settled: Pt =
       bobAmplitude > 0
-        ? { x: target.x, y: target.y + Math.sin((inputs.clockMs / BOB_PERIOD_MS) * TAU + phase) * bobAmplitude }
+        ? {
+            x: target.x,
+            y: target.y + Math.sin((inputs.clockMs / BOB_PERIOD_MS) * TAU + phase) * bobAmplitude,
+          }
         : target;
-    const heading = limitTurn(prevHeading, headingTo(prevPos, target), MAX_TURN_RATE_RAD_PER_S * inputs.dtS);
+    const heading = limitTurn(
+      prevHeading,
+      headingTo(prevPos, target),
+      MAX_TURN_RATE_RAD_PER_S * inputs.dtS,
+    );
     const clamped = clampToWorld(settled);
     return { x: clamped.x, y: clamped.y, heading, speed: 0, phase };
   }
-  const { pos, heading } = seekTarget(prevPos, prevHeading, target, approachSpeed, inputs.dtS, MAX_TURN_RATE_RAD_PER_S);
+  const { pos, heading } = seekTarget(
+    prevPos,
+    prevHeading,
+    target,
+    approachSpeed,
+    inputs.dtS,
+    MAX_TURN_RATE_RAD_PER_S,
+  );
   const clamped = clampToWorld(pos);
   return { x: clamped.x, y: clamped.y, heading, speed: approachSpeed, phase };
 }
 
-function tickIdle(inputs: FishTickInputs, prevPos: Pt, prevHeading: number, phase: number): FishKinematics {
+function tickIdle(
+  inputs: FishTickInputs,
+  prevPos: Pt,
+  prevHeading: number,
+  phase: number,
+): FishKinematics {
   const speed = hashRange(inputs.seed + 3, IDLE_SPEED_MIN, IDLE_SPEED_MAX);
   const angle = inputs.clockMs / 6000 + phase;
   const target: Pt = {
     x: inputs.homeAnchor.x + Math.cos(angle) * inputs.homeAnchor.radius * 0.6,
     y: inputs.homeAnchor.y - Math.abs(Math.sin(angle)) * inputs.homeAnchor.radius * 0.3,
   };
-  const { pos, heading } = seekTarget(prevPos, prevHeading, target, speed, inputs.dtS, MAX_TURN_RATE_RAD_PER_S);
+  const { pos, heading } = seekTarget(
+    prevPos,
+    prevHeading,
+    target,
+    speed,
+    inputs.dtS,
+    MAX_TURN_RATE_RAD_PER_S,
+  );
   const clamped = clampToWorld(pos);
   return { x: clamped.x, y: clamped.y, heading, speed, phase };
 }
@@ -135,10 +183,18 @@ function tickIdle(inputs: FishTickInputs, prevPos: Pt, prevHeading: number, phas
 const SEPARATION_RADIUS_WU = 50;
 const SEPARATION_SCALE = 4000;
 
-function tickWorking(inputs: FishTickInputs, prevPos: Pt, prevHeading: number, phase: number): FishKinematics {
+function tickWorking(
+  inputs: FishTickInputs,
+  prevPos: Pt,
+  prevHeading: number,
+  phase: number,
+): FishKinematics {
   const speed = hashRange(inputs.seed + 7, CRUISE_SPEED_MIN, CRUISE_SPEED_MAX);
   const wanderAngle = inputs.clockMs / 4000 + phase;
-  const wander: Pt = { x: prevPos.x + Math.cos(wanderAngle) * 40, y: prevPos.y + Math.sin(wanderAngle) * 40 };
+  const wander: Pt = {
+    x: prevPos.x + Math.cos(wanderAngle) * 40,
+    y: prevPos.y + Math.sin(wanderAngle) * 40,
+  };
   const cohesion = neighborCentroid(inputs.neighbors) ?? inputs.homeAnchor;
   const separation = separationPush(prevPos, inputs.neighbors);
 
@@ -149,7 +205,14 @@ function tickWorking(inputs: FishTickInputs, prevPos: Pt, prevHeading: number, p
     ...(inputs.taskTarget !== undefined ? ([[inputs.taskTarget, 0.4]] as const) : []),
   ]);
 
-  const { pos, heading } = seekTarget(prevPos, prevHeading, target, speed, inputs.dtS, MAX_TURN_RATE_RAD_PER_S);
+  const { pos, heading } = seekTarget(
+    prevPos,
+    prevHeading,
+    target,
+    speed,
+    inputs.dtS,
+    MAX_TURN_RATE_RAD_PER_S,
+  );
   const clamped = clampToWorld(pos);
   return { x: clamped.x, y: clamped.y, heading, speed, phase };
 }
@@ -201,9 +264,21 @@ function mayorPatrolPoint(clockMs: number, phase: number): Pt {
   };
 }
 
-function tickMayorPatrol(inputs: FishTickInputs, prevPos: Pt, prevHeading: number, phase: number): FishKinematics {
+function tickMayorPatrol(
+  inputs: FishTickInputs,
+  prevPos: Pt,
+  prevHeading: number,
+  phase: number,
+): FishKinematics {
   const target = mayorPatrolPoint(inputs.clockMs, phase);
-  const { pos, heading } = seekTarget(prevPos, prevHeading, target, MAYOR_SPEED, inputs.dtS, MAX_TURN_RATE_RAD_PER_S);
+  const { pos, heading } = seekTarget(
+    prevPos,
+    prevHeading,
+    target,
+    MAYOR_SPEED,
+    inputs.dtS,
+    MAX_TURN_RATE_RAD_PER_S,
+  );
   const clamped = clampToWorld(pos);
   return { x: clamped.x, y: clamped.y, heading, speed: MAYOR_SPEED, phase };
 }

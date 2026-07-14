@@ -68,11 +68,7 @@ function paintRigLabels(
     if (formation.key === CITY_KEY) continue;
     const pos = worldToScreen(mid, formation.anchorX, formation.anchorY);
     if (offscreen(pos, viewport, 140)) continue;
-    ctx.fillText(
-      `${formation.key.toUpperCase()} · ${formation.openBeadTotal}`,
-      pos.x,
-      pos.y + 26,
-    );
+    ctx.fillText(`${formation.key.toUpperCase()} · ${formation.openBeadTotal}`, pos.x, pos.y + 26);
   }
   setLetterSpacing(ctx, '0px');
 }

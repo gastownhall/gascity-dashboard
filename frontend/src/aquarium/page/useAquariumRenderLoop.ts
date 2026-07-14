@@ -1,0 +1,144 @@
+// The paint pipeline: DPR canvas sizing, and either a continuous rAF loop
+// (advanceSim -> paintScene every frame) or, under reduced motion, a single
+// settled paint per state change with no autonomous loop at all
+// (specs/plans/reef-aquarium.md "Reduced motion"). `requestPaint` is how a
+// ref-only camera gesture (which never triggers a React re-render) still
+// gets on screen while reduced motion has no loop polling for it.
+//
+// UNRESOLVED IMPORT (expected at hand-off): sim/advanceSim.ts and
+// render/paintScene.ts are owned by sibling modules and did not exist at the
+// time this file was written.
+
+import { useCallback, useEffect, useRef } from 'react';
+import type { MutableRefObject, RefObject } from 'react';
+import { advanceSim } from '../sim/advanceSim';
+import { paintScene } from '../render/paintScene';
+import type { Camera, ScenePalette, SimState, Viewport, WorldSnapshot } from '../contracts';
+
+/** window.__aquariumFrameTimesMs is capped so a long-running fixture-mode
+ *  perf sweep can't grow the array unbounded. */
+const FRAME_TIME_CAP = 5000;
+
+const INITIAL_SIM_STATE: SimState = { fish: {}, pellets: {}, clockMs: 0 };
+
+export interface UseAquariumRenderLoopArgs {
+  canvasRef: RefObject<HTMLCanvasElement | null>;
+  viewport: Viewport;
+  snapshot: WorldSnapshot | null;
+  cameraRef: MutableRefObject<Camera>;
+  palette: ScenePalette;
+  reducedMotion: boolean;
+  isFixture: boolean;
+}
+
+export interface AquariumRenderLoopApi {
+  /** No-op unless reduced motion is active — a camera gesture calls this so
+   *  its instant jump still reaches the screen with no polling loop running. */
+  requestPaint: () => void;
+  /** Read-only: the live kinematics hit-testing needs to resolve a click to
+   *  the fish/pellet actually on screen (not just the derived snapshot's
+   *  static entity list). */
+  simRef: RefObject<SimState>;
+}
+
+export function useAquariumRenderLoop({
+  canvasRef,
+  viewport,
+  snapshot,
+  cameraRef,
+  palette,
+  reducedMotion,
+  isFixture,
+}: UseAquariumRenderLoopArgs): AquariumRenderLoopApi {
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+  const paletteRef = useRef(palette);
+  paletteRef.current = palette;
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
+  const isFixtureRef = useRef(isFixture);
+  isFixtureRef.current = isFixture;
+  const simRef = useRef<SimState>(INITIAL_SIM_STATE);
+
+  useCanvasDprSizing(canvasRef, viewport);
+
+  const paintOnce = useCallback(
+    (dtMs: number) => {
+      const canvas = canvasRef.current;
+      const currentSnapshot = snapshotRef.current;
+      if (canvas === null || currentSnapshot === null) return;
+      const ctx = canvas.getContext('2d');
+      // jsdom (and any canvas-less environment) returns null here — skip
+      // painting silently; every other concern (DOM, a11y, overlay) still
+      // renders normally, which is exactly what the route tests rely on.
+      if (ctx === null) return;
+      simRef.current = advanceSim(currentSnapshot, simRef.current, dtMs, reducedMotionRef.current);
+      paintScene(
+        ctx,
+        currentSnapshot,
+        simRef.current,
+        cameraRef.current,
+        viewportRef.current,
+        paletteRef.current,
+        { reducedMotion: reducedMotionRef.current },
+      );
+    },
+    [canvasRef, cameraRef],
+  );
+
+  // Continuous loop, only while motion is not reduced.
+  useEffect(() => {
+    if (reducedMotion) return;
+    let rafId = 0;
+    let lastTs: number | null = null;
+    const tick = (ts: number) => {
+      const dtMs = lastTs === null ? 0 : ts - lastTs;
+      lastTs = ts;
+      if (isFixtureRef.current) pushFrameTime(dtMs);
+      paintOnce(dtMs);
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [reducedMotion, paintOnce]);
+
+  // Reduced motion: one settled paint whenever the derived world, viewport,
+  // or palette actually change. Camera-driven repaints route through
+  // requestPaint instead (camera lives in a ref, so it never lands here).
+  useEffect(() => {
+    if (!reducedMotion) return;
+    paintOnce(0);
+  }, [reducedMotion, snapshot, viewport, palette, paintOnce]);
+
+  const requestPaint = useCallback(() => {
+    if (reducedMotionRef.current) paintOnce(0);
+  }, [paintOnce]);
+
+  return { requestPaint, simRef };
+}
+
+function useCanvasDprSizing(
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  viewport: Viewport,
+): void {
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    canvas.width = Math.round(viewport.cssWidth * viewport.dpr);
+    canvas.height = Math.round(viewport.cssHeight * viewport.dpr);
+    canvas.style.width = `${viewport.cssWidth}px`;
+    canvas.style.height = `${viewport.cssHeight}px`;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) return;
+    ctx.setTransform(viewport.dpr, 0, 0, viewport.dpr, 0, 0);
+  }, [canvasRef, viewport]);
+}
+
+function pushFrameTime(dtMs: number): void {
+  const times = window.__aquariumFrameTimesMs ?? [];
+  times.push(dtMs);
+  if (times.length > FRAME_TIME_CAP) times.shift();
+  window.__aquariumFrameTimesMs = times;
+}

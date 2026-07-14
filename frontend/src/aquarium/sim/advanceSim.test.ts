@@ -27,15 +27,31 @@ function fish(overrides: Partial<FishEntity> & { id: string }): FishEntity {
 }
 
 function formation(overrides: Partial<RigFormation> & { key: string }): RigFormation {
-  return { anchorX: 2000, anchorY: WORLD.seabedY, radius: 200, seed: 1, openBeadTotal: 0, ...overrides };
+  return {
+    anchorX: 2000,
+    anchorY: WORLD.seabedY,
+    radius: 200,
+    seed: 1,
+    openBeadTotal: 0,
+    ...overrides,
+  };
 }
 
-function pellet(overrides: Partial<PelletEntity> & { beadId: string; rigKey: string }): PelletEntity {
+function pellet(
+  overrides: Partial<PelletEntity> & { beadId: string; rigKey: string },
+): PelletEntity {
   return { label: overrides.beadId, state: 'drifting', ...overrides };
 }
 
 function snapshot(overrides: Partial<WorldSnapshot> = {}): WorldSnapshot {
-  return { formations: [], fish: [], pellets: [], needsAttention: 0, pelletOverflow: {}, ...overrides };
+  return {
+    formations: [],
+    fish: [],
+    pellets: [],
+    needsAttention: 0,
+    pelletOverflow: {},
+    ...overrides,
+  };
 }
 
 const EMPTY_STATE: SimState = { fish: {}, pellets: {}, clockMs: 0 };
@@ -134,7 +150,11 @@ describe('advanceSim — reduced motion', () => {
     const fromEmpty = advanceSim(world, EMPTY_STATE, 16, true);
     const fromPopulated = advanceSim(
       world,
-      { fish: { f1: { x: 999, y: 999, heading: 3, speed: 80, phase: 2 } }, pellets: {}, clockMs: 5000 },
+      {
+        fish: { f1: { x: 999, y: 999, heading: 3, speed: 80, phase: 2 } },
+        pellets: {},
+        clockMs: 5000,
+      },
       16,
       true,
     );
@@ -147,7 +167,10 @@ describe('advanceSim — entity set fidelity', () => {
     const world = snapshot({
       formations: [formation({ key: 'alpha' })],
       fish: [fish({ id: 'f1' }), fish({ id: 'f2' })],
-      pellets: [pellet({ beadId: 'b1', rigKey: 'alpha' }), pellet({ beadId: 'b2', rigKey: 'alpha' })],
+      pellets: [
+        pellet({ beadId: 'b1', rigKey: 'alpha' }),
+        pellet({ beadId: 'b2', rigKey: 'alpha' }),
+      ],
     });
     const result = advanceSim(world, EMPTY_STATE, 16, false);
     expect(Object.keys(result.fish).sort()).toEqual(['f1', 'f2']);

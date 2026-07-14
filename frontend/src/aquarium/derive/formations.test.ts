@@ -8,9 +8,12 @@ function bead(id: string): Bead {
 }
 
 function beadsByRig(entries: Record<string, number>): FormationInputs['beadsByRig'] {
-  const out: FormationInputs['beadsByRig'] = {};
+  const out: Record<string, { items: Bead[]; total: number }> = {};
   for (const [key, total] of Object.entries(entries)) {
-    out[key] = { items: Array.from({ length: Math.min(total, 3) }, (_, i) => bead(`${key}-${i}`)), total };
+    out[key] = {
+      items: Array.from({ length: Math.min(total, 3) }, (_, i) => bead(`${key}-${i}`)),
+      total,
+    };
   }
   return out;
 }
@@ -31,7 +34,9 @@ describe('buildFormations', () => {
       beadsByRig: beadsByRig({ alpha: 3 }),
       fishHomeKeys: ['beta', 'beta'],
     };
-    const keys = buildFormations(inputs).map((f) => f.key).sort();
+    const keys = buildFormations(inputs)
+      .map((f) => f.key)
+      .sort();
     expect(keys).toEqual(['alpha', 'beta']);
   });
 
@@ -85,7 +90,10 @@ describe('buildFormations', () => {
   });
 
   it('places anchors on the seabed within the world bounds', () => {
-    const inputs: FormationInputs = { beadsByRig: beadsByRig({ alpha: 1, beta: 2 }), fishHomeKeys: [] };
+    const inputs: FormationInputs = {
+      beadsByRig: beadsByRig({ alpha: 1, beta: 2 }),
+      fishHomeKeys: [],
+    };
     for (const f of buildFormations(inputs)) {
       expect(f.anchorY).toBe(WORLD.seabedY);
       expect(f.anchorX).toBeGreaterThan(0);

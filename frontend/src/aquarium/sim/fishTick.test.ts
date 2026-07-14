@@ -9,6 +9,7 @@ function baseInputs(overrides: Partial<FishTickInputs>): FishTickInputs {
   return {
     seed: 42,
     pose: 'idle',
+    isMayor: false,
     tombstoned: false,
     prevKin: undefined,
     homeAnchor: ANCHOR,
@@ -22,7 +23,10 @@ function baseInputs(overrides: Partial<FishTickInputs>): FishTickInputs {
 
 describe('tickFish — general', () => {
   it('is deterministic for identical inputs', () => {
-    const inputs = baseInputs({ pose: 'working', prevKin: { x: 10, y: 20, heading: 0.2, speed: 70, phase: 1 } });
+    const inputs = baseInputs({
+      pose: 'working',
+      prevKin: { x: 10, y: 20, heading: 0.2, speed: 70, phase: 1 },
+    });
     expect(tickFish(inputs)).toEqual(tickFish(inputs));
   });
 
@@ -39,7 +43,15 @@ describe('tickFish — general', () => {
   });
 
   it('never produces NaN/Infinity across every pose', () => {
-    for (const pose of ['working', 'idle', 'asleep', 'awaiting-input', 'stalled', 'rate-limited', 'errored'] as const) {
+    for (const pose of [
+      'working',
+      'idle',
+      'asleep',
+      'awaiting-input',
+      'stalled',
+      'rate-limited',
+      'errored',
+    ] as const) {
       const kin = tickFish(baseInputs({ pose }));
       expect(Number.isFinite(kin.x)).toBe(true);
       expect(Number.isFinite(kin.y)).toBe(true);
@@ -51,7 +63,12 @@ describe('tickFish — general', () => {
 
 describe('tickFish — working', () => {
   it('cruises with positive speed', () => {
-    const kin = tickFish(baseInputs({ pose: 'working', prevKin: { x: 2000, y: 1900, heading: 0, speed: 70, phase: 0 } }));
+    const kin = tickFish(
+      baseInputs({
+        pose: 'working',
+        prevKin: { x: 2000, y: 1900, heading: 0, speed: 70, phase: 0 },
+      }),
+    );
     expect(kin.speed).toBeGreaterThan(0);
   });
 
@@ -107,7 +124,10 @@ describe('tickFish — hold poses', () => {
 describe('tickFish — world bounds', () => {
   it('never leaves the world bounds even from an out-of-bounds previous position', () => {
     const kin = tickFish(
-      baseInputs({ pose: 'working', prevKin: { x: -5000, y: -5000, heading: 0, speed: 70, phase: 0 } }),
+      baseInputs({
+        pose: 'working',
+        prevKin: { x: -5000, y: -5000, heading: 0, speed: 70, phase: 0 },
+      }),
     );
     expect(kin.x).toBeGreaterThanOrEqual(0);
     expect(kin.x).toBeLessThanOrEqual(WORLD.width);

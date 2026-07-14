@@ -103,8 +103,6 @@ describe('oklch color math', () => {
 
   it('replaces alpha and mixes componentwise', () => {
     expect(withAlpha('oklch(50% 0.1 200)', 0.5)).toBe('oklch(50% 0.1 200 / 0.5)');
-    expect(mixOklch('oklch(20% 0 100)', 'oklch(40% 0.2 200)', 0.5)).toBe(
-      'oklch(30% 0.1 150)',
-    );
+    expect(mixOklch('oklch(20% 0 100)', 'oklch(40% 0.2 200)', 0.5)).toBe('oklch(30% 0.1 150)');
   });
 });

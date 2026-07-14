@@ -60,7 +60,11 @@ function mouthPhase(seed: number): number {
 function atMouth(inputs: PelletTickInputs, phase: number): PelletKinematics {
   if (inputs.holderKin === undefined) return crestPoint(inputs.formationAnchor, inputs.seed, phase);
   const h = inputs.holderKin;
-  return { x: h.x + Math.cos(h.heading) * MOUTH_OFFSET_WU, y: h.y + Math.sin(h.heading) * MOUTH_OFFSET_WU, phase };
+  return {
+    x: h.x + Math.cos(h.heading) * MOUTH_OFFSET_WU,
+    y: h.y + Math.sin(h.heading) * MOUTH_OFFSET_WU,
+    phase,
+  };
 }
 
 function crestPoint(anchor: FormationAnchor, seed: number, phase: number): PelletKinematics {
@@ -89,7 +93,8 @@ function driftingPosition(inputs: PelletTickInputs): PelletKinematics {
   const phase = mouthPhase(inputs.seed);
   const baseX = anchor.x + hashRange(inputs.seed + 2, -anchor.radius, anchor.radius) * 0.9;
   const baseY = anchor.y - anchor.radius * hashRange(inputs.seed + 3, 0.6, 1.1);
-  const bob = Math.sin((inputs.clockMs / DRIFT_BOB_PERIOD_MS) * TAU + phase) * DRIFT_BOB_AMPLITUDE_WU;
+  const bob =
+    Math.sin((inputs.clockMs / DRIFT_BOB_PERIOD_MS) * TAU + phase) * DRIFT_BOB_AMPLITUDE_WU;
   return { x: baseX, y: baseY + bob, phase };
 }
 

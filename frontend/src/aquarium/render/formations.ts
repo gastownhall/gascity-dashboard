@@ -76,13 +76,7 @@ function buildGeometry(formation: RigFormation): FormationGeometry {
   };
 }
 
-function blobRing(
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-  rnd: () => number,
-): Pt[] {
+function blobRing(cx: number, cy: number, rx: number, ry: number, rnd: () => number): Pt[] {
   const points: Pt[] = [];
   const k = 9;
   for (let j = 0; j < k; j += 1) {

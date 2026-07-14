@@ -19,7 +19,11 @@ describe('buildPellets', () => {
     const inputs: BuildPelletsInputs = {
       beadsByRig: {
         alpha: {
-          items: [bead('a-1', 'open'), bead('a-2', 'in_progress', 'polecat-gc-1'), bead('a-3', 'blocked')],
+          items: [
+            bead('a-1', 'open'),
+            bead('a-2', 'in_progress', 'polecat-gc-1'),
+            bead('a-3', 'blocked'),
+          ],
           total: 3,
         },
       },

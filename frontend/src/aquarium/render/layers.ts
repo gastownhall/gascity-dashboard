@@ -59,11 +59,7 @@ export interface ViewRect {
 }
 
 /** Visible world rect for a layer, padded by margin world units. */
-export function visibleWorldRect(
-  t: LayerTransform,
-  viewport: Viewport,
-  margin: number,
-): ViewRect {
+export function visibleWorldRect(t: LayerTransform, viewport: Viewport, margin: number): ViewRect {
   return {
     left: (0 - t.tx) / t.scale - margin,
     top: (0 - t.ty) / t.scale - margin,

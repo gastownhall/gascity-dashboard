@@ -92,8 +92,7 @@ export function paintParticulate(
   const t = clockMs / 1000;
   for (let i = 0; i < MOTE_COUNT; i += 1) {
     const fallSpeed = 6 + hash01(i * 7 + 1) * 10;
-    const x =
-      hash01(i * 2 + 1) * WORLD.width + Math.sin(t * 0.2 + i * 1.7) * 9;
+    const x = hash01(i * 2 + 1) * WORLD.width + Math.sin(t * 0.2 + i * 1.7) * 9;
     const y = (hash01(i * 3 + 2) * WORLD.height + t * fallSpeed) % WORLD.height;
     if (x < view.left || x > view.right || y < view.top || y > view.bottom) continue;
     const r = 1.2 + hash01(i * 5 + 3) * 1.6;

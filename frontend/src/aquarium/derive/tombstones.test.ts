@@ -42,22 +42,14 @@ describe('reconcileFishTombstones', () => {
 
   it('drops a fish once the tombstone window has elapsed', () => {
     const prevMemory: FishMemory = { lastSeenMs: { a: T0 }, lastKnown: { a: fish('a') } };
-    const { fish: out, memory } = reconcileFishTombstones(
-      [],
-      prevMemory,
-      T0 + TOMBSTONE_WINDOW_MS,
-    );
+    const { fish: out, memory } = reconcileFishTombstones([], prevMemory, T0 + TOMBSTONE_WINDOW_MS);
     expect(out).toEqual([]);
     expect(memory.lastSeenMs.a).toBeUndefined();
   });
 
   it('keeps a ghost right up to (but not including) the window boundary', () => {
     const prevMemory: FishMemory = { lastSeenMs: { a: T0 }, lastKnown: { a: fish('a') } };
-    const { fish: out } = reconcileFishTombstones(
-      [],
-      prevMemory,
-      T0 + TOMBSTONE_WINDOW_MS - 1,
-    );
+    const { fish: out } = reconcileFishTombstones([], prevMemory, T0 + TOMBSTONE_WINDOW_MS - 1);
     expect(out).toHaveLength(1);
   });
 

@@ -22,15 +22,7 @@ import {
 /** world-unit cull padding: covers a grouper (160) plus caudal fan + labels */
 const CULL_MARGIN = 250;
 
-export const paintScene: PaintScene = (
-  ctx,
-  snapshot,
-  sim,
-  camera,
-  viewport,
-  palette,
-  opts,
-) => {
+export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, palette, opts) => {
   const clockMs = opts.reducedMotion ? 0 : sim.clockMs;
   const far = layerTransform(camera, viewport, PARALLAX.far);
   const mid = layerTransform(camera, viewport, PARALLAX.mid);

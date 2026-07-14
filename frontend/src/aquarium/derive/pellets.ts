@@ -5,7 +5,12 @@
 // states (e.g. closed) simply isn't a pellet.
 
 import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
-import { isBlockedStatus, isInFlightStatus, isOpenStatus, parseAssignee } from 'gas-city-dashboard-shared';
+import {
+  isBlockedStatus,
+  isInFlightStatus,
+  isOpenStatus,
+  parseAssignee,
+} from 'gas-city-dashboard-shared';
 import { PELLET_RENDER_CAP_PER_RIG, type PelletEntity, type PelletState } from '../contracts';
 
 export interface BuildPelletsInputs {
@@ -57,7 +62,9 @@ function toPellet(
   const state = pelletStateForStatus(bead.status);
   if (state === undefined) return [];
   const fishId =
-    state === 'held' ? sessionIdToFishId.get(parseAssignee(bead.assignee ?? '').sessionId ?? '') : undefined;
+    state === 'held'
+      ? sessionIdToFishId.get(parseAssignee(bead.assignee ?? '').sessionId ?? '')
+      : undefined;
   return [
     {
       beadId: bead.id,
@@ -100,9 +107,7 @@ function capPerRig(rigPellets: readonly PelletEntity[]): {
   if (rigPellets.length <= PELLET_RENDER_CAP_PER_RIG) {
     return { rendered: [...rigPellets], overflow: 0 };
   }
-  const ordered = [...rigPellets].sort(
-    (a, b) => STATE_PRIORITY[a.state] - STATE_PRIORITY[b.state],
-  );
+  const ordered = [...rigPellets].sort((a, b) => STATE_PRIORITY[a.state] - STATE_PRIORITY[b.state]);
   return {
     rendered: ordered.slice(0, PELLET_RENDER_CAP_PER_RIG),
     overflow: rigPellets.length - PELLET_RENDER_CAP_PER_RIG,

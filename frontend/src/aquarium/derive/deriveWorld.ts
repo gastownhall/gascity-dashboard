@@ -41,9 +41,17 @@ export function deriveWorldSnapshot(
     beadsByRig: inputs.beadsByRig,
     nowMs,
   });
-  const { fish, memory: fishMemory } = reconcileFishTombstones(liveFish, memory?.fish ?? null, nowMs);
+  const { fish, memory: fishMemory } = reconcileFishTombstones(
+    liveFish,
+    memory?.fish ?? null,
+    nowMs,
+  );
 
-  const { pellets: rawPellets, pelletOverflow, beadHolders } = buildPellets({
+  const {
+    pellets: rawPellets,
+    pelletOverflow,
+    beadHolders,
+  } = buildPellets({
     beadsByRig: inputs.beadsByRig,
     sessionIdsByFishId: sessionIdByFishId,
   });

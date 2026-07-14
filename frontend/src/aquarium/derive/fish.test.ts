@@ -7,7 +7,9 @@ import { buildFish, type BuildFishInputs } from './fish';
 const NOW = Date.parse('2026-07-13T12:00:00.000Z');
 const RIGS = [{ name: 'alpha-rig', path: '/home/ds/alpha' }];
 
-function session(overrides: Partial<SessionResponse> & { session_name: string; id: string }): SessionResponse {
+function session(
+  overrides: Partial<SessionResponse> & { session_name: string; id: string },
+): SessionResponse {
   return {
     attached: false,
     created_at: '2026-01-01T00:00:00Z',
@@ -57,7 +59,12 @@ describe('buildFish — session-backed fish', () => {
   });
 
   it('is calm-idle by default with no distress and no in-turn activity', () => {
-    const s = session({ session_name: 'sess-1', id: 'gc-1', activity: 'thinking', state: 'active' });
+    const s = session({
+      session_name: 'sess-1',
+      id: 'gc-1',
+      activity: 'thinking',
+      state: 'active',
+    });
     const { fish } = buildFish(inputs({ sessions: [s] }));
     expect(fish[0]?.pose).toBe('idle');
   });
@@ -70,7 +77,11 @@ describe('buildFish — session-backed fish', () => {
 
   it('carries a distress pose verbatim, joined agent<->session via agent.session.name', () => {
     const s = session({ session_name: 'sess-1', id: 'gc-1', activity: 'in-turn' });
-    const a = agent({ name: 'polecat-alpha', state: 'failed', session: { attached: true, name: 'sess-1' } });
+    const a = agent({
+      name: 'polecat-alpha',
+      state: 'failed',
+      session: { attached: true, name: 'sess-1' },
+    });
     const { fish } = buildFish(inputs({ sessions: [s], agents: [a] }));
     // errored outranks the raw activity=in-turn calm derivation entirely.
     expect(fish[0]?.pose).toBe('errored');
@@ -156,7 +167,11 @@ describe('buildFish — fallback fish for sessionless distressed agents', () => 
 
   it('does not duplicate a fish for a distressed agent that DOES have a live session', () => {
     const s = session({ session_name: 'sess-1', id: 'gc-1' });
-    const a = agent({ name: 'agent-1', state: 'failed', session: { attached: true, name: 'sess-1' } });
+    const a = agent({
+      name: 'agent-1',
+      state: 'failed',
+      session: { attached: true, name: 'sess-1' },
+    });
     const { fish } = buildFish(inputs({ sessions: [s], agents: [a] }));
     expect(fish).toHaveLength(1);
     expect(fish[0]?.id).toBe('sess-1');

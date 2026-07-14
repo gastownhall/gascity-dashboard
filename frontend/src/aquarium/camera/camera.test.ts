@@ -43,7 +43,12 @@ describe('worldFromScreen / screenFromWorld roundtrip', () => {
 
   it('maps the viewport center to the camera focus', () => {
     const cam: Camera = { x: 1234, y: 567, zoom: 2 };
-    const world = worldFromScreen(cam, VIEWPORT_1440, VIEWPORT_1440.cssWidth / 2, VIEWPORT_1440.cssHeight / 2);
+    const world = worldFromScreen(
+      cam,
+      VIEWPORT_1440,
+      VIEWPORT_1440.cssWidth / 2,
+      VIEWPORT_1440.cssHeight / 2,
+    );
     expect(world.x).toBeCloseTo(cam.x, 6);
     expect(world.y).toBeCloseTo(cam.y, 6);
   });
