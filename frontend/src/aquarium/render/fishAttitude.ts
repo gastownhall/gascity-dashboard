@@ -127,18 +127,26 @@ const BY_POSE: Record<AquariumPose, FishAttitude> = {
     tense: true,
     maxHeadingTilt: 6 * DEG,
   },
-  // fully belly-up: pale belly on top, dark back down, X-cross eye, limp fins.
-  // a gentle resting bow reads as a LIMP dead body, not a rigid parked plank
+  // fully belly-up + CAPSIZED: pale belly on top, dark back down, X-cross eye,
+  // slack agape jaw, limp drooping fins, zero tail beat. A dead float reads
+  // weakly when it's level and symmetric (a legibility judge missed it), so the
+  // body also hangs head-low: with the vertical flip a positive pitch rotates
+  // the nose DOWN, so the fish lists like a capsized carcass, not a level swimmer
+  // — the tilt is the single loudest "this is upside-down and dead" silhouette
+  // cue. Head-down (not up) keeps the dorsal fin + eye firmly on the down side,
+  // so the belly-up geometry invariants hold.
   errored: {
     ...LEVEL,
     flipVertical: true,
-    tailBeat: 0.06,
+    pitch: 20 * DEG,
+    tailBeat: 0,
     restBow: 0.05,
     eye: 'cross',
+    mouthOpen: true,
     finsFolded: true,
-    finClamp: 0.5,
+    finClamp: 0.36,
     maxHeadingTilt: 8 * DEG,
-    swayAmp: 2 * DEG,
+    swayAmp: 2.5 * DEG,
   },
 };
 
