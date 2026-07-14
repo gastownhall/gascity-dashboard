@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
 import { CITY_KEY, UNRIGGED_KEY, WORLD } from '../contracts';
-import { buildFormations, type FormationInputs } from './formations';
+import { buildFormations, formationCoreRadius, type FormationInputs } from './formations';
 
 function bead(id: string): Bead {
   return { id, created_at: '2026-01-01T00:00:00Z', issue_type: 'task', status: 'open', title: id };
@@ -89,33 +89,52 @@ describe('buildFormations', () => {
     expect(formation!.seed).toBeGreaterThanOrEqual(0);
   });
 
-  it('places anchors on the seabed within the world bounds', () => {
+  it('places anchors on the seabed band within the world bounds, at varied depths', () => {
     const inputs: FormationInputs = {
-      beadsByRig: beadsByRig({ alpha: 1, beta: 2 }),
+      beadsByRig: beadsByRig({ alpha: 1, beta: 2, gamma: 3, delta: 1 }),
       fishHomeKeys: [],
     };
     for (const f of buildFormations(inputs)) {
-      expect(f.anchorY).toBe(WORLD.seabedY);
+      expect(f.anchorY).toBeGreaterThanOrEqual(WORLD.seabedY);
+      expect(f.anchorY).toBeLessThan(WORLD.height);
       expect(f.anchorX).toBeGreaterThan(0);
       expect(f.anchorX).toBeLessThan(WORLD.width);
     }
   });
 
-  it('never overlaps for 8 formations with varied, non-trivial crew counts', () => {
+  const layoutInputs = (): FormationInputs => {
     const rigKeys = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta'];
     const crewCounts = [1, 3, 6, 2, 8, 4, 1, 5];
     const fishHomeKeys = rigKeys.flatMap((key, i) => Array(crewCounts[i]).fill(key) as string[]);
-    const inputs: FormationInputs = {
+    return {
       beadsByRig: beadsByRig(Object.fromEntries(rigKeys.map((k) => [k, 2]))),
       fishHomeKeys,
     };
-    const formations = [...buildFormations(inputs)].sort((a, b) => a.anchorX - b.anchorX);
+  };
+
+  it('keeps CORES from overlapping while allowing silhouettes to cluster', () => {
+    const formations = [...buildFormations(layoutInputs())].sort((a, b) => a.anchorX - b.anchorX);
     expect(formations).toHaveLength(8);
     for (let i = 1; i < formations.length; i += 1) {
       const prev = formations[i - 1]!;
       const cur = formations[i]!;
-      const gap = cur.anchorX - prev.anchorX;
-      expect(gap).toBeGreaterThanOrEqual(prev.radius + cur.radius);
+      const centerGap = cur.anchorX - prev.anchorX;
+      expect(centerGap).toBeGreaterThanOrEqual(
+        formationCoreRadius(prev.radius) + formationCoreRadius(cur.radius),
+      );
     }
+  });
+
+  it('spaces formations irregularly — varied gaps, not a bar chart', () => {
+    const formations = [...buildFormations(layoutInputs())].sort((a, b) => a.anchorX - b.anchorX);
+    const gaps = formations.slice(1).map((f, i) => f.anchorX - formations[i]!.anchorX);
+    const spread = Math.max(...gaps) - Math.min(...gaps);
+    expect(spread).toBeGreaterThan(60);
+  });
+
+  it('varies formation depth so bases are not all on one baseline', () => {
+    const formations = buildFormations(layoutInputs());
+    const distinctDepths = new Set(formations.map((f) => f.anchorY));
+    expect(distinctDepths.size).toBeGreaterThan(1);
   });
 });

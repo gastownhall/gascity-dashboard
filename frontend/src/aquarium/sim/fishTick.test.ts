@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WORLD } from '../contracts';
+import { BAND_WORKING_Y } from './constants';
 import type { HomeAnchor } from './restPositions';
 import { tickFish, type FishTickInputs } from './fishTick';
 
@@ -30,10 +31,11 @@ describe('tickFish — general', () => {
     expect(tickFish(inputs)).toEqual(tickFish(inputs));
   });
 
-  it('spawns a brand-new fish near its home anchor, never at the origin', () => {
+  it('spawns a brand-new working fish in its mid-water band near its home x, never at the origin', () => {
     const kin = tickFish(baseInputs({ pose: 'working' }));
     expect(kin.x === 0 && kin.y === 0).toBe(false);
-    expect(Math.hypot(kin.x - ANCHOR.x, kin.y - ANCHOR.y)).toBeLessThan(ANCHOR.radius * 2);
+    expect(Math.abs(kin.x - ANCHOR.x)).toBeLessThanOrEqual(ANCHOR.radius * 1.5);
+    expect(Math.abs(kin.y - BAND_WORKING_Y)).toBeLessThanOrEqual(80);
   });
 
   it('a tombstoned fish freezes exactly at its previous kinematics with zero speed', () => {
@@ -73,16 +75,27 @@ describe('tickFish — working', () => {
   });
 
   it('is pulled toward its task pellet target over several ticks', () => {
-    const target = { x: 2400, y: 1850 };
-    let kin = { x: 2000, y: 1900, heading: 0, speed: 70, phase: 0 };
+    const target = { x: 2400, y: BAND_WORKING_Y };
+    let kin = { x: 2000, y: BAND_WORKING_Y, heading: 0, speed: 70, phase: 0 };
     for (let i = 0; i < 240; i += 1) {
       kin = tickFish(
         baseInputs({ pose: 'working', prevKin: kin, taskTarget: target, clockMs: i * 16 }),
       );
     }
     expect(Math.hypot(kin.x - target.x, kin.y - target.y)).toBeLessThan(
-      Math.hypot(2000 - target.x, 1900 - target.y),
+      Math.hypot(2000 - target.x, BAND_WORKING_Y - target.y),
     );
+  });
+
+  it('rises from the seabed into the mid-water pellet band and holds it, never sinking back', () => {
+    // Start at the formation base; the band-home tether must lift it above the
+    // crest into the working band rather than let it linger on the seabed.
+    let kin = { x: ANCHOR.x, y: ANCHOR.y, heading: 0, speed: 70, phase: 0 };
+    for (let i = 0; i < 1500; i += 1) {
+      kin = tickFish(baseInputs({ pose: 'working', prevKin: kin, clockMs: i * 16 }));
+    }
+    expect(kin.y).toBeLessThan(ANCHOR.y - ANCHOR.radius);
+    expect(Math.abs(kin.y - BAND_WORKING_Y)).toBeLessThan(180);
   });
 });
 

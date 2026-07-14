@@ -3,7 +3,7 @@
 
 import type { FishKinematics, PelletKinematics, PelletState } from '../contracts';
 import { hashRange } from '../derive/hash';
-import { MOUTH_OFFSET_WU } from './constants';
+import { BAND_WORKING_Y, MOUTH_OFFSET_WU } from './constants';
 
 export { MOUTH_OFFSET_WU };
 
@@ -87,12 +87,16 @@ function sunkenPosition(inputs: PelletTickInputs): PelletKinematics {
   };
 }
 
-/** A slow bob in the cloud band above the formation crest. */
+/** A slow bob in the mid-water pellet band — open food drifts in the same
+ * band the working shoal cruises (BAND_WORKING_Y), spread across the
+ * formation width and sitting a touch below the shoal so fish reach down to
+ * it. Well above the formation crest for every rig, so the mid-water column
+ * reads as populated rather than empty. */
 function driftingPosition(inputs: PelletTickInputs): PelletKinematics {
   const anchor = inputs.formationAnchor;
   const phase = mouthPhase(inputs.seed);
   const baseX = anchor.x + hashRange(inputs.seed + 2, -anchor.radius, anchor.radius) * 0.9;
-  const baseY = anchor.y - anchor.radius * hashRange(inputs.seed + 3, 0.6, 1.1);
+  const baseY = BAND_WORKING_Y + hashRange(inputs.seed + 3, -70, 150);
   const bob =
     Math.sin((inputs.clockMs / DRIFT_BOB_PERIOD_MS) * TAU + phase) * DRIFT_BOB_AMPLITUDE_WU;
   return { x: baseX, y: baseY + bob, phase };

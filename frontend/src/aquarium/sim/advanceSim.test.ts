@@ -4,11 +4,13 @@ import {
   UNRIGGED_KEY,
   WORLD,
   type FishEntity,
+  type FishKinematics,
   type PelletEntity,
   type RigFormation,
   type SimState,
   type WorldSnapshot,
 } from '../contracts';
+import { BAND_WORKING_Y } from './constants';
 import { advanceSim } from './advanceSim';
 
 function fish(overrides: Partial<FishEntity> & { id: string }): FishEntity {
@@ -159,6 +161,48 @@ describe('advanceSim — reduced motion', () => {
       true,
     );
     expect(fromPopulated.fish.f1).toEqual(fromEmpty.fish.f1);
+  });
+});
+
+describe('advanceSim — schooling', () => {
+  const IDS = ['s0', 's1', 's2', 's3', 's4', 's5'];
+
+  function pairwise(state: SimState): { min: number; max: number } {
+    const pts = IDS.map((id) => state.fish[id]!);
+    let min = Infinity;
+    let max = 0;
+    for (let i = 0; i < pts.length; i += 1) {
+      for (let j = i + 1; j < pts.length; j += 1) {
+        const d = Math.hypot(pts[i]!.x - pts[j]!.x, pts[i]!.y - pts[j]!.y);
+        min = Math.min(min, d);
+        max = Math.max(max, d);
+      }
+    }
+    return { min, max };
+  }
+
+  it('working fish converge into a loose shoal without collapsing to a point', () => {
+    const world = snapshot({
+      formations: [formation({ key: 'alpha', anchorX: 2000, radius: 200 })],
+      fish: IDS.map((id) => fish({ id, pose: 'working', homeKey: 'alpha' })),
+    });
+    // Seed the shoal spread wide across the mid-water column, same band y.
+    const startXs = [400, 900, 1400, 2600, 3100, 3600];
+    const seededFish: Record<string, FishKinematics> = Object.fromEntries(
+      IDS.map((id, i) => [
+        id,
+        { x: startXs[i]!, y: BAND_WORKING_Y, heading: 0, speed: 70, phase: 0 },
+      ]),
+    );
+    let state: SimState = { fish: seededFish, pellets: {}, clockMs: 0 };
+    const before = pairwise(state);
+    for (let i = 0; i < 1200; i += 1) state = advanceSim(world, state, 16, false);
+    const after = pairwise(state);
+
+    // Cohesion: the shoal draws together (spread more than halves).
+    expect(after.max).toBeLessThan(before.max * 0.5);
+    // Separation: it never collapses onto one point.
+    expect(after.min).toBeGreaterThan(25);
   });
 });
 

@@ -12,11 +12,11 @@ import {
   type RigFormation,
   type SimState,
 } from '../contracts';
-import { hashString } from '../derive/hash';
+import { hashString, hashUnit } from '../derive/hash';
 import { DT_CLAMP_MS, MOUTH_OFFSET_WU } from './constants';
-import { tickFish, type FishTickInputs } from './fishTick';
+import { tickFish, type FishTickInputs, type Neighbor } from './fishTick';
 import { tickPellet, type FormationAnchor } from './pelletTick';
-import { headingTo, type Pt } from './steer';
+import { type Pt } from './steer';
 
 export { MOUTH_OFFSET_WU };
 
@@ -115,11 +115,20 @@ function advanceOneFish(entity: FishEntity, ctx: FishTickContext): FishKinematic
   if (!ctx.reducedMotion) return kin;
   // Reduced motion: tickFish with dtS=0 already yields each pose's settled
   // rest point (a hold pose's target equals its own spawn point, so it's
-  // "arrived" instantly; working/idle resolve to their deterministic
-  // scatter spawn since a zero step never moves off it) — only the
-  // reported speed and a more legible outward-facing heading need forcing.
+  // "arrived" instantly; working/idle resolve to their deterministic band
+  // scatter spawn since a zero step never moves off it) — only the reported
+  // speed and a legible per-pose heading need forcing.
   if (entity.tombstoned) return kin;
-  return { ...kin, heading: headingTo(anchor, kin), speed: 0 };
+  return { ...kin, heading: reducedMotionHeading(entity.pose, seed), speed: 0 };
+}
+
+/** A settled, truthful heading for the frozen frame: surfacing/rising poses
+ * nose up toward the waterline; everyone else holds a horizontal cruise,
+ * facing left or right by hash so a frozen shoal is not a rigid lattice all
+ * pointing the same way. */
+function reducedMotionHeading(pose: FishEntity['pose'], seed: number): number {
+  if (pose === 'awaiting-input' || pose === 'errored') return -Math.PI / 2;
+  return hashUnit(seed ^ 0x51ed270b) < 0.5 ? 0 : Math.PI;
 }
 
 function taskPelletTarget(entity: FishEntity, prev: SimState): Pt | undefined {
@@ -127,7 +136,7 @@ function taskPelletTarget(entity: FishEntity, prev: SimState): Pt | undefined {
   return prev.pellets[entity.taskBeadId];
 }
 
-function neighborPositions(entity: FishEntity, ctx: FishTickContext): Pt[] {
+function neighborPositions(entity: FishEntity, ctx: FishTickContext): Neighbor[] {
   if (entity.pose !== 'working' || entity.tombstoned) return [];
   const groupIds = ctx.workingGroups.get(entity.homeKey) ?? [];
   return groupIds.flatMap((id) => {

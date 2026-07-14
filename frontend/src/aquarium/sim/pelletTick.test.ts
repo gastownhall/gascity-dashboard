@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WORLD } from '../contracts';
+import { BAND_WORKING_Y } from './constants';
 import { tickPellet, type PelletTickInputs, MOUTH_OFFSET_WU } from './pelletTick';
 
 const ANCHOR = { x: 2000, y: WORLD.seabedY, radius: 200 };
@@ -56,9 +57,10 @@ describe('tickPellet — sunken', () => {
 });
 
 describe('tickPellet — drifting', () => {
-  it('stays within the formation footprint, above the seabed', () => {
+  it('drifts in the mid-water pellet band, above the crest, over the formation width', () => {
     const kin = tickPellet(baseInputs({ state: 'drifting' }));
-    expect(kin.y).toBeLessThan(ANCHOR.y);
+    expect(kin.y).toBeLessThan(ANCHOR.y - ANCHOR.radius);
+    expect(Math.abs(kin.y - BAND_WORKING_Y)).toBeLessThanOrEqual(160);
     expect(Math.abs(kin.x - ANCHOR.x)).toBeLessThanOrEqual(ANCHOR.radius);
   });
 
