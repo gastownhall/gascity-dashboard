@@ -1,0 +1,113 @@
+import { describe, expect, it } from 'vitest';
+import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
+import { CITY_KEY, UNRIGGED_KEY, WORLD } from '../contracts';
+import { buildFormations, type FormationInputs } from './formations';
+
+function bead(id: string): Bead {
+  return { id, created_at: '2026-01-01T00:00:00Z', issue_type: 'task', status: 'open', title: id };
+}
+
+function beadsByRig(entries: Record<string, number>): FormationInputs['beadsByRig'] {
+  const out: FormationInputs['beadsByRig'] = {};
+  for (const [key, total] of Object.entries(entries)) {
+    out[key] = { items: Array.from({ length: Math.min(total, 3) }, (_, i) => bead(`${key}-${i}`)), total };
+  }
+  return out;
+}
+
+describe('buildFormations', () => {
+  it('is deterministic for identical inputs', () => {
+    const inputs: FormationInputs = {
+      beadsByRig: beadsByRig({ alpha: 5, beta: 2 }),
+      fishHomeKeys: ['alpha', 'alpha', 'beta'],
+    };
+    const first = buildFormations(inputs);
+    const second = buildFormations(inputs);
+    expect(second).toEqual(first);
+  });
+
+  it('unions beadsByRig keys and fish homeKeys, one formation per key', () => {
+    const inputs: FormationInputs = {
+      beadsByRig: beadsByRig({ alpha: 3 }),
+      fishHomeKeys: ['beta', 'beta'],
+    };
+    const keys = buildFormations(inputs).map((f) => f.key).sort();
+    expect(keys).toEqual(['alpha', 'beta']);
+  });
+
+  it('never emits a formation for CITY_KEY', () => {
+    const inputs: FormationInputs = {
+      beadsByRig: { [CITY_KEY]: { items: [bead('c-1')], total: 1 } },
+      fishHomeKeys: [CITY_KEY, CITY_KEY],
+    };
+    expect(buildFormations(inputs)).toEqual([]);
+  });
+
+  it('includes UNRIGGED_KEY only when it has fish or pellets', () => {
+    expect(buildFormations({ beadsByRig: {}, fishHomeKeys: [] })).toEqual([]);
+
+    const withFish = buildFormations({ beadsByRig: {}, fishHomeKeys: [UNRIGGED_KEY] });
+    expect(withFish.map((f) => f.key)).toEqual([UNRIGGED_KEY]);
+
+    const withPellets = buildFormations({
+      beadsByRig: { [UNRIGGED_KEY]: { items: [bead('u-1')], total: 1 } },
+      fishHomeKeys: [],
+    });
+    expect(withPellets.map((f) => f.key)).toEqual([UNRIGGED_KEY]);
+  });
+
+  it('sets openBeadTotal from beadsByRig[key].total, defaulting to 0 when absent', () => {
+    const inputs: FormationInputs = {
+      beadsByRig: beadsByRig({ alpha: 17 }),
+      fishHomeKeys: ['alpha', 'beta'],
+    };
+    const byKey = new Map(buildFormations(inputs).map((f) => [f.key, f]));
+    expect(byKey.get('alpha')?.openBeadTotal).toBe(17);
+    expect(byKey.get('beta')?.openBeadTotal).toBe(0);
+  });
+
+  it('scales radius with crew count and clamps to [140, 420]', () => {
+    const inputs: FormationInputs = {
+      beadsByRig: beadsByRig({ solo: 0, crowded: 0 }),
+      fishHomeKeys: [...Array(50).fill('crowded')] as string[],
+    };
+    const byKey = new Map(buildFormations(inputs).map((f) => [f.key, f]));
+    expect(byKey.get('solo')?.radius).toBe(140);
+    expect(byKey.get('crowded')?.radius).toBe(420);
+  });
+
+  it('seeds each formation deterministically from a hash of its key', () => {
+    const inputs: FormationInputs = { beadsByRig: beadsByRig({ alpha: 1 }), fishHomeKeys: [] };
+    const [formation] = buildFormations(inputs);
+    expect(formation).toBeDefined();
+    expect(Number.isInteger(formation!.seed)).toBe(true);
+    expect(formation!.seed).toBeGreaterThanOrEqual(0);
+  });
+
+  it('places anchors on the seabed within the world bounds', () => {
+    const inputs: FormationInputs = { beadsByRig: beadsByRig({ alpha: 1, beta: 2 }), fishHomeKeys: [] };
+    for (const f of buildFormations(inputs)) {
+      expect(f.anchorY).toBe(WORLD.seabedY);
+      expect(f.anchorX).toBeGreaterThan(0);
+      expect(f.anchorX).toBeLessThan(WORLD.width);
+    }
+  });
+
+  it('never overlaps for 8 formations with varied, non-trivial crew counts', () => {
+    const rigKeys = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta'];
+    const crewCounts = [1, 3, 6, 2, 8, 4, 1, 5];
+    const fishHomeKeys = rigKeys.flatMap((key, i) => Array(crewCounts[i]).fill(key) as string[]);
+    const inputs: FormationInputs = {
+      beadsByRig: beadsByRig(Object.fromEntries(rigKeys.map((k) => [k, 2]))),
+      fishHomeKeys,
+    };
+    const formations = [...buildFormations(inputs)].sort((a, b) => a.anchorX - b.anchorX);
+    expect(formations).toHaveLength(8);
+    for (let i = 1; i < formations.length; i += 1) {
+      const prev = formations[i - 1]!;
+      const cur = formations[i]!;
+      const gap = cur.anchorX - prev.anchorX;
+      expect(gap).toBeGreaterThanOrEqual(prev.radius + cur.radius);
+    }
+  });
+});
