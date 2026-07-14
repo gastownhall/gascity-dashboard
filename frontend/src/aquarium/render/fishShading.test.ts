@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ScenePalette, ThemeMood } from '../contracts';
 import { buildScenePalette } from './palette';
-import { countershadeColors } from './fishShading';
+import { countershadeBands, countershadeColors } from './fishShading';
+import { DEPTH_BANDS } from './depth';
 import { parseOklch } from './oklch';
 
 const TOKENS: Record<string, string> = {
@@ -79,5 +80,23 @@ describe('countershadeColors', () => {
   it('the pectoral light tone is brighter than the dark back (fin catches light)', () => {
     const c = countershadeColors(palette('light'), 'normal');
     expect(L(c.finLight)).toBeGreaterThan(L(c.finRoot));
+  });
+});
+
+describe('countershadeBands (per-depth atmospheric haze)', () => {
+  it('blends the FAR band strongly toward the water haze; the NEAR band is full pigment', () => {
+    for (const mood of ['light', 'dark'] as const) {
+      const p = palette(mood);
+      const bands = countershadeBands(p, 'normal');
+      const far = bands[0];
+      const near = bands[DEPTH_BANDS - 1];
+      if (far === undefined || near === undefined) throw new Error('bands missing');
+      const hazeL = L(p.hazeFar);
+      // the far band's flank sits far closer to the haze lightness than the near
+      // band's — a far fish desaturates/lightens into the water, reading distant
+      expect(Math.abs(L(far.mid) - hazeL), mood).toBeLessThan(Math.abs(L(near.mid) - hazeL));
+      // the nearest band is unhazed: the crisp near fish keeps its full pigment
+      expect(L(near.mid), mood).toBe(L(countershadeColors(p, 'normal').mid));
+    }
   });
 });

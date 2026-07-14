@@ -150,7 +150,7 @@ function strokeRidge(
   trace(0);
 }
 
-const GRAIN_COUNT = 220;
+const GRAIN_COUNT = 150;
 
 function paintGrain(
   ctx: CanvasRenderingContext2D,
@@ -388,4 +388,4 @@ export function paintDeepDrift(
   ctx.fill();
 }
 
-const DEEP_DRIFT_COUNT = 140;
+const DEEP_DRIFT_COUNT = 100;

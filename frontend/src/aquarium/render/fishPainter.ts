@@ -35,6 +35,10 @@ const RICH_FISH_BUDGET = 48;
 const RICH_MIN_PX = 16;
 /** min drawn body length (css px) for eye/gill/mouth */
 const FACE_MIN_PX = 46;
+/** below this drawn size the secondary fins (dorsal/pelvic/pectoral) are a few
+ * invisible px, so the flat path skips them — the body silhouette + tail carry
+ * the read. This is the 200-fish overview hot path; the caudal always draws. */
+const FLAT_FIN_MIN_PX = 26;
 
 // Reused across frames so back-to-front ordering allocates no arrays in the
 // draw path (one synchronous caller, no reentrancy). `zScratch[i]` is fish i's
@@ -111,7 +115,7 @@ function paintFish(
   if (richBudget && drawnPx >= RICH_MIN_PX) {
     paintRich(ctx, fish, spine, hull, fins, colors, lineWidth, drawnPx >= FACE_MIN_PX);
   } else {
-    paintFlat(ctx, spine, hull, fins, colors, lineWidth);
+    paintFlat(ctx, spine, hull, fins, colors, lineWidth, drawnPx >= FLAT_FIN_MIN_PX);
   }
   if (alpha < 1) ctx.globalAlpha = 1;
 }
@@ -169,7 +173,10 @@ function paintRich(
   }
 }
 
-/** cheap path: flat two-tone body + flat translucent fins, one stroke */
+/** cheap path: flat two-tone body + flat translucent fins, one stroke. When
+ * `withSideFins` is false (tiny overview fish) the dorsal / pelvic / pectoral
+ * fins — a few invisible px — are skipped; the tail and countershaded body
+ * silhouette still carry the read. */
 function paintFlat(
   ctx: CanvasRenderingContext2D,
   spine: FishSpine,
@@ -177,18 +184,23 @@ function paintFlat(
   fins: FishFins,
   colors: CountershadeColors,
   lineWidth: number,
+  withSideFins: boolean,
 ): void {
   ctx.fillStyle = withAlpha(colors.finRoot, 0.6);
   traceThrough(ctx, fins.caudal);
   ctx.fill();
-  traceThrough(ctx, fins.dorsal);
-  ctx.fill();
-  traceThrough(ctx, fins.pelvic);
-  ctx.fill();
+  if (withSideFins) {
+    traceThrough(ctx, fins.dorsal);
+    ctx.fill();
+    traceThrough(ctx, fins.pelvic);
+    ctx.fill();
+  }
   paintBodyFlat(ctx, spine, hull, colors.dorsal, colors.ventral);
-  ctx.fillStyle = withAlpha(colors.finLight, 0.5);
-  traceThrough(ctx, fins.pectoral);
-  ctx.fill();
+  if (withSideFins) {
+    ctx.fillStyle = withAlpha(colors.finLight, 0.5);
+    traceThrough(ctx, fins.pectoral);
+    ctx.fill();
+  }
   traceHull(ctx, hull);
   ctx.strokeStyle = colors.outline;
   ctx.lineWidth = lineWidth;

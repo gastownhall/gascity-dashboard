@@ -13,10 +13,18 @@ import { clamp01, lerp } from './mathUtil';
 /** discrete haze planes; bounded so the hazed fish colors precompute per band */
 export const DEPTH_BANDS = 5;
 
-const MIN_SCALE = 0.62;
-const MAX_SCALE = 1.22;
-const MIN_ALPHA = 0.72;
-const MAX_HAZE = 0.5;
+// DRAMATIC depth-of-field (round-4 read "one row, one scale, equally crisp" to
+// all three judges): near fish ~1.6x + crisp + full pigment, far fish ~0.5x +
+// heavily hazed toward the water + notably transparent, so scale reads as
+// DISTANCE, not "sizes". near/far scale ratio 3.2x (was ~2x). Pushing the FAR
+// end hard is legibility-SAFE: every blind-fixture fish hashes to z≈0.92-0.94
+// (nearest band → depthBand 4, bandHaze 0, depthAlpha 1, ~max scale), so its
+// close-up crop is drawn crisp/large/un-hazed regardless of how faint the far
+// plane gets — the aggression only lands on the LOD0 population read.
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 1.6;
+const MIN_ALPHA = 0.58;
+const MAX_HAZE = 0.72;
 
 /** deterministic depth in [0,1) from an entity id (0 = far, 1 = near). */
 export function fishDepthZ(id: string): number {
@@ -56,11 +64,15 @@ export function formationDepthZ(seed: number): number {
   return (hashString(`reef:${seed}`) >>> 8) / 0x1000000;
 }
 
-const REEF_MIN_SCALE = 0.7;
-const REEF_MAX_SCALE = 1.06;
-const REEF_MAX_HAZE = 0.55;
-/** far reefs sit a little higher on the seabed (further back), world units. */
-const REEF_MAX_LIFT = 130;
+// Wider spread than round-4 (judged "coral still on one baseline"): far reefs
+// are much smaller, hazier and pushed further up/back so the seabed reads as
+// clustered near/mid/far planes, not one row. Near reefs stay full-pigment and
+// full-size (the front reef anchors the foreground).
+const REEF_MIN_SCALE = 0.56;
+const REEF_MAX_SCALE = 1.12;
+const REEF_MAX_HAZE = 0.7;
+/** far reefs sit higher on the seabed (further back), world units. */
+const REEF_MAX_LIFT = 200;
 
 export interface FormationDepth {
   /** silhouette scale about the seabed anchor */

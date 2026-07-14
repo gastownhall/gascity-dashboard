@@ -1,10 +1,12 @@
-// Offscreen cache for the slow/static scene layers. The seabed, light shafts,
-// deep drift, formations (rock / coral / kelp / speckle / contact shadow) and
-// the water surface only change when the CAMERA moves or the palette / viewport
-// / formation set changes — never per animation frame. Baking them once into
-// an offscreen buffer (sized to the viewport plus a pan margin) and blitting
-// that buffer each frame turns "redraw every reef every frame" into one
-// drawImage. Fish, pellets and the foreground motes stay dynamic on top.
+// Offscreen cache for the slow/static scene layers. The water column, seabed,
+// light shafts, deep drift, formations (rock / coral / kelp / speckle / contact
+// shadow), the water surface AND the near-foreground silhouettes only change
+// when the CAMERA moves or the palette / viewport / formation set changes —
+// never per animation frame. Baking them once into an offscreen buffer (sized
+// to the viewport plus a pan margin) and blitting that buffer each frame turns
+// "redraw the whole reef every frame" into one opaque drawImage that also
+// serves as the frame's base (no separate clear or water fill). Fish, pellets
+// and the near motes stay dynamic on top.
 //
 // INVALIDATION RULE (the buffer is re-baked only when):
 //   - no bake yet, OR
@@ -113,9 +115,11 @@ export function bufferViewport(viewport: Viewport, margin: number): Viewport {
 }
 
 /** Blit the baked static buffer under the current camera. Screen-space
- * transform must be installed. The buffer content baked at camRef appears at
- * screen + (margin, margin); the current camera shifts it by −(cam−camRef)·zoom
- * (actors-layer delta), so the draw offset is that delta minus the margin. */
+ * transform must be installed. The baked layers include the opaque water
+ * column, so the blit doubles as the frame's base — no separate clear or water
+ * fill. The buffer content baked at camRef appears at screen + (margin, margin);
+ * the current camera shifts it by −(cam−camRef)·zoom (actors-layer delta), so
+ * the draw offset is that delta minus the margin. */
 export function blitStatic(
   ctx: CanvasRenderingContext2D,
   cache: StaticLayerCache,

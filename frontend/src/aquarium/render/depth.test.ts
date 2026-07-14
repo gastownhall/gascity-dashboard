@@ -37,10 +37,22 @@ describe('fish depth (front/back volume)', () => {
     expect(depthScale(0)).toBeLessThan(depthScale(1) * 0.75);
   });
 
+  it('the near/far scale range is DRAMATIC (round-4 depth read too subtle)', () => {
+    // near fish must be clearly > 2.5x the far fish, an unmistakable size cue
+    expect(depthScale(1) / depthScale(0)).toBeGreaterThan(2.5);
+  });
+
   it('depthAlpha is monotonic and full-opaque only at the front', () => {
     expect(depthAlpha(1)).toBe(1);
-    expect(depthAlpha(0)).toBeLessThan(1);
+    // far fish are notably transparent (recede into the water), not a faint dip
+    expect(depthAlpha(0)).toBeLessThan(0.65);
     expect(depthAlpha(0.9)).toBeGreaterThan(depthAlpha(0.1));
+  });
+
+  it('the far band hazes heavily toward the water (far fish clearly distant)', () => {
+    // the farthest band must blend well past halfway toward the haze color, so
+    // a far fish reads as distant, not just small-and-crisp
+    expect(bandHaze(0)).toBeGreaterThan(0.6);
   });
 
   it('depthBand covers 0..DEPTH_BANDS-1 without spilling over', () => {

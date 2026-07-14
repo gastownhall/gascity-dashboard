@@ -69,15 +69,24 @@ function resetBatches(): void {
   eatenT.length = 0;
 }
 
-/** Actor layer must be installed. */
+/** css px below which a pellet is drawn as the cheapest square mark instead of
+ * an ellipse (its bezier-flattened arc). At the LOD0 overview 1000 pellets are
+ * ~2 px each; a square path is meaningfully cheaper to build 1000× per frame and
+ * indistinguishable at that size. Round morsels return at any real zoom. */
+const CHEAP_MARK_PX = 2.2;
+
+/** Actor layer must be installed. `layerScale` is the actor layer's css-px-per-
+ * world-unit, used only to pick the cheap square mark at the tiny-pellet LOD0. */
 export function paintPellets(
   ctx: CanvasRenderingContext2D,
   pellets: readonly PelletEntity[],
   sim: SimState,
   palette: ScenePalette,
   view: ViewRect,
+  layerScale: number,
 ): void {
   const colors = pelletColors(palette);
+  const square = PELLET_RADIUS * layerScale < CHEAP_MARK_PX;
   resetBatches();
   for (const pellet of pellets) {
     const kin = sim.pellets[pellet.beadId];
@@ -102,34 +111,51 @@ export function paintPellets(
     }
   }
   for (let tone = 0; tone < 3; tone += 1) {
-    fillDots(ctx, at(driftX, tone), at(driftY, tone), at(colors.tones, tone), PELLET_RADIUS, 0.82);
+    fillDots(
+      ctx,
+      at(driftX, tone),
+      at(driftY, tone),
+      at(colors.tones, tone),
+      PELLET_RADIUS,
+      0.82,
+      square,
+    );
   }
-  paintSunken(ctx, colors);
+  paintSunken(ctx, colors, square);
   paintEaten(ctx, colors);
 }
 
 /** settled morsels: a soft contact shadow pass, then two tone passes of
- * rounded pebbles with hashed size/squash — reads as food on the sand */
-function paintSunken(ctx: CanvasRenderingContext2D, colors: PelletColors): void {
+ * rounded pebbles with hashed size/squash — reads as food on the sand. When
+ * `square` (tiny LOD0 marks) the invisible sub-pixel contact shadow is skipped
+ * and pebbles draw as cheap squares. */
+function paintSunken(ctx: CanvasRenderingContext2D, colors: PelletColors, square: boolean): void {
   const n = sunkX.length;
   if (n === 0) return;
-  ctx.fillStyle = colors.sunkenShadow;
-  ctx.beginPath();
-  for (let i = 0; i < n; i += 1) {
-    const rx = PELLET_RADIUS * at(sunkScale, i) * 1.25;
-    const y = at(sunkY, i) + PELLET_RADIUS * 0.5;
-    ctx.moveTo(at(sunkX, i) + rx, y);
-    ctx.ellipse(at(sunkX, i), y, rx, PELLET_RADIUS * 0.4, 0, 0, TAU);
+  if (!square) {
+    ctx.fillStyle = colors.sunkenShadow;
+    ctx.beginPath();
+    for (let i = 0; i < n; i += 1) {
+      const rx = PELLET_RADIUS * at(sunkScale, i) * 1.25;
+      const y = at(sunkY, i) + PELLET_RADIUS * 0.5;
+      ctx.moveTo(at(sunkX, i) + rx, y);
+      ctx.ellipse(at(sunkX, i), y, rx, PELLET_RADIUS * 0.4, 0, 0, TAU);
+    }
+    ctx.fill();
   }
-  ctx.fill();
   for (let tone = 0; tone < colors.sunken.length; tone += 1) {
     ctx.fillStyle = at(colors.sunken, tone);
     ctx.beginPath();
     for (let i = 0; i < n; i += 1) {
       if (at(sunkTone, i) !== tone) continue;
       const rx = PELLET_RADIUS * at(sunkScale, i);
-      ctx.moveTo(at(sunkX, i) + rx, at(sunkY, i));
-      ctx.ellipse(at(sunkX, i), at(sunkY, i), rx, rx * at(sunkSquash, i), 0, 0, TAU);
+      const ry = rx * at(sunkSquash, i);
+      if (square) {
+        ctx.rect(at(sunkX, i) - rx, at(sunkY, i) - ry, rx * 2, ry * 2);
+      } else {
+        ctx.moveTo(at(sunkX, i) + rx, at(sunkY, i));
+        ctx.ellipse(at(sunkX, i), at(sunkY, i), rx, ry, 0, 0, TAU);
+      }
     }
     ctx.fill();
   }
@@ -160,14 +186,25 @@ function fillDots(
   color: string,
   rx: number,
   squash: number,
+  square: boolean,
 ): void {
   const n = xs.length;
   if (n === 0) return;
+  const ry = rx * squash;
   ctx.fillStyle = color;
   ctx.beginPath();
-  for (let i = 0; i < n; i += 1) {
-    ctx.moveTo(at(xs, i) + rx, at(ys, i));
-    ctx.ellipse(at(xs, i), at(ys, i), rx, rx * squash, 0, 0, TAU);
+  if (square) {
+    // cheapest possible mark for the 1000-pellet LOD0 overview: a rect adds 4
+    // straight edges vs the ellipse's four flattened beziers, and at ~2 css px
+    // it is indistinguishable from a dot.
+    for (let i = 0; i < n; i += 1) {
+      ctx.rect(at(xs, i) - rx, at(ys, i) - ry, rx * 2, ry * 2);
+    }
+  } else {
+    for (let i = 0; i < n; i += 1) {
+      ctx.moveTo(at(xs, i) + rx, at(ys, i));
+      ctx.ellipse(at(xs, i), at(ys, i), rx, ry, 0, 0, TAU);
+    }
   }
   ctx.fill();
 }

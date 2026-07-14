@@ -184,10 +184,32 @@ export function paintFormations(
     const depth = formationDepth(f.seed);
     const t = depthTransform(mid, f, depth);
     applyLayer(ctx, t);
-    const colors = hazeFormationColors(base, palette.hazeFar, depth.haze);
+    const colors = hazedForSeed(palette, base, f.seed, depth.haze);
     paintOneFormation(ctx, f, colors, t.scale, palette, depth.haze, clockMs);
   }
   applyLayer(ctx, mid);
+}
+
+// hazed colors are seed-deterministic; cache them so repeated re-bakes (the
+// camera workout triggers many) never re-run the mixOklch parse/format.
+const hazedCache = new WeakMap<ScenePalette, Map<number, FormationColors>>();
+
+function hazedForSeed(
+  palette: ScenePalette,
+  base: FormationColors,
+  seed: number,
+  haze: number,
+): FormationColors {
+  let bySeed = hazedCache.get(palette);
+  if (bySeed === undefined) {
+    bySeed = new Map();
+    hazedCache.set(palette, bySeed);
+  }
+  const hit = bySeed.get(seed);
+  if (hit !== undefined) return hit;
+  const built = hazeFormationColors(base, palette.hazeFar, haze);
+  bySeed.set(seed, built);
+  return built;
 }
 
 function withinView(f: RigFormation, view: ViewRect): boolean {

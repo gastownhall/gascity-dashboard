@@ -12,6 +12,9 @@ export const PARALLAX = {
   mid: 0.95,
   actors: 1.0,
   near: 1.06,
+  // near-foreground silhouettes: > 1.15 so they slide clearly faster than the
+  // actors on a pan (the through-glass depth cue). See render/foreground.ts.
+  foreground: 1.24,
 } as const;
 
 /** world → css px mapping for one parallax layer: screen = world·scale + t. */
