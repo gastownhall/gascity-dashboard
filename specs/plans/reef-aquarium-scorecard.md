@@ -135,6 +135,49 @@ Remaining blockers (round 4), 3 criteria:
   sharp, far small/hazy), some formations as hazier background reef, and a
   thicker vertical fish distribution WITHIN the safe pose bands (must not
   regress the 7/7 legibility). This is orthogonal to y-banding, so low risk.
+
+## Round 4 (2026-07-14)
+
+Two fix agents landed (render: offscreen static-layer cache + depth parallax +
+craft polish; sim: thicker vertical working volume + formation depth stagger);
+all mechanical gates green (typecheck src+test, 1545 frontend + 618 backend +
+356 shared tests, lint, prettier, build). Re-judged + perf.
+
+| Criterion             | Result                                                              | Verdict                 |
+| --------------------- | ------------------------------------------------------------------- | ----------------------- |
+| 1 Aquarium illusion   | 2/5 median (judges 2,2,3)                                           | FAIL (regressed from 3) |
+| 2 Fish craft          | 4/5 median (3,4,4); clip-art FALSE, fins visible, errored eye clean | **PASS**                |
+| 3 Blind legibility    | 7/7 median (judges A,C both 7/7)                                    | **PASS** (held)         |
+| 4 LOD honesty         | clean                                                               | **PASS** (held)         |
+| 5 Camera perf         | p95 16.8 ms (was 33.3; offscreen cache ~halved it)                  | FAIL (0.8 ms over)      |
+| 6 Truthfulness parity | unit tests green                                                    | PASS                    |
+| 7 Mechanical          | all gates green                                                     | PASS                    |
+
+5 of 7 pass now. CRAFT crossed the line (spine bow + visible dorsal/pectoral
+fins + a clean circled-X dead-eye all landed; residual is only slightly stiff
+spines and flat-triangle fins). PERF: the offscreen static-layer cache confirmed
+paintScene was the bottleneck (33 -> 16.8 ms); p50 16.7 with rare 33 ms spikes
+(cache re-render on zoom). Legibility + honesty held (errored still read despite
+a weak belly-up).
+
+Round-4 ILLUSION REGRESSED (3 -> 2): the depth-plane scale/haze was too subtle
+to read in pixels. All three judges: fish still in ONE horizontal band at ~one
+scale (the one big fish is the mayor grouper = species size, not a depth cue);
+no blur/desaturation distinguishing near vs far; no overlap/occlusion/parallax;
+coral still on one evenly-spaced baseline; small fish collapse to "chevron
+glyphs" at fit-zoom. depth_reads_volumetric = FALSE (all three).
+
+Round-5 mandate: ILLUSION needs a DRAMATIC, unmistakable depth treatment (round
+4 was too timid): (a) a blurred NEAR-FOREGROUND layer (kelp/coral/rock, out of
+focus, partially occluding, parallax-fast) — the classic aquarium-through-glass
+cue, licensed ambience, currently absent; (b) AGGRESSIVE depth-of-field —
+foreground fish notably bigger + crisp, background fish much smaller + hazier +
+softened, real overlap; (c) formations CLUSTERED at varied depths with overlap,
+not one baseline. PERF: shave ~1 ms off the dynamic draw + kill the zoom-frame
+spike to get p95 < 16. Must NOT regress craft (4/5), legibility (7/7), honesty.
+
+## (round-3 residual notes, superseded)
+
 - CRAFT (3/5): countershading + clip-art SOLVED. Residual: working/errored
   spines read straight ("parked"); fin vocabulary thin (tail only, no visible
   dorsal/pectoral); the errored X-eye reads as a "stray scribble" (two judges).
