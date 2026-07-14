@@ -1,7 +1,9 @@
 // Fin and head anchors, built from the spine + hull so appendages stay
 // attached under bellyFactor swell, pitch, flip, and x-compression. Pure
 // geometry: each fin is an ordered point list the painter smooths into a
-// translucent membrane. Re-exported through fishGeometry.ts.
+// translucent membrane whose ROOT sits on the hull outline (never floating).
+// The dorsal is one low rounded sail — deliberately not the twin-spike ridge
+// that read as lightning bolts. Re-exported through fishGeometry.ts.
 
 import type { Pt } from './mathUtil';
 import { at } from './mathUtil';
@@ -9,9 +11,9 @@ import type { FishHull, FishSpine, SpeciesProfile } from './fishGeometry';
 import { SPECIES, outlineAt, sampleSpine } from './fishGeometry';
 
 export interface FishFins {
-  /** base-fore, front peak, back peak, base-aft (along the anatomical back) */
+  /** base-fore, sail-fore, sail-aft, base-aft — a single rounded dorsal sail */
   dorsal: readonly Pt[];
-  /** root, tip, trailing root — sweeps back-down from ~30% length */
+  /** root(on hull), leading tip, trailing tip, trail root — near-side wing */
   pectoral: readonly Pt[];
   /** small ventral fin near mid-body */
   pelvic: readonly Pt[];
@@ -23,15 +25,17 @@ const DEG = Math.PI / 180;
 
 export function fishFins(spine: FishSpine, hull: FishHull, swimPhase: number): FishFins {
   const p = SPECIES[spine.species];
-  const fold = spine.attitude.finsFolded ? 0.3 : 1;
+  const fold = spine.attitude.finsFolded ? 0.28 : 1;
   return {
     dorsal: buildDorsal(spine, hull, p, fold, swimPhase),
-    pectoral: buildVentralFin(spine, hull, p, 0.3, p.pectoralLength, fold, swimPhase),
+    pectoral: buildPectoral(spine, hull, p, fold, swimPhase),
     pelvic: buildVentralFin(spine, hull, p, 0.52, p.pelvicLength, fold, swimPhase + 1.7),
     caudal: buildCaudal(spine, hull, p, fold, swimPhase),
   };
 }
 
+/** one low rounded sail: base chord on the dorsal hull line, a single broad
+ * hump above it (two near-equal crest points, no valley → no spike read) */
 function buildDorsal(
   spine: FishSpine,
   hull: FishHull,
@@ -42,14 +46,61 @@ function buildDorsal(
   const baseFore = outlineAt(hull.dorsal, spine.stations, p.dorsalStart);
   const baseAft = outlineAt(hull.dorsal, spine.stations, p.dorsalEnd);
   const mid = sampleSpine(spine, (p.dorsalStart + p.dorsalEnd) / 2);
-  const h = p.dorsalHeight * p.length * fold * (1 + 0.06 * Math.sin(swimPhase * 2));
+  const h = p.dorsalHeight * p.length * fold * (1 + 0.05 * Math.sin(swimPhase * 2));
   const ux = mid.up.x * spine.dorsalSign;
   const uy = mid.up.y * spine.dorsalSign;
-  const peakAt = (t: number, k: number): Pt => ({
+  const crest = (t: number, k: number): Pt => ({
     x: baseFore.x + (baseAft.x - baseFore.x) * t + ux * h * k,
     y: baseFore.y + (baseAft.y - baseFore.y) * t + uy * h * k,
   });
-  return [baseFore, peakAt(0.3, 1), peakAt(0.72, 0.68), baseAft];
+  return [baseFore, crest(0.35, 1), crest(0.62, 0.85), baseAft];
+}
+
+/** near-side pectoral wing rooted on the flank just behind the head; splays
+ * out-and-down when swimming, sweeps back tight when folded */
+function buildPectoral(
+  spine: FishSpine,
+  hull: FishHull,
+  p: SpeciesProfile,
+  fold: number,
+  swimPhase: number,
+): Pt[] {
+  const s = 0.32;
+  const sample = sampleSpine(spine, s);
+  const edge = outlineAt(hull.ventral, spine.stations, s);
+  const root = lerpPt(sample.p, edge, 0.72);
+  const down = { x: -sample.up.x * spine.dorsalSign, y: -sample.up.y * spine.dorsalSign };
+  const swept = spine.attitude.finsFolded ? 1.5 : 0.7;
+  const flutter = 10 * DEG * spine.attitude.tailBeat * fold * Math.sin(swimPhase);
+  const lead = fanTip(
+    root,
+    sample.toTail,
+    down,
+    swept,
+    flutter,
+    p.pectoralLength * p.length * fold,
+  );
+  const trailLen = p.pectoralLength * p.length * fold * 0.7;
+  const back = fanTip(root, sample.toTail, down, swept + 0.9, flutter, trailLen);
+  const trailRoot = {
+    x: root.x + sample.toTail.x * trailLen * 0.4,
+    y: root.y + sample.toTail.y * trailLen * 0.4,
+  };
+  return [root, lead, back, trailRoot];
+}
+
+function fanTip(
+  root: Pt,
+  toTail: Pt,
+  down: Pt,
+  tailWeight: number,
+  flutter: number,
+  len: number,
+): Pt {
+  const dx = toTail.x * tailWeight + down.x;
+  const dy = toTail.y * tailWeight + down.y;
+  const a = Math.atan2(dy, dx) + flutter;
+  return { x: root.x + Math.cos(a) * len, y: root.y + Math.sin(a) * len };
 }
 
 function buildVentralFin(
@@ -64,16 +115,12 @@ function buildVentralFin(
   const sample = sampleSpine(spine, s);
   const edge = outlineAt(hull.ventral, spine.stations, s);
   // root tucked just inside the hull edge so the membrane visibly attaches
-  const root = {
-    x: sample.p.x + (edge.x - sample.p.x) * 0.8,
-    y: sample.p.y + (edge.y - sample.p.y) * 0.8,
-  };
+  const root = lerpPt(sample.p, edge, 0.82);
   const down = { x: -sample.up.x * spine.dorsalSign, y: -sample.up.y * spine.dorsalSign };
-  const flutter = 14 * DEG * spine.attitude.tailBeat * fold * Math.sin(swimPhase);
-  const angle =
-    Math.atan2(sample.toTail.y * 0.85 + down.y, sample.toTail.x * 0.85 + down.x) + flutter;
+  const swept = spine.attitude.finsFolded ? 1.4 : 0.85;
+  const flutter = 12 * DEG * spine.attitude.tailBeat * fold * Math.sin(swimPhase);
   const len = lengthFrac * p.length * fold;
-  const tip = { x: root.x + Math.cos(angle) * len, y: root.y + Math.sin(angle) * len };
+  const tip = fanTip(root, sample.toTail, down, swept, flutter, len);
   const trail = {
     x: root.x + sample.toTail.x * len * 0.5,
     y: root.y + sample.toTail.y * len * 0.5,
@@ -96,8 +143,8 @@ function buildCaudal(
   const dl = Math.hypot(dx, dy) || 1;
   const td = { x: dx / dl, y: dy / dl };
   const spread =
-    p.caudalSpreadDeg * DEG * (1 + 0.25 * Math.sin(swimPhase * 2)) * (0.45 + 0.55 * fold);
-  const len = p.caudalLength * p.length * (0.85 + 0.15 * fold);
+    p.caudalSpreadDeg * DEG * (1 + 0.25 * Math.sin(swimPhase * 2)) * (0.5 + 0.5 * fold);
+  const len = p.caudalLength * p.length * (0.88 + 0.12 * fold);
   const tipAt = (a: number, k: number): Pt => ({
     x: last.x + (td.x * Math.cos(a) - td.y * Math.sin(a)) * len * k,
     y: last.y + (td.x * Math.sin(a) + td.y * Math.cos(a)) * len * k,
@@ -112,6 +159,10 @@ function buildCaudal(
   ];
 }
 
+function lerpPt(a: Pt, b: Pt, t: number): Pt {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
 // ---------------------------------------------------------------------------
 // Head anchors (eye, gill line, mouth)
 
@@ -124,6 +175,9 @@ export interface FishHead {
   /** mouth anchor at the nose tip and its outward direction */
   mouth: Pt;
   mouthDir: Pt;
+  /** closed-mouth crease endpoints across the snout front */
+  mouthA: Pt;
+  mouthB: Pt;
 }
 
 export function fishHead(spine: FishSpine, hull: FishHull): FishHead {
@@ -138,21 +192,19 @@ export function fishHead(spine: FishSpine, hull: FishHull): FishHead {
   const mdx = hull.nose.x - first.x;
   const mdy = hull.nose.y - first.y;
   const ml = Math.hypot(mdx, mdy) || 1;
+  const dir = { x: mdx / ml, y: mdy / ml };
+  const px = -dir.y;
+  const py = dir.x;
+  const lip = p.eyeRadius * p.length * (0.9 + 1.2 * p.noseBlunt);
+  const jaw = lerpPt(hull.nose, first, 0.28);
   return {
-    eye: {
-      x: eyeSample.p.x + (eyeEdge.x - eyeSample.p.x) * 0.45,
-      y: eyeSample.p.y + (eyeEdge.y - eyeSample.p.y) * 0.45,
-    },
+    eye: lerpPt(eyeSample.p, eyeEdge, 0.42),
     eyeRadius: p.eyeRadius * p.length,
-    gillA: {
-      x: gillMidTop.x + (gillTop.x - gillMidTop.x) * 0.6,
-      y: gillMidTop.y + (gillTop.y - gillMidTop.y) * 0.6,
-    },
-    gillB: {
-      x: gillMidBottom.x + (gillBottom.x - gillMidBottom.x) * 0.65,
-      y: gillMidBottom.y + (gillBottom.y - gillMidBottom.y) * 0.65,
-    },
+    gillA: lerpPt(gillMidTop, gillTop, 0.6),
+    gillB: lerpPt(gillMidBottom, gillBottom, 0.65),
     mouth: hull.nose,
-    mouthDir: { x: mdx / ml, y: mdy / ml },
+    mouthDir: dir,
+    mouthA: { x: jaw.x + px * lip * 0.15, y: jaw.y + py * lip * 0.15 },
+    mouthB: { x: jaw.x - px * lip, y: jaw.y - py * lip },
   };
 }

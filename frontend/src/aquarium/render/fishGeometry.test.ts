@@ -99,6 +99,30 @@ describe('fishSpine', () => {
     expect(fishFins(s2, h2, 1.234)).toEqual(fishFins(s1, h1, 1.234));
     expect(fishHead(s2, h2)).toEqual(fishHead(s1, h1));
   });
+
+  it('a swimming body carries a readable spine curve in a still frame', () => {
+    // perpendicular offset of each spine point from the nose→tail chord
+    const chordOffsets = (spine: FishSpine): number[] => {
+      const nose = at(spine.points, 0);
+      const tail = at(spine.points, spine.points.length - 1);
+      const dx = tail.x - nose.x;
+      const dy = tail.y - nose.y;
+      const len = Math.hypot(dx, dy) || 1;
+      return spine.points.map((p) => ((p.x - nose.x) * dy - (p.y - nose.y) * dx) / len);
+    };
+    const L = SPECIES.role.length;
+    // a single frozen frame is bent, not rigid
+    const still = Math.max(...chordOffsets(spineFor('working', 'role', 1.3, 1)).map(Math.abs));
+    expect(still).toBeGreaterThan(0.02 * L);
+    // over the beat cycle the body flexes hard off its own axis — propulsion,
+    // not a stick (chord offset understates raw sway; 6% of length is a clear bow)
+    let swept = 0;
+    for (let k = 0; k < 32; k += 1) {
+      const off = chordOffsets(fishSpine('role', attitudeForPose('working'), (k / 32) * TAU, 1));
+      swept = Math.max(swept, ...off.map(Math.abs));
+    }
+    expect(swept).toBeGreaterThan(0.06 * L);
+  });
 });
 
 describe('fishHull', () => {
@@ -136,6 +160,29 @@ describe('fishHull', () => {
     };
     // the belly swells downward; the pelvic root must ride the hull down
     expect(pelvicRootY(1.5)).toBeGreaterThan(pelvicRootY(1));
+  });
+
+  it('the caudal roots exactly on the hull peduncle (tail is not a floating wedge)', () => {
+    for (const species of ALL_SPECIES) {
+      const spine = spineFor('working', species);
+      const hull = fishHull(spine, species, 1);
+      const n = spine.points.length;
+      const caudal = fishFins(spine, hull, 0).caudal;
+      expect(at(caudal, 0)).toEqual(at(hull.dorsal, n - 1));
+      expect(at(caudal, caudal.length - 1)).toEqual(at(hull.ventral, n - 1));
+    }
+  });
+
+  it('the pectoral root sits inside the hull, never detached in open water', () => {
+    const spine = spineFor('working');
+    const hull = fishHull(spine, 'role', 1);
+    const root = at(fishFins(spine, hull, 0).pectoral, 0);
+    // root is between the spine and the ventral outline at its station
+    const spineNear = at(spine.points, 1);
+    const ventralNear = at(hull.ventral, 1);
+    const spanSq = (ventralNear.x - spineNear.x) ** 2 + (ventralNear.y - spineNear.y) ** 2;
+    const rootSq = (root.x - spineNear.x) ** 2 + (root.y - spineNear.y) ** 2;
+    expect(rootSq).toBeLessThanOrEqual(spanSq * 1.6);
   });
 
   it('bellyFactorFromPct maps context pct to the documented swell', () => {
@@ -190,11 +237,27 @@ describe('attitudes', () => {
     expect(attitudeForPose('awaiting-input').mouthOpen).toBe(true);
   });
 
-  it('stalled treads nose-up 35–40° with a hollow eye', () => {
+  it('stalled treads nose-up 38–46° (steeper than awaiting), fins folded', () => {
     const angle = bodyAngle(spineFor('stalled', 'role', 0, 0));
-    expect(angle).toBeGreaterThan(35 * DEG);
-    expect(angle).toBeLessThan(40 * DEG);
+    expect(angle).toBeGreaterThan(38 * DEG);
+    expect(angle).toBeLessThan(46 * DEG);
+    expect(angle).toBeGreaterThan(bodyAngle(spineFor('awaiting-input', 'role', 0, 0)));
     expect(attitudeForPose('stalled').eye).toBe('hollow');
+    expect(attitudeForPose('stalled').finsFolded).toBe(true);
+    expect(attitudeForPose('stalled').mouthOpen).toBe(false);
+  });
+
+  it('nose angles are distinct and ordered idle < working < awaiting < stalled', () => {
+    const idle = bodyAngle(spineFor('idle', 'role', 0, 0));
+    const working = bodyAngle(spineFor('working', 'role', 0, 0));
+    const awaiting = bodyAngle(spineFor('awaiting-input', 'role', 0, 0));
+    const stalled = bodyAngle(spineFor('stalled', 'role', 0, 0));
+    expect(idle).toBeLessThan(working);
+    expect(working).toBeLessThan(awaiting);
+    expect(awaiting).toBeLessThan(stalled);
+    // each pair is separated enough to read apart at a glance
+    expect(awaiting - working).toBeGreaterThan(20 * DEG);
+    expect(stalled - awaiting).toBeGreaterThan(8 * DEG);
   });
 
   it('errored flips belly-up: dorsal fin and eye swap sides, eye is crossed', () => {
@@ -209,10 +272,10 @@ describe('attitudes', () => {
     expect(attitudeForPose('errored').eye).toBe('cross');
   });
 
-  it('rate-limited compresses the body to 0.85 and folds the fins', () => {
+  it('rate-limited compresses the body to 0.8 and folds the fins', () => {
     const spine = spineFor('rate-limited', 'role', 0, 0);
     const length = at(spine.points, 0).x - at(spine.points, spine.points.length - 1).x;
-    expect(length).toBeCloseTo(SPECIES.role.length * 0.85, 6);
+    expect(length).toBeCloseTo(SPECIES.role.length * 0.8, 6);
     // perpendicular height of the fin peak above its base chord
     const peakHeight = (pose: AquariumPose): number => {
       const s = spineFor(pose, 'role', 0, 0);

@@ -1,17 +1,20 @@
-// All in-scene type: rig labels (small tracked caps + open-bead count), fish
-// name tags (fade in across LOD1), LOD2 captions (name, pose word, task bead,
+// All in-scene type: rig labels (small tracked caps + open-bead count, legit at
+// LOD0/LOD1 as the tank's map), LOD2 captions (name, pose word, task bead,
 // belly percent as typeset figures), pellet id labels, and "+N" pellet
-// overflow. Text is always horizontal and screen-space (map-label style):
-// anchors project through the owning layer's parallax transform, glyphs stay
-// at fixed css-px sizes. The Honest Zoom Rule: every string here is a
-// snapshot fact; nothing is invented to fill the glass.
+// overflow. Fish IDENTITY is deliberately NOT drawn in swim space at overview
+// or mid zoom — floating name tags next to every fish broke the aquarium
+// illusion, so a fish's name lives on the hover/click HTML overlay and only
+// appears in-scene at deep LOD2 captions. Text is always horizontal and
+// screen-space (map-label style): anchors project through the owning layer's
+// parallax transform, glyphs stay at fixed css-px sizes. The Honest Zoom Rule:
+// every string here is a snapshot fact; nothing is invented to fill the glass.
 
 import type { Camera, ScenePalette, SimState, Viewport, WorldSnapshot } from '../contracts';
 import { CITY_KEY } from '../contracts';
 import { SPECIES } from './fishGeometry';
 import type { LayerTransform } from './layers';
 import { PARALLAX, applyScreenSpace, layerTransform, worldToScreen } from './layers';
-import { lod1Fade, lod2Fade } from './lod';
+import { lod2Fade } from './lod';
 import type { Pt } from './mathUtil';
 
 export function paintTextLayers(
@@ -24,14 +27,11 @@ export function paintTextLayers(
 ): void {
   applyScreenSpace(ctx, viewport);
   ctx.textBaseline = 'alphabetic';
-  const f1 = lod1Fade(camera.zoom);
   const f2 = lod2Fade(camera.zoom);
   const mid = layerTransform(camera, viewport, PARALLAX.mid);
   const act = layerTransform(camera, viewport, PARALLAX.actors);
   paintRigLabels(ctx, snapshot, palette, mid, viewport);
   paintOverflow(ctx, snapshot, palette, mid, viewport);
-  const tagAlpha = f1 * (1 - f2);
-  if (tagAlpha > 0.01) paintNameTags(ctx, snapshot, sim, palette, act, viewport, tagAlpha);
   if (f2 > 0.01) {
     paintCaptions(ctx, snapshot, sim, palette, act, viewport, f2);
     paintPelletLabels(ctx, snapshot, sim, palette, act, viewport, f2);
@@ -100,7 +100,6 @@ function paintOverflow(
 interface FishAnchor {
   x: number;
   y: number;
-  lift: number;
   drop: number;
   tombstoned: boolean;
   name: string;
@@ -128,7 +127,6 @@ function visibleFishAnchors(
     anchors.push({
       x: pos.x,
       y: pos.y,
-      lift: halfSpan * 0.7 + 9,
       drop: halfSpan * 0.7 + 16,
       tombstoned: fish.tombstoned,
       name: fish.name,
@@ -136,25 +134,6 @@ function visibleFishAnchors(
     });
   }
   return anchors;
-}
-
-function paintNameTags(
-  ctx: CanvasRenderingContext2D,
-  snapshot: WorldSnapshot,
-  sim: SimState,
-  palette: ScenePalette,
-  act: LayerTransform,
-  viewport: Viewport,
-  alpha: number,
-): void {
-  ctx.font = `10.5px ${palette.fontFamily}`;
-  ctx.textAlign = 'center';
-  ctx.fillStyle = palette.text;
-  for (const anchor of visibleFishAnchors(snapshot, sim, act, viewport)) {
-    ctx.globalAlpha = anchor.tombstoned ? alpha * 0.5 : alpha;
-    ctx.fillText(anchor.name, anchor.x, anchor.y - anchor.lift);
-  }
-  ctx.globalAlpha = 1;
 }
 
 function paintCaptions(

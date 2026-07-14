@@ -1,15 +1,17 @@
-// Water atmosphere: the one licensed vertical gradient, diagonal light
-// shafts, drifting particulate, depth vignette, and the dashed waterline.
-// All variation is deterministic (hash + clockMs); Math.random never appears
-// in the render layer. reduced-motion arrives as a frozen clock upstream.
+// Water atmosphere: the one licensed vertical water-column gradient, a warm
+// sand (light) / muted deep (dark) seabed with a dune ridge + speckle grain +
+// contact darkening, soft volumetric light shafts that feather with depth,
+// drifting particulate, a depth vignette, and the dashed waterline. All
+// variation is deterministic (hash + clockMs); Math.random never appears here.
+// reduced-motion arrives as a frozen clock upstream.
 
 import type { ScenePalette, Viewport } from '../contracts';
 import { WORLD } from '../contracts';
 import { hash01 } from './hash';
 import type { LayerTransform, ViewRect } from './layers';
 import { applyScreenSpace } from './layers';
-import { TAU } from './mathUtil';
-import { adjustL, withAlpha } from './oklch';
+import { TAU, clamp } from './mathUtil';
+import { adjustL, mixOklch, parseOklch, withAlpha } from './oklch';
 
 interface WaterDerived {
   mote: string;
@@ -47,33 +49,188 @@ export function paintWaterColumn(
   ctx.fillRect(0, 0, viewport.cssWidth, viewport.cssHeight);
 }
 
-const SHAFT_COUNT = 3;
+// ---------------------------------------------------------------------------
+// Seabed
 
-/** Diagonal translucent light shafts from the waterline. Far layer must be
- * installed. One fill for all shafts (single style). */
+interface SeabedColors {
+  sand: string;
+  ridge: string;
+  trough: string;
+  grainLight: string;
+  grainDark: string;
+  backDune: string;
+}
+
+const seabedCache = new WeakMap<ScenePalette, SeabedColors>();
+
+function seabedColors(palette: ScenePalette): SeabedColors {
+  const hit = seabedCache.get(palette);
+  if (hit !== undefined) return hit;
+  // warm sand in light (formation warm brown pulled toward the gold pellet),
+  // muted deep in dark — theme-keyed off existing pigment, never pale blue
+  const sand = mixOklch(palette.formation, palette.pellet, 0.28);
+  const built: SeabedColors = {
+    sand,
+    ridge: adjustL(sand, 7),
+    trough: withAlpha(adjustL(sand, -12), 0.55),
+    grainLight: adjustL(sand, 6),
+    grainDark: adjustL(sand, -6),
+    backDune: mixOklch(sand, palette.hazeFar, 0.5),
+  };
+  seabedCache.set(palette, built);
+  return built;
+}
+
+/** Undulating seabed top at world x (deterministic dune line). */
+function ridgeY(x: number, base: number): number {
+  return base + 34 * Math.sin(x * 0.0016 + 1.3) + 17 * Math.sin(x * 0.0041 + 4.1);
+}
+
+/** Warm seabed band with a back dune, dune-crest highlight, contact-shadow
+ * trough, and speckle grain. Far layer must be installed (world space). */
+export function paintSeabed(
+  ctx: CanvasRenderingContext2D,
+  palette: ScenePalette,
+  view: ViewRect,
+): void {
+  if (WORLD.height < view.top) return;
+  const c = seabedColors(palette);
+  const left = Math.max(view.left, 0);
+  const right = Math.min(view.right, WORLD.width);
+  if (right <= left) return;
+  fillBand(ctx, left, right, (x) => ridgeY(x, WORLD.seabedY - 70) - 24, c.backDune);
+  fillBand(ctx, left, right, (x) => ridgeY(x, WORLD.seabedY), c.sand);
+  strokeRidge(ctx, left, right, (x) => ridgeY(x, WORLD.seabedY), c.ridge, c.trough);
+  paintGrain(ctx, left, right, c);
+}
+
+function fillBand(
+  ctx: CanvasRenderingContext2D,
+  left: number,
+  right: number,
+  topAt: (x: number) => number,
+  color: string,
+): void {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(left, WORLD.height);
+  ctx.lineTo(left, topAt(left));
+  for (let x = left; x <= right; x += 42) ctx.lineTo(x, topAt(x));
+  ctx.lineTo(right, topAt(right));
+  ctx.lineTo(right, WORLD.height);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function strokeRidge(
+  ctx: CanvasRenderingContext2D,
+  left: number,
+  right: number,
+  topAt: (x: number) => number,
+  ridge: string,
+  trough: string,
+): void {
+  const trace = (offset: number): void => {
+    ctx.beginPath();
+    ctx.moveTo(left, topAt(left) + offset);
+    for (let x = left; x <= right; x += 42) ctx.lineTo(x, topAt(x) + offset);
+    ctx.stroke();
+  };
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = trough; // self-shadow just under the crest (ground contact)
+  trace(9);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = ridge; // sunlit crest highlight
+  trace(0);
+}
+
+const GRAIN_COUNT = 220;
+
+function paintGrain(
+  ctx: CanvasRenderingContext2D,
+  left: number,
+  right: number,
+  c: SeabedColors,
+): void {
+  for (let pass = 0; pass < 2; pass += 1) {
+    ctx.fillStyle = pass === 0 ? c.grainLight : c.grainDark;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    for (let i = pass; i < GRAIN_COUNT; i += 2) {
+      const x = hash01(i * 2 + 1) * WORLD.width;
+      if (x < left || x > right) continue;
+      const depth = hash01(i * 3 + 7);
+      const y = WORLD.seabedY + 30 + depth * (WORLD.height - WORLD.seabedY - 30);
+      const r = 2 + hash01(i * 5 + 3) * 3;
+      ctx.moveTo(x + r, y);
+      ctx.arc(x, y, r, 0, TAU);
+    }
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Light shafts
+
+const SHAFT_COUNT = 4;
+
+/** Soft volumetric light shafts from the waterline: a vertical gradient fades
+ * each beam into depth (no hard triangle edge), and a wide faint halo + narrow
+ * bright core feather the sides. Width/angle vary per shaft. Far layer must be
+ * installed. */
 export function paintLightShafts(
   ctx: CanvasRenderingContext2D,
   palette: ScenePalette,
   view: ViewRect,
   clockMs: number,
 ): void {
-  ctx.fillStyle = palette.lightShaft;
-  ctx.beginPath();
+  const baseA = parseOklch(palette.lightShaft).alpha;
+  const topY = WORLD.waterlineY;
   for (let i = 0; i < SHAFT_COUNT; i += 1) {
-    const anchorX = (0.14 + 0.36 * i + hash01(i * 11 + 3) * 0.12) * WORLD.width;
-    const topWidth = 180 + hash01(i * 17 + 5) * 140;
+    const anchorX = (0.1 + 0.26 * i + hash01(i * 11 + 3) * 0.12) * WORLD.width;
+    const topWidth = 150 + hash01(i * 17 + 5) * 190;
     const sway = Math.sin((clockMs / 1000) * 0.03 * TAU + i * 2.1) * 90;
-    const slant = 300 + hash01(i * 23 + 7) * 220 + sway;
-    const depth = WORLD.height * 0.72;
-    if (anchorX + topWidth + Math.abs(slant) < view.left) continue;
+    const slant = 260 + hash01(i * 23 + 7) * 260 + sway;
+    const depth = WORLD.height * (0.62 + hash01(i * 19 + 2) * 0.22);
+    if (anchorX + topWidth * 2 + Math.abs(slant) < view.left) continue;
     if (anchorX - topWidth - Math.abs(slant) > view.right) continue;
-    const topY = WORLD.waterlineY;
-    ctx.moveTo(anchorX, topY);
-    ctx.lineTo(anchorX + topWidth, topY);
-    ctx.lineTo(anchorX + topWidth * 1.8 + slant, topY + depth);
-    ctx.lineTo(anchorX + slant, topY + depth);
-    ctx.closePath();
+    // wide faint halo, then a narrow bright core — soft feathered sides
+    shaftQuad(
+      ctx,
+      palette.lightShaft,
+      baseA * 0.5,
+      anchorX,
+      topWidth * 1.7,
+      slant * 1.25,
+      topY,
+      depth,
+    );
+    shaftQuad(ctx, palette.lightShaft, baseA, anchorX, topWidth, slant, topY, depth);
   }
+}
+
+function shaftQuad(
+  ctx: CanvasRenderingContext2D,
+  shaft: string,
+  topAlpha: number,
+  anchorX: number,
+  width: number,
+  slant: number,
+  topY: number,
+  depth: number,
+): void {
+  const grad = ctx.createLinearGradient(0, topY, 0, topY + depth);
+  grad.addColorStop(0, withAlpha(shaft, clamp(topAlpha, 0, 1)));
+  grad.addColorStop(0.5, withAlpha(shaft, clamp(topAlpha * 0.5, 0, 1)));
+  grad.addColorStop(1, withAlpha(shaft, 0));
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(anchorX, topY);
+  ctx.lineTo(anchorX + width, topY);
+  ctx.lineTo(anchorX + width * 1.6 + slant, topY + depth);
+  ctx.lineTo(anchorX + slant, topY + depth);
+  ctx.closePath();
   ctx.fill();
 }
 

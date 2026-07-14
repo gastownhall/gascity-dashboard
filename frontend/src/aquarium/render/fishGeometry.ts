@@ -4,12 +4,16 @@
 // owns placement (heading/mirror) and pixels.
 //
 // Construction: a 5–6 point spine nose→tail carries a traveling swim-cycle
-// wave whose amplitude grows toward the tail; the hull is a closed
-// Catmull-Rom bezier ring built from per-station dorsal/ventral half-widths
-// (nose taper, deep mid-body, narrow caudal peduncle). Attitude (pose) is
-// baked into the geometry: pitch, belly-up flip, x-compression, fin fold.
+// wave whose amplitude grows toward the tail; at cruising tail-beat the wave
+// bows the whole body into a readable S even in a single still frame (head
+// leading, tail trailing in phase). The hull is a closed Catmull-Rom bezier
+// ring built from per-station dorsal/ventral half-widths (nose taper, deep
+// mid-body, narrow caudal peduncle) so the caudal fin roots on a real
+// peduncle. Attitude (pose) is baked into the geometry: pitch, belly-up flip,
+// x-compression, fin fold.
 
-import type { AquariumPose, FishSpecies } from '../contracts';
+import type { FishSpecies } from '../contracts';
+import type { FishAttitude } from './fishAttitude';
 import { TAU, at, clamp, clamp01, type Pt } from './mathUtil';
 
 export type CaudalKind = 'forked' | 'rounded' | 'broad';
@@ -49,162 +53,61 @@ export const SPECIES: Record<FishSpecies, SpeciesProfile> = {
   pool: {
     length: 55,
     stations: [0, 0.25, 0.5, 0.75, 1],
-    dorsalWidths: [0.026, 0.085, 0.1, 0.055, 0.018],
-    ventralWidths: [0.026, 0.095, 0.115, 0.06, 0.018],
+    dorsalWidths: [0.03, 0.088, 0.1, 0.055, 0.016],
+    ventralWidths: [0.03, 0.1, 0.118, 0.06, 0.016],
     tailFrequencyHz: 2.3,
-    tailAmplitude: 0.1,
+    tailAmplitude: 0.14,
     cruiseSpeed: 90,
     caudal: 'forked',
-    caudalLength: 0.24,
-    caudalSpreadDeg: 26,
+    caudalLength: 0.26,
+    caudalSpreadDeg: 28,
     dorsalStart: 0.3,
     dorsalEnd: 0.56,
-    dorsalHeight: 0.1,
-    pectoralLength: 0.14,
+    dorsalHeight: 0.085,
+    pectoralLength: 0.15,
     pelvicLength: 0.08,
-    eyeRadius: 0.036,
+    eyeRadius: 0.04,
     noseBlunt: 0.15,
   },
   role: {
     length: 85,
     stations: [0, 0.25, 0.5, 0.75, 1],
-    dorsalWidths: [0.034, 0.12, 0.145, 0.075, 0.024],
-    ventralWidths: [0.034, 0.135, 0.17, 0.082, 0.024],
+    dorsalWidths: [0.04, 0.125, 0.15, 0.076, 0.022],
+    ventralWidths: [0.04, 0.14, 0.175, 0.084, 0.022],
     tailFrequencyHz: 1.5,
-    tailAmplitude: 0.085,
+    tailAmplitude: 0.12,
     cruiseSpeed: 65,
     caudal: 'rounded',
-    caudalLength: 0.2,
+    caudalLength: 0.21,
     caudalSpreadDeg: 18,
     dorsalStart: 0.26,
     dorsalEnd: 0.62,
-    dorsalHeight: 0.135,
-    pectoralLength: 0.16,
+    dorsalHeight: 0.11,
+    pectoralLength: 0.17,
     pelvicLength: 0.09,
-    eyeRadius: 0.034,
+    eyeRadius: 0.037,
     noseBlunt: 0.35,
   },
   grouper: {
     length: 160,
     stations: [0, 0.2, 0.4, 0.6, 0.8, 1],
-    dorsalWidths: [0.062, 0.135, 0.17, 0.15, 0.075, 0.028],
-    ventralWidths: [0.062, 0.15, 0.195, 0.17, 0.082, 0.028],
+    dorsalWidths: [0.07, 0.15, 0.178, 0.152, 0.075, 0.026],
+    ventralWidths: [0.07, 0.165, 0.2, 0.172, 0.082, 0.026],
     tailFrequencyHz: 0.85,
-    tailAmplitude: 0.06,
+    tailAmplitude: 0.09,
     cruiseSpeed: 40,
     caudal: 'broad',
-    caudalLength: 0.19,
+    caudalLength: 0.2,
     caudalSpreadDeg: 24,
-    dorsalStart: 0.3,
-    dorsalEnd: 0.74,
-    dorsalHeight: 0.115,
-    pectoralLength: 0.2,
+    dorsalStart: 0.28,
+    dorsalEnd: 0.76,
+    dorsalHeight: 0.1,
+    pectoralLength: 0.21,
     pelvicLength: 0.1,
-    eyeRadius: 0.028,
+    eyeRadius: 0.03,
     noseBlunt: 0.8,
   },
 };
-
-// ---------------------------------------------------------------------------
-// Attitude: how a pose shapes the body (posture carries state, greyscale-safe)
-
-export type EyeStyle = 'open' | 'hollow' | 'closed' | 'cross';
-
-export interface FishAttitude {
-  /** radians; positive lifts the nose (y-down canvas: nose.y decreases) */
-  pitch: number;
-  /** errored: belly-up */
-  flipVertical: boolean;
-  /** rate-limited: tucked x-compression */
-  xScale: number;
-  finsFolded: boolean;
-  /** 0..1 swim-cycle amplitude multiplier */
-  tailBeat: number;
-  eye: EyeStyle;
-  mouthOpen: boolean;
-  /** asleep: painter renders with fishDim */
-  dimmed: boolean;
-  /** painter clamp on heading-driven body rotation */
-  maxHeadingTilt: number;
-  /** radians of slow ambient body sway the painter applies over the clock */
-  swayAmp: number;
-}
-
-const DEG = Math.PI / 180;
-
-const LEVEL: FishAttitude = {
-  pitch: 0,
-  flipVertical: false,
-  xScale: 1,
-  finsFolded: false,
-  tailBeat: 1,
-  eye: 'open',
-  mouthOpen: false,
-  dimmed: false,
-  maxHeadingTilt: 28 * DEG,
-  swayAmp: 0,
-};
-
-export function attitudeForPose(pose: AquariumPose): FishAttitude {
-  switch (pose) {
-    case 'working':
-      return LEVEL;
-    case 'idle':
-      return {
-        ...LEVEL,
-        pitch: -7 * DEG,
-        tailBeat: 0.3,
-        eye: 'hollow',
-        maxHeadingTilt: 14 * DEG,
-        swayAmp: 3.5 * DEG,
-      };
-    case 'asleep':
-      return {
-        ...LEVEL,
-        tailBeat: 0,
-        finsFolded: true,
-        eye: 'closed',
-        dimmed: true,
-        maxHeadingTilt: 4 * DEG,
-      };
-    case 'awaiting-input':
-      return {
-        ...LEVEL,
-        pitch: 30 * DEG,
-        tailBeat: 0.5,
-        mouthOpen: true,
-        maxHeadingTilt: 6 * DEG,
-        swayAmp: 2 * DEG,
-      };
-    case 'stalled':
-      return {
-        ...LEVEL,
-        pitch: 38 * DEG,
-        tailBeat: 0.4,
-        eye: 'hollow',
-        maxHeadingTilt: 5 * DEG,
-        swayAmp: 4 * DEG,
-      };
-    case 'rate-limited':
-      return {
-        ...LEVEL,
-        xScale: 0.85,
-        finsFolded: true,
-        tailBeat: 0.15,
-        eye: 'hollow',
-        maxHeadingTilt: 6 * DEG,
-      };
-    case 'errored':
-      return {
-        ...LEVEL,
-        flipVertical: true,
-        tailBeat: 0.1,
-        eye: 'cross',
-        maxHeadingTilt: 8 * DEG,
-        swayAmp: 2 * DEG,
-      };
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Spine
@@ -219,8 +122,9 @@ export interface FishSpine {
   attitude: FishAttitude;
 }
 
-/** phase lag from nose to tail (radians) — a partial traveling body wave */
-const BODY_WAVE_RAD = 2.4;
+/** phase lag from nose to tail (radians) — just over a half wave, so a still
+ * frame lands on an S (front and back bow opposite ways), not a bland C */
+const BODY_WAVE_RAD = 3.2;
 
 /** tailPhase = phase + clockMs·frequency (the swim-cycle clock for one fish) */
 export function swimPhaseFor(species: FishSpecies, phase: number, clockMs: number): number {
@@ -240,7 +144,7 @@ export function fishSpine(
 ): FishSpine {
   const p = SPECIES[species];
   const beat = clamp(speedFactor, 0, 2);
-  const amp = p.tailAmplitude * p.length * attitude.tailBeat * (0.45 + 0.55 * Math.min(beat, 1.6));
+  const amp = p.tailAmplitude * p.length * attitude.tailBeat * (0.5 + 0.6 * Math.min(beat, 1.5));
   const rot = -attitude.pitch;
   const cos = Math.cos(rot);
   const sin = Math.sin(rot);
@@ -337,7 +241,7 @@ function noseTip(spine: FishSpine, p: SpeciesProfile): Pt {
   const dy = first.y - second.y;
   const len = Math.hypot(dx, dy) || 1;
   // blunter species extend less beyond the (already wide) head stations
-  const noseLen = p.length * (0.04 - 0.028 * p.noseBlunt);
+  const noseLen = p.length * (0.05 - 0.032 * p.noseBlunt);
   return { x: first.x + (dx / len) * noseLen, y: first.y + (dy / len) * noseLen };
 }
 
@@ -409,5 +313,7 @@ function bracket(stations: readonly number[], s: number): { i: number; t: number
   return { i, t: (sc - s0) / (s1 - s0) };
 }
 
+export { attitudeForPose } from './fishAttitude';
+export type { FishAttitude, EyeStyle } from './fishAttitude';
 export { fishFins, fishHead } from './fishFins';
 export type { FishFins, FishHead } from './fishFins';

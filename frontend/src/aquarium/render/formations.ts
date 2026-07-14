@@ -1,14 +1,18 @@
-// Procedural rig formations: layered rounded-blob rock/coral clusters in 2–3
-// depth tones, kelp fronds with slow clock sway, and a sunken-pellet shelf.
-// Silhouettes are seed-deterministic (same rig, same shape, every session)
-// and cached as world-space Path2D per tone so a frame costs three fills.
+// Procedural rig formations: layered rounded-rock clusters in 3 depth tones
+// with per-seed-unique silhouettes (formationShapes.ts), thin crown spurs, a
+// soft contact shadow where the rock meets the seabed, and kelp fronds with a
+// slow clock sway. Silhouettes are seed-deterministic (same rig, same shape,
+// every session) and cached as world-space Path2D per tone so a frame costs a
+// handful of fills. There is deliberately NO flat shelf/plank bar — that read
+// as a diagram baseline; fish perch on the irregular rock instead.
 
 import type { RigFormation, ScenePalette } from '../contracts';
-import { CITY_KEY, WORLD } from '../contracts';
-import { hash01, mulberry32 } from './hash';
+import { CITY_KEY } from '../contracts';
+import { buildLobes, buildSpurs, blobRing, traceSmoothRing } from './formationShapes';
+import { mulberry32 } from './hash';
 import type { ViewRect } from './layers';
-import { TAU, at, type Pt } from './mathUtil';
-import { mixOklch, withAlpha } from './oklch';
+import { TAU, at } from './mathUtil';
+import { adjustL, mixOklch, withAlpha } from './oklch';
 
 const TONE_COUNT = 3;
 
@@ -20,10 +24,16 @@ interface Frond {
   phase: number;
 }
 
+interface Contact {
+  cx: number;
+  cy: number;
+  halfWidth: number;
+}
+
 interface FormationGeometry {
   tonePaths: readonly Path2D[];
   edgePath: Path2D;
-  shelf: { x: number; y: number; width: number; height: number };
+  contact: Contact;
   fronds: readonly Frond[];
   cullLeft: number;
   cullRight: number;
@@ -43,65 +53,38 @@ function formationGeometry(formation: RigFormation): FormationGeometry {
 
 function buildGeometry(formation: RigFormation): FormationGeometry {
   const rnd = mulberry32(formation.seed);
-  const r = formation.radius;
   const tonePaths = [new Path2D(), new Path2D(), new Path2D()];
   const edgePath = new Path2D();
-  const counts = [2, 2 + Math.floor(rnd() * 2), 1 + Math.floor(rnd() * 2)];
-  for (let tone = 0; tone < TONE_COUNT; tone += 1) {
-    const path = at(tonePaths, tone);
-    for (let b = 0; b < at(counts, tone); b += 1) {
-      const spreadX = (rnd() * 1.6 - 0.8) * r;
-      const rx = r * (0.34 + rnd() * 0.3) * (tone === 0 ? 1.25 : 1);
-      const ry = rx * (0.62 + rnd() * 0.5) * (tone === 0 ? 1.2 : 1);
-      const cx = formation.anchorX + spreadX;
-      const cy = formation.anchorY - ry * (0.4 + rnd() * 0.25);
-      const ring = blobRing(cx, cy, rx, ry, rnd);
-      traceSmoothRing(path, ring);
-      if (tone === TONE_COUNT - 1) traceSmoothRing(edgePath, ring);
-    }
+  const lobes = buildLobes(formation, rnd);
+  let minX = formation.anchorX;
+  let maxX = formation.anchorX;
+  for (const lobe of lobes) {
+    const ring = blobRing(lobe.cx, lobe.cy, lobe.rx, lobe.ry, rnd);
+    traceSmoothRing(at(tonePaths, lobe.tone), ring);
+    if (lobe.tone === TONE_COUNT - 1) traceSmoothRing(edgePath, ring);
+    minX = Math.min(minX, lobe.cx - lobe.rx);
+    maxX = Math.max(maxX, lobe.cx + lobe.rx);
   }
-  const shelfWidth = r * 1.9;
+  const front = at(tonePaths, TONE_COUNT - 1);
+  for (const spur of buildSpurs(formation, rnd)) {
+    const px = -(spur.tipY - spur.baseY);
+    const py = spur.tipX - spur.baseX;
+    const len = Math.hypot(px, py) || 1;
+    const nx = (px / len) * spur.width;
+    const ny = (py / len) * spur.width;
+    front.moveTo(spur.baseX + nx, spur.baseY + ny);
+    front.lineTo(spur.tipX, spur.tipY);
+    front.lineTo(spur.baseX - nx, spur.baseY - ny);
+    front.closePath();
+  }
   return {
     tonePaths,
     edgePath,
-    shelf: {
-      x: formation.anchorX - shelfWidth / 2,
-      y: formation.anchorY - 7,
-      width: shelfWidth,
-      height: 16,
-    },
+    contact: { cx: (minX + maxX) / 2, cy: formation.anchorY + 6, halfWidth: (maxX - minX) / 2 },
     fronds: buildFronds(formation, rnd),
-    cullLeft: formation.anchorX - r * 1.6,
-    cullRight: formation.anchorX + r * 1.6,
+    cullLeft: minX - formation.radius * 0.3,
+    cullRight: maxX + formation.radius * 0.3,
   };
-}
-
-function blobRing(cx: number, cy: number, rx: number, ry: number, rnd: () => number): Pt[] {
-  const points: Pt[] = [];
-  const k = 9;
-  for (let j = 0; j < k; j += 1) {
-    const angle = (j / k) * TAU;
-    const wobble = 0.82 + rnd() * 0.36;
-    points.push({
-      x: cx + Math.cos(angle) * rx * wobble,
-      y: cy + Math.sin(angle) * ry * wobble,
-    });
-  }
-  return points;
-}
-
-/** closed quadratic-through-midpoints ring (smooth, cheap) */
-function traceSmoothRing(path: Path2D, ring: readonly Pt[]): void {
-  const n = ring.length;
-  const first = at(ring, 0);
-  const second = at(ring, 1);
-  path.moveTo((first.x + second.x) / 2, (first.y + second.y) / 2);
-  for (let i = 1; i <= n; i += 1) {
-    const p = at(ring, i % n);
-    const next = at(ring, (i + 1) % n);
-    path.quadraticCurveTo(p.x, p.y, (p.x + next.x) / 2, (p.y + next.y) / 2);
-  }
-  path.closePath();
 }
 
 function buildFronds(formation: RigFormation, rnd: () => number): Frond[] {
@@ -122,8 +105,8 @@ function buildFronds(formation: RigFormation, rnd: () => number): Frond[] {
 
 interface FormationColors {
   tones: readonly string[];
-  shelf: string;
   edge: string;
+  contact: string;
 }
 
 const colorCache = new WeakMap<ScenePalette, FormationColors>();
@@ -138,15 +121,16 @@ function formationColors(palette: ScenePalette): FormationColors {
       mixOklch(palette.formation, palette.hazeFar, 0.28),
       palette.formation,
     ],
-    shelf: mixOklch(palette.formationEdge, palette.formation, 0.35),
     edge: withAlpha(palette.formationEdge, 0.85),
+    contact: withAlpha(adjustL(palette.formationEdge, -10), 1),
   };
   colorCache.set(palette, built);
   return built;
 }
 
-/** Mid-layer transform must be installed. Batches all visible formations
- * into one fill per depth tone, one edge stroke, one kelp stroke. */
+/** Mid-layer transform must be installed. Batches all visible formations into
+ * one fill per depth tone, a contact shadow pass, one edge stroke, one kelp
+ * stroke. */
 export function paintFormations(
   ctx: CanvasRenderingContext2D,
   formations: readonly RigFormation[],
@@ -162,21 +146,42 @@ export function paintFormations(
     return g.cullRight >= view.left && g.cullLeft <= view.right;
   });
   if (visible.length === 0) return;
+  paintContactShadows(ctx, visible, colors.contact);
   for (let tone = 0; tone < TONE_COUNT; tone += 1) {
     ctx.fillStyle = at(colors.tones, tone);
     for (const f of visible) ctx.fill(at(formationGeometry(f).tonePaths, tone));
   }
   ctx.strokeStyle = colors.edge;
   ctx.lineWidth = 1.25 / zoom;
+  ctx.lineJoin = 'round';
   for (const f of visible) ctx.stroke(formationGeometry(f).edgePath);
-  ctx.fillStyle = colors.shelf;
-  ctx.beginPath();
-  for (const f of visible) {
-    const s = formationGeometry(f).shelf;
-    ctx.rect(s.x, s.y, s.width, s.height);
-  }
-  ctx.fill();
   paintKelp(ctx, visible, palette, zoom, clockMs);
+}
+
+/** soft ambient-occlusion darkening at the rock/seabed contact: nested flat
+ * ellipses (darkest tight, faint wide) — no gradient, cheap, deterministic */
+function paintContactShadows(
+  ctx: CanvasRenderingContext2D,
+  visible: readonly RigFormation[],
+  contact: string,
+): void {
+  const rings: Array<{ scale: number; alpha: number }> = [
+    { scale: 1.15, alpha: 0.1 },
+    { scale: 0.8, alpha: 0.16 },
+    { scale: 0.5, alpha: 0.22 },
+  ];
+  for (const ring of rings) {
+    ctx.fillStyle = withAlpha(contact, ring.alpha);
+    ctx.beginPath();
+    for (const f of visible) {
+      const c = formationGeometry(f).contact;
+      const rx = c.halfWidth * ring.scale;
+      const ry = Math.max(10, c.halfWidth * 0.14) * ring.scale;
+      ctx.moveTo(c.cx + rx, c.cy);
+      ctx.ellipse(c.cx, c.cy, rx, ry, 0, 0, TAU);
+    }
+    ctx.fill();
+  }
 }
 
 function paintKelp(
@@ -200,7 +205,6 @@ function paintKelp(
       const midY = frond.baseY - frond.height * 0.55;
       ctx.moveTo(frond.baseX, frond.baseY);
       ctx.bezierCurveTo(frond.baseX, frond.baseY - frond.height * 0.3, midX, midY, tipX, tipY);
-      // two short blades off the upper stem
       ctx.moveTo(midX, midY);
       ctx.lineTo(midX + 16 + sway * 0.2, midY - 26);
       ctx.moveTo((frond.baseX + midX) / 2, (frond.baseY + midY) / 2);
@@ -209,27 +213,4 @@ function paintKelp(
   }
   ctx.stroke();
   ctx.lineCap = 'butt';
-}
-
-const FAR_MOUND_COUNT = 5;
-
-/** Distant seabed dunes in pure haze tone (licensed ambience — nothing rig-,
- * fish-, or pellet-shaped). Far layer must be installed. */
-export function paintFarHaze(
-  ctx: CanvasRenderingContext2D,
-  palette: ScenePalette,
-  view: ViewRect,
-): void {
-  ctx.fillStyle = palette.hazeFar;
-  ctx.beginPath();
-  for (let i = 0; i < FAR_MOUND_COUNT; i += 1) {
-    const cx = (0.06 + (i + hash01(i * 13 + 1) * 0.5) / FAR_MOUND_COUNT) * WORLD.width;
-    const rx = 380 + hash01(i * 29 + 2) * 420;
-    const ry = 130 + hash01(i * 31 + 4) * 150;
-    const cy = WORLD.seabedY + 90;
-    if (cx + rx < view.left || cx - rx > view.right) continue;
-    ctx.moveTo(cx + rx, cy);
-    ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU);
-  }
-  ctx.fill();
 }

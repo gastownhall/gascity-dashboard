@@ -6,7 +6,7 @@
 // clock; poses and positions stay truthful facts.
 
 import type { PaintScene } from '../contracts';
-import { paintFarHaze, paintFormations } from './formations';
+import { paintFormations } from './formations';
 import { paintFishLayer } from './fishPainter';
 import { PARALLAX, applyLayer, applyScreenSpace, layerTransform, visibleWorldRect } from './layers';
 import { paintPellets } from './pellets';
@@ -15,6 +15,7 @@ import {
   paintDepthVignette,
   paintLightShafts,
   paintParticulate,
+  paintSeabed,
   paintWaterColumn,
   paintWaterline,
 } from './water';
@@ -38,7 +39,7 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
   paintWaterColumn(ctx, palette, far, viewport);
 
   applyLayer(ctx, far);
-  paintFarHaze(ctx, palette, farView);
+  paintSeabed(ctx, palette, farView);
   paintLightShafts(ctx, palette, farView, clockMs);
 
   applyLayer(ctx, mid);

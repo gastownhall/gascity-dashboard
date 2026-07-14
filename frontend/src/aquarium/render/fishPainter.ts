@@ -1,11 +1,13 @@
-// Paints one fish from its geometry + entity + kinematics: two-tone flat
-// body (darker dorsal over lighter ventral, split along the spine), crisp
-// zoom-stable outline, translucent fins, pose-carrying eye/gill/mouth.
-// No save/restore per fish: placement is one setTransform, and the caller
-// re-installs the actor layer once after the loop.
+// Paints one fish from its geometry + entity + kinematics. Two draw paths:
+// a rich path (per-fish countershading gradient, feathered fin membranes,
+// eye/gill/mouth) for fish drawn large enough to read, and a cheap flat
+// two-tone path for the 200-fish perf sweep where every fish is a few pixels.
+// The rich path is gated on a fish-count budget (≤ RICH_FISH_BUDGET) AND a
+// minimum drawn size, so gradients never fire on the perf fixture.
+// No save/restore per fish: placement is one setTransform.
 
 import type { FishEntity, FishKinematics, ScenePalette, SimState } from '../contracts';
-import type { FishAttitude, FishHead, FishHull, FishSpine } from './fishGeometry';
+import type { FishAttitude, FishHull, FishSpine } from './fishGeometry';
 import {
   SPECIES,
   attitudeForPose,
@@ -17,44 +19,21 @@ import {
   speedFactorFor,
   swimPhaseFor,
 } from './fishGeometry';
+import type { FishFins } from './fishFins';
+import { paintFace } from './fishFace';
+import type { CountershadeColors } from './fishShading';
+import { bodyGradient, countershadeColors, finGradient, midpoint } from './fishShading';
 import type { LayerTransform, ViewRect } from './layers';
 import { applyLayer, rectContains } from './layers';
 import { TAU, at, clamp, normalizeAngle, type Pt } from './mathUtil';
-import { adjustL, withAlpha } from './oklch';
+import { withAlpha } from './oklch';
 
-interface FishColors {
-  dorsal: string;
-  ventral: string;
-  fin: string;
-  outline: string;
-  dimDorsal: string;
-  dimVentral: string;
-  dimFin: string;
-  dimOutline: string;
-}
-
-const colorCache = new WeakMap<ScenePalette, FishColors>();
-
-function fishColors(palette: ScenePalette): FishColors {
-  const hit = colorCache.get(palette);
-  if (hit !== undefined) return hit;
-  const dorsal = adjustL(palette.fishBody, -7);
-  const ventral = adjustL(palette.fishBody, 7);
-  const dimDorsal = adjustL(palette.fishDim, -4);
-  const dimVentral = adjustL(palette.fishDim, 4);
-  const built: FishColors = {
-    dorsal,
-    ventral,
-    fin: withAlpha(dorsal, 0.7),
-    outline: palette.fishOutline,
-    dimDorsal,
-    dimVentral,
-    dimFin: withAlpha(dimDorsal, 0.6),
-    dimOutline: withAlpha(palette.fishOutline, 0.55),
-  };
-  colorCache.set(palette, built);
-  return built;
-}
+/** above this many visible fish, everyone takes the cheap flat path */
+const RICH_FISH_BUDGET = 48;
+/** min drawn body length (css px) for the gradient path */
+const RICH_MIN_PX = 16;
+/** min drawn body length (css px) for eye/gill/mouth */
+const FACE_MIN_PX = 46;
 
 /** Cull + paint every fish. Leaves the actor layer transform installed. */
 export function paintFishLayer(
@@ -66,14 +45,18 @@ export function paintFishLayer(
   view: ViewRect,
   clockMs: number,
 ): void {
-  const colors = fishColors(palette);
+  const normal = countershadeColors(palette, false);
+  const dim = countershadeColors(palette, true);
+  const drawnPx = 85 * layer.scale;
+  const richBudget = fishList.length <= RICH_FISH_BUDGET && drawnPx >= RICH_MIN_PX;
   for (const fish of fishList) {
     const kin = sim.fish[fish.id];
     // sim can lag a fresh snapshot by one frame; a fish with no kinematics
     // yet is skipped rather than painted at an invented position
     if (kin === undefined) continue;
     if (!rectContains(view, kin.x, kin.y)) continue;
-    paintFish(ctx, fish, kin, colors, layer, clockMs);
+    const dimmed = attitudeForPose(fish.pose).dimmed || fish.tombstoned;
+    paintFish(ctx, fish, kin, dimmed ? dim : normal, layer, clockMs, richBudget);
   }
   applyLayer(ctx, layer);
 }
@@ -82,9 +65,10 @@ function paintFish(
   ctx: CanvasRenderingContext2D,
   fish: FishEntity,
   kin: FishKinematics,
-  colors: FishColors,
+  colors: CountershadeColors,
   layer: LayerTransform,
   clockMs: number,
+  richBudget: boolean,
 ): void {
   const attitude = attitudeForPose(fish.pose);
   const swimPhase = swimPhaseFor(fish.species, kin.phase, clockMs);
@@ -96,37 +80,104 @@ function paintFish(
   );
   const hull = fishHull(spine, fish.species, bellyFactorFromPct(fish.bellyPct));
   const fins = fishFins(spine, hull, swimPhase);
-  const head = fishHead(spine, hull);
   placeFish(ctx, kin, attitude, layer, clockMs);
-  const dim = attitude.dimmed || fish.tombstoned;
-  const body = dim
-    ? {
-        dorsal: colors.dimDorsal,
-        ventral: colors.dimVentral,
-        fin: colors.dimFin,
-        outline: colors.dimOutline,
-      }
-    : { dorsal: colors.dorsal, ventral: colors.ventral, fin: colors.fin, outline: colors.outline };
   const lineWidth = 1.25 / layer.scale;
+  const drawnPx = SPECIES[fish.species].length * layer.scale;
   if (fish.tombstoned) ctx.globalAlpha = 0.4;
-  ctx.fillStyle = body.fin;
+  if (richBudget && drawnPx >= RICH_MIN_PX) {
+    paintRich(ctx, fish, spine, hull, fins, colors, lineWidth, drawnPx >= FACE_MIN_PX);
+  } else {
+    paintFlat(ctx, spine, hull, fins, colors, lineWidth);
+  }
+  if (fish.tombstoned) ctx.globalAlpha = 1;
+}
+
+/** rich path: membranes behind the body, gradient body, near pectoral, face */
+function paintRich(
+  ctx: CanvasRenderingContext2D,
+  fish: FishEntity,
+  spine: FishSpine,
+  hull: FishHull,
+  fins: FishFins,
+  colors: CountershadeColors,
+  lineWidth: number,
+  withFace: boolean,
+): void {
+  membrane(
+    ctx,
+    fins.caudal,
+    midpoint(at(fins.caudal, 0), at(fins.caudal, 4)),
+    at(fins.caudal, 2),
+    colors.finRoot,
+    0.92,
+  );
+  membrane(
+    ctx,
+    fins.dorsal,
+    midpoint(at(fins.dorsal, 0), at(fins.dorsal, 3)),
+    midpoint(at(fins.dorsal, 1), at(fins.dorsal, 2)),
+    colors.finRoot,
+    0.82,
+  );
+  membrane(ctx, fins.pelvic, at(fins.pelvic, 0), at(fins.pelvic, 1), colors.finRoot, 0.78);
+  traceHull(ctx, hull);
+  ctx.fillStyle = bodyGradient(ctx, hull, colors);
+  ctx.fill();
+  ctx.strokeStyle = colors.outline;
+  ctx.lineWidth = lineWidth;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  membrane(ctx, fins.pectoral, at(fins.pectoral, 0), at(fins.pectoral, 1), colors.finLight, 0.6);
+  if (withFace) {
+    paintFace(
+      ctx,
+      fishHead(spine, hull),
+      spine.attitude,
+      SPECIES[fish.species].noseBlunt,
+      colors,
+      lineWidth,
+    );
+  }
+}
+
+/** cheap path: flat two-tone body + flat translucent fins, one stroke */
+function paintFlat(
+  ctx: CanvasRenderingContext2D,
+  spine: FishSpine,
+  hull: FishHull,
+  fins: FishFins,
+  colors: CountershadeColors,
+  lineWidth: number,
+): void {
+  ctx.fillStyle = withAlpha(colors.finRoot, 0.6);
+  traceThrough(ctx, fins.caudal);
+  ctx.fill();
   traceThrough(ctx, fins.dorsal);
   ctx.fill();
   traceThrough(ctx, fins.pelvic);
   ctx.fill();
-  traceThrough(ctx, fins.caudal);
-  ctx.fill();
-  paintBody(ctx, spine, hull, body.dorsal, body.ventral);
-  ctx.fillStyle = body.fin;
+  paintBodyFlat(ctx, spine, hull, colors.dorsal, colors.ventral);
+  ctx.fillStyle = withAlpha(colors.finLight, 0.5);
   traceThrough(ctx, fins.pectoral);
   ctx.fill();
   traceHull(ctx, hull);
-  ctx.strokeStyle = body.outline;
+  ctx.strokeStyle = colors.outline;
   ctx.lineWidth = lineWidth;
   ctx.lineJoin = 'round';
   ctx.stroke();
-  paintFace(ctx, head, attitude, spine, body.outline, lineWidth);
-  if (fish.tombstoned) ctx.globalAlpha = 1;
+}
+
+function membrane(
+  ctx: CanvasRenderingContext2D,
+  pts: readonly Pt[],
+  root: Pt,
+  tip: Pt,
+  color: string,
+  rootAlpha: number,
+): void {
+  ctx.fillStyle = finGradient(ctx, root, tip, color, rootAlpha);
+  traceThrough(ctx, pts);
+  ctx.fill();
 }
 
 /** heading → mirrored, tilt-clamped placement in one setTransform */
@@ -139,8 +190,10 @@ function placeFish(
 ): void {
   const facingLeft = Math.cos(kin.heading) < 0;
   const base = normalizeAngle(facingLeft ? kin.heading - Math.PI : kin.heading);
-  const sway = attitude.swayAmp * Math.sin((clockMs / 1000) * 0.35 * TAU + kin.phase);
-  const rot = clamp(base, -attitude.maxHeadingTilt, attitude.maxHeadingTilt) + sway;
+  const t = clockMs / 1000;
+  const sway = attitude.swayAmp * Math.sin(t * 0.35 * TAU + kin.phase);
+  const quiver = attitude.quiver * Math.sin(t * 6 * TAU + kin.phase);
+  const rot = clamp(base, -attitude.maxHeadingTilt, attitude.maxHeadingTilt) + sway + quiver;
   const m = facingLeft ? -1 : 1;
   const k = layer.dpr * layer.scale;
   const cos = Math.cos(rot);
@@ -164,9 +217,9 @@ function traceHull(ctx: CanvasRenderingContext2D, hull: FishHull): void {
   ctx.closePath();
 }
 
-/** two-tone fill: whole hull in ventral, then the dorsal half re-filled
- * darker, split along a smoothed spine curve */
-function paintBody(
+/** two-tone fill: whole hull in ventral, then the dorsal half re-filled darker,
+ * split along a smoothed spine curve (cheap countershading for tiny fish) */
+function paintBodyFlat(
   ctx: CanvasRenderingContext2D,
   spine: FishSpine,
   hull: FishHull,
@@ -219,88 +272,4 @@ function traceThrough(ctx: CanvasRenderingContext2D, pts: readonly Pt[]): void {
     );
   }
   ctx.closePath();
-}
-
-function paintFace(
-  ctx: CanvasRenderingContext2D,
-  head: FishHead,
-  attitude: FishAttitude,
-  spine: FishSpine,
-  outline: string,
-  lineWidth: number,
-): void {
-  ctx.strokeStyle = outline;
-  ctx.fillStyle = outline;
-  ctx.lineWidth = lineWidth;
-  paintEye(ctx, head, attitude);
-  // gill crease, bowed back toward the tail
-  const bow = 1.6 * head.eyeRadius;
-  ctx.beginPath();
-  ctx.moveTo(head.gillA.x, head.gillA.y);
-  ctx.quadraticCurveTo(
-    (head.gillA.x + head.gillB.x) / 2 - head.mouthDir.x * bow,
-    (head.gillA.y + head.gillB.y) / 2 - head.mouthDir.y * bow,
-    head.gillB.x,
-    head.gillB.y,
-  );
-  ctx.stroke();
-  if (attitude.mouthOpen) {
-    // open gape: dark wedge notched into the nose
-    const len = head.eyeRadius * 2.4;
-    const px = -head.mouthDir.y;
-    const py = head.mouthDir.x;
-    ctx.beginPath();
-    ctx.moveTo(
-      head.mouth.x + head.mouthDir.x * len * 0.35,
-      head.mouth.y + head.mouthDir.y * len * 0.35,
-    );
-    ctx.lineTo(
-      head.mouth.x - head.mouthDir.x * len + px * len * 0.45,
-      head.mouth.y - head.mouthDir.y * len + py * len * 0.45,
-    );
-    ctx.lineTo(
-      head.mouth.x - head.mouthDir.x * len - px * len * 0.45,
-      head.mouth.y - head.mouthDir.y * len - py * len * 0.45,
-    );
-    ctx.closePath();
-    ctx.fill();
-  } else if (SPECIES[spine.species].noseBlunt > 0.6) {
-    // heavy grouper lips: a short thick bar across the nose front
-    const px = -head.mouthDir.y;
-    const py = head.mouthDir.x;
-    const r = head.eyeRadius;
-    ctx.lineWidth = lineWidth * 2.4;
-    ctx.beginPath();
-    ctx.moveTo(head.mouth.x + px * r * 0.6, head.mouth.y + py * r * 0.6);
-    ctx.lineTo(head.mouth.x - px * r * 1.1, head.mouth.y - py * r * 1.1);
-    ctx.stroke();
-    ctx.lineWidth = lineWidth;
-  }
-}
-
-function paintEye(ctx: CanvasRenderingContext2D, head: FishHead, attitude: FishAttitude): void {
-  const { eye, eyeRadius: r } = head;
-  ctx.beginPath();
-  switch (attitude.eye) {
-    case 'open':
-      ctx.arc(eye.x, eye.y, r, 0, TAU);
-      ctx.fill();
-      return;
-    case 'hollow':
-      ctx.arc(eye.x, eye.y, r * 0.9, 0, TAU);
-      ctx.stroke();
-      return;
-    case 'closed':
-      // restful downward arc
-      ctx.arc(eye.x, eye.y - r * 0.3, r, TAU * 0.08, TAU * 0.42);
-      ctx.stroke();
-      return;
-    case 'cross':
-      ctx.moveTo(eye.x - r * 0.8, eye.y - r * 0.8);
-      ctx.lineTo(eye.x + r * 0.8, eye.y + r * 0.8);
-      ctx.moveTo(eye.x + r * 0.8, eye.y - r * 0.8);
-      ctx.lineTo(eye.x - r * 0.8, eye.y + r * 0.8);
-      ctx.stroke();
-      return;
-  }
 }
