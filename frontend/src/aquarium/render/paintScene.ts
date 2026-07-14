@@ -1,18 +1,19 @@
-// One full frame. The SLOW layers — water column, seabed, light shafts, deep
-// drift, formations (rock / coral / kelp / speckle / contact shadow), the water
-// surface AND the near-foreground silhouettes — are baked ONCE into an offscreen
-// buffer (sceneCache.ts) and blitted each frame under the camera delta; they
-// re-bake only when the camera pans past the margin or the zoom / viewport /
-// palette / formation set changes. The baked buffer is opaque (the water column
-// is its base), so its blit doubles as the frame's base — no per-frame full-
-// screen clear or gradient fill. Fish, pellets and the near motes are the only
-// dynamic layers drawn on top every frame. reduced-motion freezes the ambient
-// clock; poses and positions stay truthful facts.
+// One full frame. The SLOW layers — seabed, light shafts, deep drift,
+// formations (rock / coral / kelp / speckle / contact shadow), the water surface
+// AND the near-foreground silhouettes — are baked ONCE into an offscreen buffer
+// (sceneCache.ts) and blitted each frame under the camera delta; they re-bake
+// only when the camera pans past the margin or the zoom / viewport / palette /
+// formation set changes. The water-column gradient is drawn fresh as the opaque
+// base (cheap, and it keeps its true world-depth anchoring under a pan, and —
+// being a per-frame 1440×900 fill rather than an in-bake 2080×1540 one — it
+// keeps the re-bake, which dominates the p95 frames, as light as possible).
+// Fish, pellets and the near motes are dynamic on top every frame. reduced-
+// motion freezes the ambient clock; poses and positions stay truthful facts.
 
 import type { Camera, PaintScene, ScenePalette, Viewport, WorldSnapshot } from '../contracts';
 import { paintFormations } from './formations';
 import { paintFishLayer } from './fishPainter';
-import { paintForeground } from './foreground';
+import { foregroundVisibleAtZoom, paintForeground } from './foreground';
 import { PARALLAX, applyLayer, applyScreenSpace, layerTransform, visibleWorldRect } from './layers';
 import { paintPellets } from './pellets';
 import {
@@ -49,6 +50,9 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
   const actorView = visibleWorldRect(actors, viewport, CULL_MARGIN);
   const nearView = visibleWorldRect(near, viewport, CULL_MARGIN);
 
+  applyScreenSpace(ctx, viewport);
+  paintWaterColumn(ctx, palette, far, viewport);
+
   const cache = getStaticCache(ctx.canvas);
   if (
     needsRebake(
@@ -63,10 +67,6 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
   ) {
     bakeStaticLayers(cache, snapshot, palette, camera, viewport, opts.reducedMotion, clockMs);
   }
-  // The opaque baked buffer (water column base + reef + near-foreground) fully
-  // covers the viewport within the pan margin, so this single blit replaces the
-  // old per-frame clear + full-screen water gradient — one fewer full-screen
-  // op every frame.
   applyScreenSpace(ctx, viewport);
   blitStatic(ctx, cache, camera, viewport, CACHE_MARGIN);
 
@@ -84,7 +84,9 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
 
 /** Render the static layers into the offscreen buffer at the current camera as
  * the new bake reference, then record the bake key. Uses an expanded viewport
- * so buffer pixel (margin+sx, margin+sy) maps to real screen pixel (sx, sy). */
+ * so buffer pixel (margin+sx, margin+sy) maps to real screen pixel (sx, sy). The
+ * buffer is transparent above the seabed (the per-frame water column shows
+ * through), so it is cleared explicitly before baking. */
 function bakeStaticLayers(
   cache: StaticLayerCache,
   snapshot: WorldSnapshot,
@@ -94,12 +96,11 @@ function bakeStaticLayers(
   reducedMotion: boolean,
   clockMs: number,
 ): void {
-  // resize the buffer to the (viewport + margin) if needed — setting width also
-  // clears it, and the opaque water column below re-covers it in any case.
-  sizeStaticBuffer(cache, viewport, CACHE_MARGIN);
+  const { bufCssWidth, bufCssHeight } = sizeStaticBuffer(cache, viewport, CACHE_MARGIN);
   const bctx = cache.bctx;
   const bufViewport = bufferViewport(viewport, CACHE_MARGIN);
   bctx.setTransform(bufViewport.dpr, 0, 0, bufViewport.dpr, 0, 0);
+  bctx.clearRect(0, 0, bufCssWidth, bufCssHeight);
 
   const far = layerTransform(camera, bufViewport, PARALLAX.far);
   const mid = layerTransform(camera, bufViewport, PARALLAX.mid);
@@ -109,9 +110,6 @@ function bakeStaticLayers(
   const midView = visibleWorldRect(mid, bufViewport, CULL_MARGIN);
   const actorView = visibleWorldRect(actors, bufViewport, CULL_MARGIN);
   const fgView = visibleWorldRect(fg, bufViewport, FG_CULL_MARGIN);
-
-  // Opaque water column base fills the whole buffer (doubles as the clear).
-  paintWaterColumn(bctx, palette, far, bufViewport);
 
   applyLayer(bctx, far);
   paintSeabed(bctx, palette, farView);
@@ -124,11 +122,16 @@ function bakeStaticLayers(
   applyLayer(bctx, actors);
   paintWaterSurface(bctx, palette, actorView, clockMs);
 
-  // Near-foreground silhouettes at the near parallax (they slide fast on a pan).
-  // Baked in front of the reef so they occlude the background; the dynamic fish
-  // then draw over them. Baked here → zero per-frame cost.
-  applyLayer(bctx, fg);
-  paintForeground(bctx, palette, fgView);
+  // Near-foreground silhouettes at the near parallax (they slide fast on a pan),
+  // filled under a real out-of-focus blur. Baked in front of the reef so they
+  // occlude the background; the dynamic fish then draw over them. Baked here →
+  // the banned per-frame `ctx.filter` costs nothing per frame. Only at the
+  // overview / near-tank zooms: it fades out well below the blind-crop (~1.71)
+  // and LOD2 (2.4) zooms so it can never occlude a fish being judged close-up.
+  if (foregroundVisibleAtZoom(camera.zoom)) {
+    applyLayer(bctx, fg);
+    paintForeground(bctx, palette, fgView, bufViewport.dpr);
+  }
 
   cache.key = {
     camX: camera.x,

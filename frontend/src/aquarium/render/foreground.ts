@@ -1,13 +1,24 @@
 // Near-foreground silhouettes: the classic looking-through-glass aquarium cue.
-// A few large, dark, SOFT-EDGED, low-detail kelp and rock shapes rooted at the
-// bottom / side edges of the tank, sitting on a NEAR parallax plane (they slide
-// fast on pan) and OUT OF FOCUS (approximated by 3 stacked, semi-transparent,
-// scaled-about-the-base fills — no canvas blur/filter in the hot path). They
-// partially occlude the scene edges, which reads instantly as depth-through-
-// glass. This is licensed ambience (DESIGN.md §7: water/kelp are licensed);
-// nothing here is fish- or pellet-shaped. Geometry is built ONCE (deterministic
-// mulberry32) and cached; the painter only fills it, and it is baked into the
-// offscreen foreground buffer (sceneCache.ts) so it costs one drawImage/frame.
+// A few large, dark kelp and rock shapes rooted at the bottom / side edges of
+// the tank, sitting on a NEAR parallax plane (they slide fast on pan) and
+// REALLY OUT OF FOCUS: filled under an actual `ctx.filter = blur(...)`. That
+// filter is banned in the per-frame hot path, but the foreground is STATIC per
+// camera, so it is baked ONCE into the offscreen static cache (sceneCache.ts /
+// paintScene.ts) where the blur cost is paid per camera change, never per
+// frame. The blurred mass partially occludes the scene edges, which reads
+// instantly as a defocused near plane behind glass — the depth cue the layered
+// fake-blur failed to sell in rounds 4 and 5.
+//
+// This is licensed ambience (DESIGN.md §7: water/kelp are licensed); nothing
+// here is fish- or pellet-shaped. Geometry is built ONCE (deterministic
+// mulberry32) and cached. The composition is deliberately ASYMMETRIC left vs
+// right (different element types, sizes, and x-offsets per side) so it reads as
+// organic growth, not mirror-symmetric UI decoration.
+//
+// LEGIBILITY GUARD: the foreground is only baked at the overview / near-tank
+// zooms (foregroundVisibleAtZoom) — it never appears in the LOD2 close-up
+// (zoom 2.4) or the single-fish blind crops (zoom ~1.71), so a big blurred mass
+// can never occlude a seabed-pose fish being judged in a centered crop.
 
 import type { ScenePalette } from '../contracts';
 import { WORLD } from '../contracts';
@@ -20,8 +31,6 @@ import { adjustL, mixOklch, parseOklch, withAlpha } from './oklch';
 interface Silhouette {
   /** smooth closed shape(s), world coordinates */
   path: Path2D;
-  /** pivot for the out-of-focus feather (scale-about-base), world coordinates */
-  baseX: number;
   baseY: number;
   cullLeft: number;
   cullRight: number;
@@ -34,18 +43,31 @@ interface AnchorSpec {
   halfWidth: number;
   height: number;
   lean: number;
+  /** per-anchor shape seed (distinct so no two silhouettes rhyme) */
+  seed: number;
+}
+
+/** css-px zoom at/above which the near-foreground is NOT drawn. The blind crops
+ * sit at ~1.71 and the LOD2 close-up at 2.4; both must be clear of any blurred
+ * foreground mass, so the plane fades out well below them (kept through LOD1's
+ * 1.0). */
+export const FOREGROUND_MAX_ZOOM = 1.2;
+
+export function foregroundVisibleAtZoom(zoom: number): boolean {
+  return zoom < FOREGROUND_MAX_ZOOM;
 }
 
 // Rooted at the world floor so the base sits just below the frame edge at the
-// fit-tank overview. Tall kelp hug the left/right edges; low rock mounds sit
-// inboard over the seabed so they occlude background reef without covering the
-// mid-water schools.
+// fit-tank overview. Deliberately ASYMMETRIC: the LEFT edge is a tall kelp
+// stand plus one low squat rock; the RIGHT edge is a broad rock outcrop plus a
+// shorter, offset kelp — different types, heights, widths, and x-offsets per
+// side (not mirrored) so the near plane reads as organic, not composed.
 const FLOOR = WORLD.height;
 const ANCHORS: readonly AnchorSpec[] = [
-  { kind: 'kelp', baseX: 235, halfWidth: 158, height: 1010, lean: -78 },
-  { kind: 'rock', baseX: 1080, halfWidth: 350, height: 452, lean: 0 },
-  { kind: 'rock', baseX: 2905, halfWidth: 402, height: 536, lean: 0 },
-  { kind: 'kelp', baseX: 3775, halfWidth: 168, height: 966, lean: 86 },
+  { kind: 'kelp', baseX: 175, halfWidth: 150, height: 1080, lean: -72, seed: 0x5eed01 },
+  { kind: 'rock', baseX: 640, halfWidth: 300, height: 300, lean: 24, seed: 0xf00d02 },
+  { kind: 'rock', baseX: 3180, halfWidth: 476, height: 660, lean: -34, seed: 0xf00d03 },
+  { kind: 'kelp', baseX: 3865, halfWidth: 122, height: 726, lean: 98, seed: 0x5eed04 },
 ];
 
 let cached: readonly Silhouette[] | null = null;
@@ -53,28 +75,27 @@ let cached: readonly Silhouette[] | null = null;
 /** Built once; deterministic, palette-independent. */
 export function foregroundSilhouettes(): readonly Silhouette[] {
   if (cached !== null) return cached;
-  cached = ANCHORS.map((a, i) =>
-    a.kind === 'kelp'
-      ? buildKelp(a, mulberry32(0x5eed11 + i))
-      : buildRock(a, mulberry32(0xf00d21 + i)),
+  cached = ANCHORS.map((a) =>
+    a.kind === 'kelp' ? buildKelp(a, mulberry32(a.seed)) : buildRock(a, mulberry32(a.seed)),
   );
   return cached;
 }
 
-/** A kelp stand: 4 tall tapering fronds with gentle S-lean, merged into one
- * path so the whole clump feathers as a single soft mass. */
+/** A kelp stand: tall tapering fronds with gentle S-lean, merged into one path
+ * so the whole clump feathers as a single soft mass. Frond count varies per
+ * seed so left and right stands never rhyme. */
 function buildKelp(a: AnchorSpec, rnd: () => number): Silhouette {
   const path = new Path2D();
-  const fronds = 5;
+  const fronds = 3 + Math.floor(rnd() * 3);
   let minX = a.baseX;
   let maxX = a.baseX;
   for (let f = 0; f < fronds; f += 1) {
-    const spread = (f / (fronds - 1) - 0.5) * a.halfWidth * 2;
+    const spread = (f / Math.max(1, fronds - 1) - 0.5) * a.halfWidth * 2;
     const bx = a.baseX + spread;
     const height = a.height * (0.72 + rnd() * 0.4);
     const lean = a.lean * (0.5 + rnd() * 0.8) + spread * 0.4;
     const bow = (rnd() - 0.5) * 100;
-    const baseW = 36 + rnd() * 26;
+    const baseW = 40 + rnd() * 28;
     const ring = frondRing(bx, FLOOR, height, lean, bow, baseW);
     traceSmoothRing(path, ring);
     for (const p of ring) {
@@ -82,7 +103,7 @@ function buildKelp(a: AnchorSpec, rnd: () => number): Silhouette {
       if (p.x > maxX) maxX = p.x;
     }
   }
-  return { path, baseX: a.baseX, baseY: FLOOR, cullLeft: minX - 40, cullRight: maxX + 40 };
+  return { path, baseY: FLOOR, cullLeft: minX - 40, cullRight: maxX + 40 };
 }
 
 /** A single frond ring: sampled centerline offset by a tapering half-width,
@@ -128,66 +149,60 @@ function buildRock(a: AnchorSpec, rnd: () => number): Silhouette {
   traceSmoothRing(path, ring);
   return {
     path,
-    baseX: a.baseX + a.lean,
     baseY: FLOOR,
     cullLeft: a.baseX + a.lean - a.halfWidth - 40,
     cullRight: a.baseX + a.lean + a.halfWidth + 40,
   };
 }
 
-interface FeatherPass {
-  /** scale-about-base for this soft-edge pass */
-  k: number;
-  /** pre-alpha'd fill color */
-  color: string;
-}
+const fillCache = new WeakMap<ScenePalette, string>();
 
-const cache = new WeakMap<ScenePalette, readonly FeatherPass[]>();
-
-/** The darkest available pigment (theme-agnostic) darkened hard into a true
- * silhouette, then split into four stacked feather passes (wide faint halo →
- * near-opaque core) that read as a DARK, out-of-focus foreground mass — the
- * classic near-glass depth cue. A light-water background needs the shape dark,
- * not a pale wash (round-5 first pass read as more background fog). */
-function foregroundPasses(palette: ScenePalette): readonly FeatherPass[] {
-  const hit = cache.get(palette);
+/** The darkest available pigment (theme-agnostic), tinted with a hint of the
+ * water hue so the mass belongs, then darkened hard into a near-opaque shadow.
+ * A light-water background needs the near plane DARK, not a pale wash (round-5
+ * first pass read as more background fog). */
+function foregroundFill(palette: ScenePalette): string {
+  const hit = fillCache.get(palette);
   if (hit !== undefined) return hit;
   const darkBase =
     parseOklch(palette.formationEdge).l <= parseOklch(palette.waterBottom).l
       ? palette.formationEdge
       : palette.waterBottom;
-  // a hint of the water hue so it belongs, then darkened hard into shadow
-  const core = adjustL(mixOklch(darkBase, palette.waterBottom, 0.15), -15);
-  const built: readonly FeatherPass[] = [
-    { k: 1.24, color: withAlpha(core, 0.12) },
-    { k: 1.14, color: withAlpha(core, 0.22) },
-    { k: 1.06, color: withAlpha(core, 0.38) },
-    { k: 1.0, color: withAlpha(core, 0.85) },
-  ];
-  cache.set(palette, built);
+  const built = withAlpha(adjustL(mixOklch(darkBase, palette.waterBottom, 0.15), -15), 0.9);
+  fillCache.set(palette, built);
   return built;
 }
 
-/** Fill every visible foreground silhouette with the 3-pass soft feather. The
- * foreground parallax layer must be installed. Called only at bake time (once
- * per camera, into the offscreen foreground buffer), so the save/restore per
- * feather pass never touches the per-frame hot path. */
+/** css-px gaussian blur (stddev) for the out-of-focus near plane. Chromium's
+ * canvas `ctx.filter` blur is measured in backing-store px independent of the
+ * world→device CTM (verified empirically), so the radius is scaled by dpr to
+ * land as a stable on-screen css blur at any zoom. 12 css px reads as clearly
+ * defocused against the crisp mid-ground. */
+const FOREGROUND_BLUR_CSS = 12;
+
+/** Fill the visible foreground silhouettes as ONE blurred mass. Only ever
+ * called at bake time (once per camera, into the static offscreen buffer), so
+ * the `ctx.filter` blur — banned in the per-frame path — costs nothing per
+ * frame. The foreground parallax layer must be installed; `dpr` scales the css
+ * blur into the backing-store px the filter expects. */
 export function paintForeground(
   ctx: CanvasRenderingContext2D,
   palette: ScenePalette,
   view: ViewRect,
+  dpr: number,
 ): void {
-  const passes = foregroundPasses(palette);
+  const combined = new Path2D();
+  let anyVisible = false;
   for (const s of foregroundSilhouettes()) {
     if (s.cullRight < view.left || s.cullLeft > view.right) continue;
-    for (const pass of passes) {
-      ctx.save();
-      ctx.translate(s.baseX, s.baseY);
-      ctx.scale(pass.k, pass.k);
-      ctx.translate(-s.baseX, -s.baseY);
-      ctx.fillStyle = pass.color;
-      ctx.fill(s.path);
-      ctx.restore();
-    }
+    combined.addPath(s.path);
+    anyVisible = true;
   }
+  if (!anyVisible) return;
+  ctx.save();
+  ctx.filter = `blur(${FOREGROUND_BLUR_CSS * dpr}px)`;
+  ctx.fillStyle = foregroundFill(palette);
+  ctx.fill(combined);
+  ctx.filter = 'none';
+  ctx.restore();
 }

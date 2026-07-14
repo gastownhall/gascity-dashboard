@@ -38,7 +38,11 @@ const FACE_MIN_PX = 46;
 /** below this drawn size the secondary fins (dorsal/pelvic/pectoral) are a few
  * invisible px, so the flat path skips them — the body silhouette + tail carry
  * the read. This is the 200-fish overview hot path; the caudal always draws. */
-const FLAT_FIN_MIN_PX = 26;
+const FLAT_FIN_MIN_PX = 30;
+/** below this drawn size the hull outline stroke is a sub-pixel darkening that
+ * only adds a draw call: the tiniest overview fish are body + tail fills only,
+ * the cheapest possible mark (round-6 draw-call shave for the perf sweep). */
+const FLAT_STROKE_MIN_PX = 18;
 
 // Reused across frames so back-to-front ordering allocates no arrays in the
 // draw path (one synchronous caller, no reentrancy). `zScratch[i]` is fish i's
@@ -115,7 +119,7 @@ function paintFish(
   if (richBudget && drawnPx >= RICH_MIN_PX) {
     paintRich(ctx, fish, spine, hull, fins, colors, lineWidth, drawnPx >= FACE_MIN_PX);
   } else {
-    paintFlat(ctx, spine, hull, fins, colors, lineWidth, drawnPx >= FLAT_FIN_MIN_PX);
+    paintFlat(ctx, hull, fins, colors, lineWidth, drawnPx);
   }
   if (alpha < 1) ctx.globalAlpha = 1;
 }
@@ -173,19 +177,24 @@ function paintRich(
   }
 }
 
-/** cheap path: flat two-tone body + flat translucent fins, one stroke. When
- * `withSideFins` is false (tiny overview fish) the dorsal / pelvic / pectoral
- * fins — a few invisible px — are skipped; the tail and countershaded body
- * silhouette still carry the read. */
+/** cheap path: single-tone body + tail (+ side fins and an outline only once
+ * big enough to read), sized down to the fewest draw calls per fish for the
+ * 200-fish sweep. Graduated by drawn size:
+ *   tiny  (< FLAT_STROKE_MIN_PX): caudal fill + body fill                (2 fills)
+ *   small (< FLAT_FIN_MIN_PX):    + outline stroke                       (2 + stroke)
+ *   mid   (>= FLAT_FIN_MIN_PX):   + dorsal/pelvic/pectoral fins          (full flat)
+ * The body is one flat mid-tone fill (the per-station countershade split reads
+ * only at close range — a few px on an overview fish — so it is dropped here,
+ * halving the body's path work). Rich near fish keep full countershading. */
 function paintFlat(
   ctx: CanvasRenderingContext2D,
-  spine: FishSpine,
   hull: FishHull,
   fins: FishFins,
   colors: CountershadeColors,
   lineWidth: number,
-  withSideFins: boolean,
+  drawnPx: number,
 ): void {
+  const withSideFins = drawnPx >= FLAT_FIN_MIN_PX;
   ctx.fillStyle = withAlpha(colors.finRoot, 0.6);
   traceThrough(ctx, fins.caudal);
   ctx.fill();
@@ -195,17 +204,21 @@ function paintFlat(
     traceThrough(ctx, fins.pelvic);
     ctx.fill();
   }
-  paintBodyFlat(ctx, spine, hull, colors.dorsal, colors.ventral);
+  ctx.fillStyle = colors.mid;
+  traceHull(ctx, hull);
+  ctx.fill();
   if (withSideFins) {
     ctx.fillStyle = withAlpha(colors.finLight, 0.5);
     traceThrough(ctx, fins.pectoral);
     ctx.fill();
   }
-  traceHull(ctx, hull);
-  ctx.strokeStyle = colors.outline;
-  ctx.lineWidth = lineWidth;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
+  if (drawnPx >= FLAT_STROKE_MIN_PX) {
+    traceHull(ctx, hull);
+    ctx.strokeStyle = colors.outline;
+    ctx.lineWidth = lineWidth;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
 }
 
 function membrane(
@@ -276,40 +289,6 @@ function traceHull(ctx: CanvasRenderingContext2D, hull: FishHull): void {
   ctx.moveTo(start.x, start.y);
   for (const s of segs) ctx.bezierCurveTo(s.cp1.x, s.cp1.y, s.cp2.x, s.cp2.y, s.to.x, s.to.y);
   ctx.closePath();
-}
-
-/** two-tone fill: whole hull in ventral, then the dorsal half re-filled darker,
- * split along a smoothed spine curve (cheap countershading for tiny fish) */
-function paintBodyFlat(
-  ctx: CanvasRenderingContext2D,
-  spine: FishSpine,
-  hull: FishHull,
-  dorsal: string,
-  ventral: string,
-): void {
-  ctx.fillStyle = ventral;
-  traceHull(ctx, hull);
-  ctx.fill();
-  ctx.fillStyle = dorsal;
-  const segs = hull.segments;
-  const n = spine.points.length;
-  const start = at(segs, 0).from;
-  ctx.beginPath();
-  ctx.moveTo(start.x, start.y);
-  // ring is [nose, dorsal…, tail, ventral…]: segments 0..n run nose→tail
-  for (let i = 0; i <= n; i += 1) {
-    const s = at(segs, i);
-    ctx.bezierCurveTo(s.cp1.x, s.cp1.y, s.cp2.x, s.cp2.y, s.to.x, s.to.y);
-  }
-  for (let i = n - 2; i >= 1; i -= 1) {
-    const p = at(spine.points, i);
-    const next = at(spine.points, i - 1);
-    ctx.quadraticCurveTo(p.x, p.y, (p.x + next.x) / 2, (p.y + next.y) / 2);
-  }
-  const head = at(spine.points, 0);
-  ctx.quadraticCurveTo(head.x, head.y, start.x, start.y);
-  ctx.closePath();
-  ctx.fill();
 }
 
 /** open Catmull-Rom through every point (tips stay sharp), closed at the end */
