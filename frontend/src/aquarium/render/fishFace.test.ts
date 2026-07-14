@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ScenePalette } from '../contracts';
 import { buildScenePalette } from './palette';
 import { SPECIES, attitudeForPose, fishHead, fishHull, fishSpine } from './fishGeometry';
-import { paintFace } from './fishFace';
+import { paintEyeDot, paintFace } from './fishFace';
 import { countershadeColors } from './fishShading';
 
 const TOKENS: Record<string, string> = {
@@ -102,5 +102,30 @@ describe('errored dead-eye (findings: X read as a stray scribble)', () => {
     expect(
       arcs.some((a) => near(a.x, eye.x) && near(a.y, eye.y) && Math.abs(a.r - r) < r * 0.2),
     ).toBe(true);
+  });
+});
+
+describe('cheap eye dot (below the full-face floor)', () => {
+  it('draws an iris disc at the eye plus a smaller catchlight, and no gill or mouth', () => {
+    const spine = fishSpine('role', attitudeForPose('working'), 0, 0);
+    const hull = fishHull(spine, 'role', 1);
+    const head = fishHead(spine, hull);
+    const colors = countershadeColors(PALETTE, 'normal');
+    const { ctx, segments, arcs } = recordingCtx();
+    paintEyeDot(ctx, head, colors);
+
+    // exactly the iris + its catchlight — no gill quad, no mouth line, no socket
+    expect(arcs.length).toBe(2);
+    expect(segments.length).toBe(0);
+
+    const r = head.eyeRadius;
+    const iris = arcs.find((a) => Math.abs(a.r - r) < r * 0.1);
+    expect(iris).toBeDefined();
+    expect(Math.hypot(iris!.x - head.eye.x, iris!.y - head.eye.y)).toBeLessThan(r * 0.1);
+
+    // the catchlight is markedly smaller than the iris and sits off-centre
+    const catchlight = arcs.find((a) => a.r < r * 0.6);
+    expect(catchlight).toBeDefined();
+    expect(Math.hypot(catchlight!.x - head.eye.x, catchlight!.y - head.eye.y)).toBeGreaterThan(0);
   });
 });

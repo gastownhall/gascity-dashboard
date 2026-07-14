@@ -20,7 +20,7 @@ import {
   swimPhaseFor,
 } from './fishGeometry';
 import type { FishFins } from './fishFins';
-import { paintFace } from './fishFace';
+import { paintEyeDot, paintFace } from './fishFace';
 import { depthAlpha, depthBand, depthScale, fishDepthZ } from './depth';
 import type { CountershadeColors } from './fishShading';
 import { bodyGradient, countershadeBands, finGradient, midpoint } from './fishShading';
@@ -44,8 +44,14 @@ export const RICH_FISH_BUDGET = 48;
  * a gradient is sub-pixel and buys nothing. Guarded by RICH_FISH_BUDGET, so the
  * perf sweep never richens. */
 const RICH_MIN_PX = 6;
-/** min drawn body length (css px) for eye/gill/mouth */
+/** min drawn body length (css px) for the full face — eye + gill + mouth. */
 const FACE_MIN_PX = 46;
+/** min drawn body length (css px) for a bare eye. Well below FACE_MIN_PX: a
+ * simple eye dot reads long before a gill crease and mouth do, so every fish
+ * this size or larger gets an eye even when it misses the full face (the busy
+ * live city's small pool schoolers, ~20-30px, were the eyeless ones). Above the
+ * ~10px LOD0-overview fish, so the flat 200-fish perf sweep still skips it. */
+const EYE_DOT_MIN_PX = 20;
 /** below this drawn size the secondary fins (dorsal/pelvic/pectoral) are a few
  * invisible px, so the flat path skips them — the body silhouette + tail carry
  * the read. This is the 200-fish overview hot path; the caudal always draws. */
@@ -176,10 +182,17 @@ function paintFish(
   const drawnPx = SPECIES[fish.species].length * layer.scale * dScale;
   const alpha = fish.tombstoned ? 0.4 * depthAlpha(z) : depthAlpha(z);
   if (alpha < 1) ctx.globalAlpha = alpha;
+  const wantsFace = rich && drawnPx >= FACE_MIN_PX;
   if (rich) {
-    paintRich(ctx, fish, spine, hull, fins, colors, lineWidth, drawnPx >= FACE_MIN_PX);
+    paintRich(ctx, fish, spine, hull, fins, colors, lineWidth, wantsFace);
   } else {
     paintFlat(ctx, hull, fins, colors, lineWidth, drawnPx);
+  }
+  // Fish too small for the full face but large enough to read still get a bare
+  // eye, so no visible fish is eyeless. fishHead is only computed here (never
+  // for the sub-EYE_DOT_MIN_PX overview fish), so the perf sweep pays nothing.
+  if (!wantsFace && drawnPx >= EYE_DOT_MIN_PX) {
+    paintEyeDot(ctx, fishHead(spine, hull), colors);
   }
   if (alpha < 1) ctx.globalAlpha = 1;
 }

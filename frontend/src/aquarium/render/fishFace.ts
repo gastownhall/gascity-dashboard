@@ -22,6 +22,33 @@ export function paintFace(
   paintEye(ctx, head, attitude, colors, lineWidth);
 }
 
+/** A cheap eye: a dark iris disc and a single catchlight — no socket ring,
+ * gill, mouth, or pose branching. Drawn for fish below FACE_MIN_PX (and on the
+ * flat path) so every fish large enough to read an eye has one without paying
+ * for the full face. Uses the same eye position and catchlight as paintFace's
+ * open eye, so an eye never jumps as a fish grows across the full-face floor. */
+export function paintEyeDot(
+  ctx: CanvasRenderingContext2D,
+  head: FishHead,
+  colors: CountershadeColors,
+): void {
+  const { eye, eyeRadius: r } = head;
+  ctx.fillStyle = colors.outline;
+  ctx.beginPath();
+  ctx.arc(eye.x, eye.y, r, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = colors.belly;
+  ctx.beginPath();
+  ctx.arc(
+    eye.x + head.mouthDir.x * r * 0.34 - r * 0.12,
+    eye.y + head.mouthDir.y * r * 0.34 - r * 0.3,
+    r * 0.34,
+    0,
+    TAU,
+  );
+  ctx.fill();
+}
+
 function paintGill(
   ctx: CanvasRenderingContext2D,
   head: FishHead,
