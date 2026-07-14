@@ -30,6 +30,12 @@ cd ~/gas-city-dashboard
 git pull
 npm install
 npm run build
+
+# Re-copy the unit and reload systemd's view of it. Without this, systemd keeps
+# running the OLD installed unit, so any unit-file change upstream never takes
+# effect on restart.
+cp deploy/gas-city-dashboard.service ~/.config/systemd/user/
+systemctl --user daemon-reload
 systemctl --user restart gas-city-dashboard.service
 ```
 
