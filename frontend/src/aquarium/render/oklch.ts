@@ -62,6 +62,32 @@ export function withAlpha(color: string, alpha: number): string {
   return formatOklch({ ...o, alpha: clamp01(alpha) });
 }
 
+/** Override hue and chroma, preserving lightness and alpha — retints a base
+ * pigment to a rig's identity hue while keeping the value that carries form. */
+export function withHueChroma(color: string, h: number, c: number): string {
+  const o = parseOklch(color);
+  return formatOklch({ ...o, h, c: Math.max(0, c) });
+}
+
+/**
+ * Atmospheric haze: pull lightness, chroma and alpha toward `haze` by t, but
+ * KEEP the colour's own hue. A receding fish desaturates and lightens into the
+ * water's value; it must never rotate through unrelated hues, which the naive
+ * hue lerp in mixOklch would do for a wide-gamut rig palette (e.g. a gold fish
+ * greening as it recedes). t=0 → color unchanged.
+ */
+export function hazeToward(color: string, haze: string, t: number): string {
+  const oc = parseOklch(color);
+  const oh = parseOklch(haze);
+  const k = clamp01(t);
+  return formatOklch({
+    l: lerp(oc.l, oh.l, k),
+    c: lerp(oc.c, oh.c, k),
+    h: oc.h,
+    alpha: lerp(oc.alpha, oh.alpha, k),
+  });
+}
+
 /** Linear mix a→b in OKLCH components (t=0 → a). Hues lerp directly; the
  * scene's aquatic hues all sit within one hemisphere so no wraparound. */
 export function mixOklch(a: string, b: string, t: number): string {

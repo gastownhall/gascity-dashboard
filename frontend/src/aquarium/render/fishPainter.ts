@@ -24,6 +24,7 @@ import { paintFace } from './fishFace';
 import { depthAlpha, depthBand, depthScale, fishDepthZ } from './depth';
 import type { CountershadeColors } from './fishShading';
 import { bodyGradient, countershadeBands, finGradient, midpoint } from './fishShading';
+import { rigHue } from './rigHue';
 import type { LayerTransform, ViewRect } from './layers';
 import { applyLayer, rectContains } from './layers';
 import { TAU, at, clamp, normalizeAngle, type Pt } from './mathUtil';
@@ -84,9 +85,6 @@ export function paintFishLayer(
   view: ViewRect,
   clockMs: number,
 ): void {
-  const normal = countershadeBands(palette, 'normal');
-  const dim = countershadeBands(palette, 'dim');
-  const tense = countershadeBands(palette, 'tense');
   const richBudget = fishList.length <= RICH_FISH_BUDGET;
   const n = fishList.length;
   orderScratch.length = n;
@@ -107,7 +105,11 @@ export function paintFishLayer(
     if (!rectContains(view, kin.x, kin.y)) continue;
     const z = at(zScratch, index);
     const attitude = attitudeForPose(fish.pose);
-    const bands = attitude.dimmed || fish.tombstoned ? dim : attitude.tense ? tense : normal;
+    // hue = rig identity (cached per palette+hue+variant, so this is a lookup);
+    // variant = the fish's shading attitude; band = its atmospheric depth.
+    const variant =
+      attitude.dimmed || fish.tombstoned ? 'dim' : attitude.tense ? 'tense' : 'normal';
+    const bands = countershadeBands(palette, variant, rigHue(fish.homeKey));
     paintFish(ctx, fish, kin, at(bands, depthBand(z)), layer, clockMs, richBudget, z);
   }
   applyLayer(ctx, layer);

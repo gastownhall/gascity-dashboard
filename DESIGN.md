@@ -148,10 +148,22 @@ licenses it; outside this route, nothing here applies.
 
 - **The Greyscale Test, carried by posture.** Every fish state must be
   identifiable with color stripped: pose, position in the water column, eye,
-  and fin attitude carry the state. Color remains emphasis.
+  and fin attitude carry the state. Color carries emphasis and rig identity
+  (below), never state.
 - **The One Mark Rule, adapted.** The single maroon per viewport is the
   overlay's "N need attention" ledger line. No fish, pellet, or formation is
   ever maroon.
+- **Colour as fleet identity (the licensed exception).** On /reef only, hue is
+  an identity channel, not merely emphasis: every session of a rig and its beads
+  carry the rig's hue, so project ownership reads at a glance. This is the one
+  place the system lets colour carry meaning, and it is bounded. Hue names the
+  _group_, never the _state_ — state stays in pose, position, eye, and fin, so
+  the Greyscale Test above still passes: strip colour and every state is still
+  legible; only the group label is lost. The rig palette is a curated, vivid,
+  non-maroon set (the ledger keeps maroon to itself). The four channels stay
+  orthogonal: **hue** = rig, **shade** = bead status, **size and shape** = agent
+  type, **pose** = agent state. The mayor's city stratum and unrigged agents
+  carry no project, so they swim neutral against the coloured schools.
 - **The One Voice Rule and tabular figures** for all overlay and in-scene
   text. The scene draws creatures; the type stays the system's type.
 - **`prefers-reduced-motion`.** The scene freezes to a truthful still frame:

@@ -11,7 +11,24 @@ import { DEPTH_BANDS, bandHaze } from './depth';
 import type { FishHull } from './fishGeometry';
 import type { Pt } from './mathUtil';
 import { at } from './mathUtil';
-import { adjustLC, mixOklch, withAlpha } from './oklch';
+import { adjustLC, hazeToward, withAlpha, withHueChroma } from './oklch';
+import { RIG_CHROMA } from './rigHue';
+
+/** chroma of a rig-tinted asleep/tombstone fish — identity persists but washed
+ * out, so a sleeping fish still reads as its project, faintly. */
+const DIM_RIG_CHROMA = RIG_CHROMA * 0.4;
+
+/** Retint a base pigment to a rig's identity hue (keeping its lightness), or
+ * leave it neutral when the fish carries no project (mayor city / unrigged). */
+function tintBase(base: string, rigHue: number | null, chroma: number): string {
+  return rigHue === null ? base : withHueChroma(base, rigHue, chroma);
+}
+
+/** neutral (no-rig) cache key; real rig hues are their degree value. */
+const NEUTRAL_KEY = -1;
+function hueKey(rigHue: number | null): number {
+  return rigHue ?? NEUTRAL_KEY;
+}
 
 export interface CountershadeColors {
   /** dark back */
@@ -49,7 +66,9 @@ interface ShadeSpec {
 
 type Variants = Record<ShadeVariant, CountershadeColors>;
 
-const cache = new WeakMap<ScenePalette, Variants>();
+// Cached per palette, then per rig hue (neutral = NEUTRAL_KEY): a whole reef of
+// ~6 rigs holds a handful of Variants, reused every frame with zero alloc.
+const cache = new WeakMap<ScenePalette, Map<number, Variants>>();
 
 function build(s: ShadeSpec): CountershadeColors {
   const dorsal = adjustLC(s.base, s.dorsal[0], s.dorsal[1]);
@@ -59,57 +78,74 @@ function build(s: ShadeSpec): CountershadeColors {
   return { dorsal, mid, ventral, belly, outline: s.outline, finRoot: dorsal, finLight: belly };
 }
 
+/** Build all three variants for one rig hue (null = neutral, keeps the base
+ * pigment). Hue only retints the base; the countershade deltas — what carries
+ * the lit form and the pose attitudes — are identical across rigs, so a pink
+ * fish and a teal fish read as the same species in different colours. */
+function buildVariants(palette: ScenePalette, rigHue: number | null): Variants {
+  const outline = palette.fishOutline;
+  return {
+    // dark back drops hard and gains chroma; the belly lifts far AND
+    // desaturates toward a lit cream/silver — the two ends read ~45 L apart
+    normal: build({
+      base: tintBase(palette.fishBody, rigHue, RIG_CHROMA),
+      outline,
+      dorsal: [-22, 1.2],
+      mid: [0, 1],
+      ventral: [26, 0.55],
+      belly: [37, 0.38],
+    }),
+    // pale, washed, low-contrast: unmistakably asleep, not merely dark
+    dim: build({
+      base: tintBase(palette.fishDim, rigHue, DIM_RIG_CHROMA),
+      outline: withAlpha(outline, 0.55),
+      dorsal: [-6, 0.55],
+      mid: [2, 0.5],
+      ventral: [9, 0.4],
+      belly: [15, 0.3],
+    }),
+    // held/hunched: darker overall + more saturated, outline full (awake)
+    tense: build({
+      base: tintBase(palette.fishBody, rigHue, RIG_CHROMA),
+      outline,
+      dorsal: [-24, 1.35],
+      mid: [-9, 1.2],
+      ventral: [7, 0.95],
+      belly: [16, 0.78],
+    }),
+  };
+}
+
 export function countershadeColors(
   palette: ScenePalette,
   variant: ShadeVariant,
+  rigHue: number | null = null,
 ): CountershadeColors {
-  let built = cache.get(palette);
+  let byHue = cache.get(palette);
+  if (byHue === undefined) {
+    byHue = new Map();
+    cache.set(palette, byHue);
+  }
+  const k = hueKey(rigHue);
+  let built = byHue.get(k);
   if (built === undefined) {
-    const outline = palette.fishOutline;
-    built = {
-      // dark back drops hard and gains chroma; the belly lifts far AND
-      // desaturates toward a lit cream/silver — the two ends read ~45 L apart
-      normal: build({
-        base: palette.fishBody,
-        outline,
-        dorsal: [-22, 1.2],
-        mid: [0, 1],
-        ventral: [26, 0.55],
-        belly: [37, 0.38],
-      }),
-      // pale, washed, low-contrast: unmistakably asleep, not merely dark
-      dim: build({
-        base: palette.fishDim,
-        outline: withAlpha(outline, 0.55),
-        dorsal: [-6, 0.55],
-        mid: [2, 0.5],
-        ventral: [9, 0.4],
-        belly: [15, 0.3],
-      }),
-      // held/hunched: darker overall + more saturated, outline full (awake)
-      tense: build({
-        base: palette.fishBody,
-        outline,
-        dorsal: [-24, 1.35],
-        mid: [-9, 1.2],
-        ventral: [7, 0.95],
-        belly: [16, 0.78],
-      }),
-    };
-    cache.set(palette, built);
+    built = buildVariants(palette, rigHue);
+    byHue.set(k, built);
   }
   return built[variant];
 }
 
 type BandCache = Record<ShadeVariant, readonly CountershadeColors[]>;
-const bandCache = new WeakMap<ScenePalette, BandCache>();
+const bandCache = new WeakMap<ScenePalette, Map<number, BandCache>>();
 
 /** Blend one countershade set toward the far water by `haze` (atmospheric
  * perspective): a far fish desaturates and lightens toward the haze so it reads
- * as receding, never a crisp near fish shrunk in place. */
+ * as receding, never a crisp near fish shrunk in place. Hue is preserved
+ * (hazeToward, not a full mix) so a wide-gamut rig colour recedes into the
+ * water's value without rotating through unrelated hues. */
 function hazeColors(c: CountershadeColors, hazeFar: string, haze: number): CountershadeColors {
   if (haze <= 0) return c;
-  const mix = (color: string): string => mixOklch(color, hazeFar, haze);
+  const mix = (color: string): string => hazeToward(color, hazeFar, haze);
   return {
     dorsal: mix(c.dorsal),
     mid: mix(c.mid),
@@ -123,23 +159,31 @@ function hazeColors(c: CountershadeColors, hazeFar: string, haze: number): Count
 
 /**
  * DEPTH_BANDS hazed copies of a variant, band 0 = farthest/haziest. Precomputed
- * and cached per palette so a 200-fish frame allocates zero color strings: the
- * painter picks a fish's band from its depth and reuses the shared set.
+ * and cached per (palette, rigHue) so a 200-fish frame allocates zero color
+ * strings: the painter resolves a fish's rig hue and depth band and reuses the
+ * shared set. `rigHue` null keeps the neutral pigment (mayor city / unrigged).
  */
 export function countershadeBands(
   palette: ScenePalette,
   variant: ShadeVariant,
+  rigHue: number | null = null,
 ): readonly CountershadeColors[] {
-  let cached = bandCache.get(palette);
+  let byHue = bandCache.get(palette);
+  if (byHue === undefined) {
+    byHue = new Map();
+    bandCache.set(palette, byHue);
+  }
+  const k = hueKey(rigHue);
+  let cached = byHue.get(k);
   if (cached === undefined) {
     const build = (v: ShadeVariant): readonly CountershadeColors[] => {
-      const base = countershadeColors(palette, v);
+      const base = countershadeColors(palette, v, rigHue);
       return Array.from({ length: DEPTH_BANDS }, (_unused, band) =>
         hazeColors(base, palette.hazeFar, bandHaze(band)),
       );
     };
     cached = { normal: build('normal'), dim: build('dim'), tense: build('tense') };
-    bandCache.set(palette, cached);
+    byHue.set(k, cached);
   }
   return cached[variant];
 }
