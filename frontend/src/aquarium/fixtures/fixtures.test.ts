@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ALL_POSES, CITY_KEY, PELLET_RENDER_CAP_PER_RIG, type AquariumPose } from '../contracts';
+import {
+  ALL_POSES,
+  CITY_KEY,
+  PELLET_RENDER_CAP_PER_RIG,
+  UNRIGGED_KEY,
+  type AquariumPose,
+} from '../contracts';
 import {
   buildAquariumFixture,
   buildBlindFixture,
@@ -21,16 +27,23 @@ describe("'aquarium' fixture", () => {
     }
   });
 
-  it('has 12-14 fish', () => {
-    expect(manifest.fish.length).toBeGreaterThanOrEqual(12);
-    expect(manifest.fish.length).toBeLessThanOrEqual(14);
+  it('has 32-40 fish (a real population, not a handful of solitary fish)', () => {
+    expect(manifest.fish.length).toBeGreaterThanOrEqual(32);
+    expect(manifest.fish.length).toBeLessThanOrEqual(40);
   });
 
-  it('has 3 rigs, a mayor, and one unrigged worker', () => {
+  it('most fish are working, so each rig schools a visible crew', () => {
+    const working = manifest.fish.filter((f) => f.pose === 'working');
+    expect(working.length / manifest.fish.length).toBeGreaterThan(0.6);
+  });
+
+  it('has 3 rigs, a mayor, and an unrigged shoal', () => {
     expect(manifest.rigs.length).toBe(3);
     const mayor = inputs.agents.find((a) => a.name === 'mayor');
     expect(mayor).toBeDefined();
     expect(mayor?.rig).toBeUndefined();
+    const unrigged = manifest.fish.filter((f) => f.rigKey === UNRIGGED_KEY);
+    expect(unrigged.length).toBeGreaterThan(1);
   });
 
   it('has one rig whose open bead total exceeds the render cap', () => {

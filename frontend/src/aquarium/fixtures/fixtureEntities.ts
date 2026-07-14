@@ -100,7 +100,7 @@ export function buildFishAgent(spec: FishAgentSpec): BuiltFishAgent {
   };
 
   const session: SessionResponse = {
-    id: sessionIdFor(sessionName),
+    id: fishSessionId(sessionName),
     session_name: sessionName,
     title: sessionName,
     template: 'pool-worker',
@@ -132,8 +132,21 @@ function buildPendingSignal(spec: FishAgentSpec): AgentPendingSignal | undefined
     : { agentName: spec.name };
 }
 
-function sessionIdFor(agentName: string): string {
-  return `gc-fx-${agentName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+/**
+ * Deterministic supervisor session id for a fixture fish, in the bare
+ * `<prefix>-wisp-<slug>` bead-id shape (session-handle.ts's
+ * TRAILING_SESSION_BEAD_ID_RE, the `wisp-` tier marker) — a hyphen-free
+ * slug behind that tier round-trips through parseAssignee() back to this
+ * exact id. Exported so a fixture scene can stamp a bead's `assignee`
+ * with the same string and have buildPellets()/buildFish() actually
+ * resolve which fish holds/works that bead (a bare display name like
+ * `alpha/scout` does NOT round-trip: it embeds no session-id-shaped
+ * trailing token, so a held pellet built that way silently loses its
+ * holder and drifts at the formation crest instead of the fish's mouth).
+ */
+export function fishSessionId(agentName: string): string {
+  const slug = agentName.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  return `gc-wisp-${slug}`;
 }
 
 export interface FixtureBeadSpec {

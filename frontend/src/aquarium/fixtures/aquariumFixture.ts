@@ -1,12 +1,20 @@
-// The 'aquarium' fixture: a small, hand-authored scene covering every pose
-// at least once, a truthful pellet spread across three rigs (one of which
-// overflows the per-rig render cap), a mayor, and one unrigged worker.
-// Ground truth for the honesty auditor lives in the returned manifest.
+// The 'aquarium' fixture: the hero LOD0 scene the illusion judge scores.
+// Three named rigs each carry a real working SCHOOL (most fish are
+// 'working', schooling in the pellet band) plus a mayor and a small
+// unrigged shoal — every pose still covered at least once. Ground truth
+// for the honesty auditor lives in the returned manifest.
 //
 // FishEntity.name is `session.alias ?? session.session_name`
 // (derive/fish.ts) — every fish spec below sets `alias` to the display name
 // the manifest predicts; `name` (AgentResponse.name) is a separate,
 // realistic-looking identity used only for the SSOT needs-you join.
+//
+// A working fish's held pellet must actually resolve to that fish
+// (buildPellets in derive/pellets.ts resolves a bead's holder by parsing
+// bead.assignee back to a supervisor session id) — so every crew bead's
+// `assignee` is built with fixtureEntities.fishSessionId() over the exact
+// same agent name the fish spec carries, not a bare display name (which
+// does not round-trip through parseAssignee; see fishSessionId's doc).
 
 import type { AgentResponse, Bead, SessionResponse } from 'gas-city-dashboard-shared/gc-supervisor';
 import type { AgentPendingSignal } from 'gas-city-dashboard-shared';
@@ -18,35 +26,30 @@ import {
   UNRIGGED_KEY,
   type FixtureManifest,
 } from '../contracts';
-import { buildFixtureBead, buildFishAgent, type FishAgentSpec } from './fixtureEntities';
+import {
+  buildFixtureBead,
+  buildFishAgent,
+  fishSessionId,
+  type FishAgentSpec,
+} from './fixtureEntities';
 
 const RIG_ALPHA = 'reef-alpha';
 const RIG_BETA = 'reef-beta';
 const RIG_GAMMA = 'reef-gamma';
 
-// One spec per fixture fish, covering all 7 poses across three rigs plus the
-// mayor and one unrigged worker. `pose`/`rigKey`/`taskBeadId` drive manifest
+// One spec per fixture fish. `pose`/`rigKey`/`taskBeadId` drive manifest
 // construction below; they are not part of the raw wire payload.
 interface AquariumFishSpec extends FishAgentSpec {
   pose: 'working' | 'idle' | 'asleep' | 'awaiting-input' | 'stalled' | 'rate-limited' | 'errored';
   rigKey: string;
 }
 
-const FISH_SPECS: readonly AquariumFishSpec[] = [
-  {
-    name: 'alpha/scout',
-    alias: 'scout',
-    agentKind: 'pool',
-    rig: RIG_ALPHA,
-    pose: 'working',
-    rigKey: RIG_ALPHA,
-    state: 'active',
-    running: true,
-    activity: 'in-turn',
-    contextPct: 62,
-    activeBead: 'aq-alpha-1',
-    lastActiveMinutesAgo: 1,
-  },
+// ---------------------------------------------------------------------------
+// Non-working named fish: one idle/asleep/distress personality per rig, the
+// mayor patrolling open water, and one idle unrigged wanderer. These carry
+// no bead — a fish that isn't 'working' never holds a task pellet.
+
+const NAMED_FISH_SPECS: readonly AquariumFishSpec[] = [
   {
     name: 'alpha/mason',
     alias: 'mason',
@@ -120,19 +123,6 @@ const FISH_SPECS: readonly AquariumFishSpec[] = [
     lastActiveMinutesAgo: 45,
   },
   {
-    name: 'beta/finch',
-    alias: 'finch',
-    rig: RIG_BETA,
-    pose: 'working',
-    rigKey: RIG_BETA,
-    state: 'active',
-    running: true,
-    activity: 'in-turn',
-    contextPct: 33,
-    activeBead: 'aq-beta-1',
-    lastActiveMinutesAgo: 1,
-  },
-  {
     name: 'gamma/loom',
     alias: 'loom',
     agentKind: 'pool',
@@ -159,6 +149,7 @@ const FISH_SPECS: readonly AquariumFishSpec[] = [
     // No `rig` — the mayor is cross-rig orchestration, open water. Species
     // detection (derive/species.ts) matches on the name itself, so no
     // separate `alias` is needed: session_name === 'mayor' already wins.
+    // Working but patrols rather than holding a task bead.
     name: 'mayor',
     pose: 'working',
     rigKey: CITY_KEY,
@@ -182,58 +173,329 @@ const FISH_SPECS: readonly AquariumFishSpec[] = [
   },
 ];
 
-const ALPHA_BEADS: readonly Bead[] = [
+// ---------------------------------------------------------------------------
+// Working schools: most fish in the tank are 'working' (activity: 'in-turn'),
+// each carrying its own in_progress bead — this is what fills the mid-water
+// with a real population instead of two or three solitary fish.
+
+interface CrewMember {
+  /** display alias; the SSOT identity is `${rigPrefix}/${name}`. */
+  name: string;
+  /** undefined => indeterminate (slim) belly — truthful, not a fake default. */
+  bellyPct?: number;
+  beadId: string;
+  beadTitle: string;
+  beadAgedMinutes: number;
+}
+
+interface CrewScene {
+  fishSpecs: AquariumFishSpec[];
+  beads: Bead[];
+}
+
+/** Builds one working fish + one matching in_progress bead per crew member.
+ * `rigField` is the raw `rig` wire value (undefined for the unrigged shoal,
+ * so homeKeyFor's residual-bucket rule applies instead of a resolved rig). */
+function buildWorkingCrew(
+  rigPrefix: string,
+  rigKey: string,
+  rigField: string | undefined,
+  members: readonly CrewMember[],
+): CrewScene {
+  const fishSpecs = members.map((m, i): AquariumFishSpec => {
+    const agentName = `${rigPrefix}/${m.name}`;
+    return {
+      name: agentName,
+      alias: m.name,
+      agentKind: 'pool',
+      ...(rigField !== undefined ? { rig: rigField } : {}),
+      pose: 'working',
+      rigKey,
+      state: 'active',
+      running: true,
+      activity: 'in-turn',
+      activeBead: m.beadId,
+      lastActiveMinutesAgo: 1 + (i % 5),
+      ...(m.bellyPct !== undefined ? { contextPct: m.bellyPct } : {}),
+    };
+  });
+  const beads = members.map((m) =>
+    buildFixtureBead({
+      id: m.beadId,
+      title: m.beadTitle,
+      status: 'in_progress',
+      assignee: fishSessionId(`${rigPrefix}/${m.name}`),
+      agedMinutes: m.beadAgedMinutes,
+    }),
+  );
+  return { fishSpecs, beads };
+}
+
+const ALPHA_CREW: readonly CrewMember[] = [
+  {
+    name: 'scout',
+    bellyPct: 62,
+    beadId: 'aq-alpha-scout',
+    beadTitle: 'Fix checkout retry backoff',
+    beadAgedMinutes: 90,
+  },
+  {
+    name: 'wisp',
+    bellyPct: 58,
+    beadId: 'aq-alpha-wisp',
+    beadTitle: 'Patch retry jitter',
+    beadAgedMinutes: 40,
+  },
+  {
+    name: 'nudge',
+    beadId: 'aq-alpha-nudge',
+    beadTitle: 'Wire idempotency key header',
+    beadAgedMinutes: 25,
+  },
+  {
+    name: 'ferry',
+    bellyPct: 71,
+    beadId: 'aq-alpha-ferry',
+    beadTitle: 'Backfill cart abandonment metric',
+    beadAgedMinutes: 55,
+  },
+  {
+    name: 'quill',
+    bellyPct: 44,
+    beadId: 'aq-alpha-quill',
+    beadTitle: 'Instrument checkout funnel',
+    beadAgedMinutes: 70,
+  },
+  {
+    name: 'basin',
+    beadId: 'aq-alpha-basin',
+    beadTitle: 'Normalize address validation',
+    beadAgedMinutes: 33,
+  },
+  {
+    name: 'coho',
+    bellyPct: 81,
+    beadId: 'aq-alpha-coho',
+    beadTitle: 'Cache warm cart totals',
+    beadAgedMinutes: 18,
+  },
+  {
+    name: 'ember',
+    bellyPct: 37,
+    beadId: 'aq-alpha-ember',
+    beadTitle: 'Dedupe webhook retries',
+    beadAgedMinutes: 62,
+  },
+];
+
+const BETA_CREW: readonly CrewMember[] = [
+  {
+    name: 'finch',
+    bellyPct: 33,
+    beadId: 'aq-beta-finch',
+    beadTitle: 'Write regression suite for billing',
+    beadAgedMinutes: 60,
+  },
+  {
+    name: 'delta',
+    bellyPct: 69,
+    beadId: 'aq-beta-delta',
+    beadTitle: 'Reconcile invoice totals',
+    beadAgedMinutes: 35,
+  },
+  {
+    name: 'skiff',
+    beadId: 'aq-beta-skiff',
+    beadTitle: 'Patch dunning email template',
+    beadAgedMinutes: 50,
+  },
+  {
+    name: 'raven',
+    bellyPct: 52,
+    beadId: 'aq-beta-raven',
+    beadTitle: 'Audit refund latency',
+    beadAgedMinutes: 44,
+  },
+  {
+    name: 'pike',
+    bellyPct: 90,
+    beadId: 'aq-beta-pike',
+    beadTitle: 'Spike usage-based tier preview',
+    beadAgedMinutes: 28,
+  },
+  {
+    name: 'shoal',
+    beadId: 'aq-beta-shoal',
+    beadTitle: 'Rewrite proration edge cases',
+    beadAgedMinutes: 66,
+  },
+  {
+    name: 'cinder',
+    bellyPct: 47,
+    beadId: 'aq-beta-cinder',
+    beadTitle: 'Backfill dunning metrics',
+    beadAgedMinutes: 52,
+  },
+];
+
+const GAMMA_CREW: readonly CrewMember[] = [
+  {
+    name: 'drift',
+    bellyPct: 63,
+    beadId: 'aq-gamma-drift',
+    beadTitle: 'Triage inbound webhook errors',
+    beadAgedMinutes: 45,
+  },
+  {
+    name: 'anchor',
+    beadId: 'aq-gamma-anchor',
+    beadTitle: 'Rebalance shard hot spot',
+    beadAgedMinutes: 55,
+  },
+  {
+    name: 'moth',
+    bellyPct: 39,
+    beadId: 'aq-gamma-moth',
+    beadTitle: 'Patch retry storm guard',
+    beadAgedMinutes: 20,
+  },
+  {
+    name: 'reel',
+    bellyPct: 77,
+    beadId: 'aq-gamma-reel',
+    beadTitle: 'Rotate expired API keys',
+    beadAgedMinutes: 65,
+  },
+  {
+    name: 'tallow',
+    bellyPct: 55,
+    beadId: 'aq-gamma-tallow',
+    beadTitle: 'Compact event log segment',
+    beadAgedMinutes: 38,
+  },
+];
+
+const UNRIGGED_CREW: readonly CrewMember[] = [
+  {
+    name: 'sable',
+    bellyPct: 41,
+    beadId: 'aq-unrigged-sable',
+    beadTitle: 'Patch flaky nightly job',
+    beadAgedMinutes: 48,
+  },
+  {
+    name: 'quince',
+    beadId: 'aq-unrigged-quince',
+    beadTitle: 'Rotate log retention policy',
+    beadAgedMinutes: 26,
+  },
+  {
+    name: 'birch',
+    bellyPct: 68,
+    beadId: 'aq-unrigged-birch',
+    beadTitle: 'Audit orphaned worktrees',
+    beadAgedMinutes: 58,
+  },
+  {
+    name: 'otter',
+    bellyPct: 30,
+    beadId: 'aq-unrigged-otter',
+    beadTitle: 'Sweep stale feature flags',
+    beadAgedMinutes: 33,
+  },
+];
+
+const ALPHA_SCENE = buildWorkingCrew('alpha', RIG_ALPHA, RIG_ALPHA, ALPHA_CREW);
+const BETA_SCENE = buildWorkingCrew('beta', RIG_BETA, RIG_BETA, BETA_CREW);
+const GAMMA_SCENE = buildWorkingCrew('gamma', RIG_GAMMA, RIG_GAMMA, GAMMA_CREW);
+const UNRIGGED_SCENE = buildWorkingCrew('stray', UNRIGGED_KEY, undefined, UNRIGGED_CREW);
+
+const FISH_SPECS: readonly AquariumFishSpec[] = [
+  ...NAMED_FISH_SPECS,
+  ...ALPHA_SCENE.fishSpecs,
+  ...BETA_SCENE.fishSpecs,
+  ...GAMMA_SCENE.fishSpecs,
+  ...UNRIGGED_SCENE.fishSpecs,
+];
+
+// ---------------------------------------------------------------------------
+// Backlog beads: open (drifting) and blocked (sunken) queue depth on top of
+// each rig's held pellets, for a believable spread. reef-gamma's backlog
+// deliberately pushes its total past PELLET_RENDER_CAP_PER_RIG so the "+N"
+// overflow label renders for that rig.
+
+const ALPHA_BACKLOG: readonly Bead[] = [
   buildFixtureBead({
-    id: 'aq-alpha-1',
-    title: 'Fix checkout retry backoff',
-    status: 'in_progress',
-    assignee: 'alpha/scout',
-    agedMinutes: 90,
-  }),
-  buildFixtureBead({
-    id: 'aq-alpha-2',
+    id: 'aq-alpha-b1',
     title: 'Audit cart telemetry',
     status: 'open',
     agedMinutes: 200,
   }),
   buildFixtureBead({
-    id: 'aq-alpha-3',
+    id: 'aq-alpha-b2',
     title: 'Spike: idempotent submit',
     status: 'open',
     agedMinutes: 340,
   }),
   buildFixtureBead({
-    id: 'aq-alpha-4',
+    id: 'aq-alpha-b3',
     title: 'Waiting on payments API key',
     status: 'blocked',
     agedMinutes: 500,
   }),
+  buildFixtureBead({
+    id: 'aq-alpha-b4',
+    title: 'Draft checkout SLO doc',
+    status: 'open',
+    agedMinutes: 220,
+  }),
 ];
 
-const BETA_BEADS: readonly Bead[] = [
+const BETA_BACKLOG: readonly Bead[] = [
   buildFixtureBead({
-    id: 'aq-beta-1',
-    title: 'Write regression suite for billing',
-    status: 'in_progress',
-    assignee: 'beta/finch',
-    agedMinutes: 60,
-  }),
-  buildFixtureBead({
-    id: 'aq-beta-2',
+    id: 'aq-beta-b1',
     title: 'Draft billing runbook',
     status: 'open',
     agedMinutes: 400,
+  }),
+  buildFixtureBead({
+    id: 'aq-beta-b2',
+    title: 'Waiting on Stripe webhook access',
+    status: 'blocked',
+    agedMinutes: 300,
+  }),
+  buildFixtureBead({
+    id: 'aq-beta-b3',
+    title: 'Audit chargeback trend',
+    status: 'open',
+    agedMinutes: 140,
+  }),
+];
+
+const UNRIGGED_BACKLOG: readonly Bead[] = [
+  buildFixtureBead({
+    id: 'aq-unrigged-b1',
+    title: 'Draft worktree hygiene doc',
+    status: 'open',
+    agedMinutes: 150,
+  }),
+  buildFixtureBead({
+    id: 'aq-unrigged-b2',
+    title: 'Survey dead cron jobs',
+    status: 'open',
+    agedMinutes: 210,
   }),
 ];
 
 /** reef-gamma deliberately exceeds PELLET_RENDER_CAP_PER_RIG so one rig
  *  exercises the "+N" overflow label. */
-const GAMMA_OVERFLOW_COUNT = PELLET_RENDER_CAP_PER_RIG + 5;
+const GAMMA_OVERFLOW_MARGIN = 6;
+const GAMMA_BACKLOG_COUNT = PELLET_RENDER_CAP_PER_RIG - GAMMA_CREW.length + GAMMA_OVERFLOW_MARGIN;
 
-function buildGammaBeads(): readonly Bead[] {
-  return Array.from({ length: GAMMA_OVERFLOW_COUNT }, (_, i) => {
+function buildGammaBacklog(): readonly Bead[] {
+  return Array.from({ length: GAMMA_BACKLOG_COUNT }, (_, i) => {
     const n = i + 1;
-    const id = `aq-gamma-${String(n).padStart(2, '0')}`;
+    const id = `aq-gamma-b${String(n).padStart(2, '0')}`;
     return buildFixtureBead({
       id,
       title: `Backlog item ${n}`,
@@ -242,6 +504,11 @@ function buildGammaBeads(): readonly Bead[] {
     });
   });
 }
+
+const ALPHA_BEADS: readonly Bead[] = [...ALPHA_SCENE.beads, ...ALPHA_BACKLOG];
+const BETA_BEADS: readonly Bead[] = [...BETA_SCENE.beads, ...BETA_BACKLOG];
+const GAMMA_BEADS: readonly Bead[] = [...GAMMA_SCENE.beads, ...buildGammaBacklog()];
+const UNRIGGED_BEADS: readonly Bead[] = [...UNRIGGED_SCENE.beads, ...UNRIGGED_BACKLOG];
 
 export function buildAquariumFixture(): { inputs: DeriveInputs; manifest: FixtureManifest } {
   const agents: AgentResponse[] = [];
@@ -255,12 +522,12 @@ export function buildAquariumFixture(): { inputs: DeriveInputs; manifest: Fixtur
     if (built.pending !== undefined) pendingSignals.push(built.pending);
   }
 
-  const gammaBeads = buildGammaBeads();
-  const allBeads = [...ALPHA_BEADS, ...BETA_BEADS, ...gammaBeads];
+  const allBeads = [...ALPHA_BEADS, ...BETA_BEADS, ...GAMMA_BEADS, ...UNRIGGED_BEADS];
   const beadsByRig: DeriveInputs['beadsByRig'] = {
     [RIG_ALPHA]: { items: [...ALPHA_BEADS], total: ALPHA_BEADS.length },
     [RIG_BETA]: { items: [...BETA_BEADS], total: BETA_BEADS.length },
-    [RIG_GAMMA]: { items: [...gammaBeads], total: gammaBeads.length },
+    [RIG_GAMMA]: { items: [...GAMMA_BEADS], total: GAMMA_BEADS.length },
+    [UNRIGGED_KEY]: { items: [...UNRIGGED_BEADS], total: UNRIGGED_BEADS.length },
   };
 
   const inputs: DeriveInputs = {
@@ -280,7 +547,7 @@ export function buildAquariumFixture(): { inputs: DeriveInputs; manifest: Fixtur
     rigs: [
       { key: RIG_ALPHA, openBeadTotal: ALPHA_BEADS.length },
       { key: RIG_BETA, openBeadTotal: BETA_BEADS.length },
-      { key: RIG_GAMMA, openBeadTotal: gammaBeads.length },
+      { key: RIG_GAMMA, openBeadTotal: GAMMA_BEADS.length },
     ],
     fish: FISH_SPECS.map((spec) => ({
       name: spec.alias ?? spec.name,

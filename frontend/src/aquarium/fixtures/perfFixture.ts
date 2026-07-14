@@ -37,8 +37,21 @@ const DISTRESS_POSES: ReadonlySet<AquariumPose> = new Set([
   'errored',
 ]);
 
+// A working-biased pose cycle rather than an even round-robin: the camera
+// sweep should stress the realistic worst case (large working schools doing
+// boid/shoal steering), not an evenly-split roster no live fleet resembles.
+// Every non-working pose still gets its own slot each cycle (full 7-pose
+// coverage, unaffected by future ALL_POSES additions), just outnumbered by
+// 'working' the way a healthy fleet's rigs actually school.
+const WORKING_FILLER_PER_POSE = 3;
+const POSE_CYCLE: readonly AquariumPose[] = ALL_POSES.flatMap((pose) =>
+  pose === 'working'
+    ? [pose]
+    : [...Array<AquariumPose>(WORKING_FILLER_PER_POSE).fill('working'), pose],
+);
+
 function poseAt(index: number): AquariumPose {
-  const pose = ALL_POSES[index % ALL_POSES.length];
+  const pose = POSE_CYCLE[index % POSE_CYCLE.length];
   if (pose === undefined) throw new Error(`perf fixture: pose index ${index} out of range`);
   return pose;
 }
