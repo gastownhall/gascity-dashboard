@@ -91,6 +91,36 @@ export function getStaticCache(main: HTMLCanvasElement): StaticLayerCache {
   return created;
 }
 
+/** Whether two formation sets bake to the SAME silhouette. Compared by the
+ * fields the bake actually draws — key, seed, radius, anchor — NOT by array
+ * identity and NOT by openBeadTotal (a per-frame text label, never baked). The
+ * live derive rebuilds the formations array on every snapshot refresh, so a
+ * reference check re-baked on every SSE tick and made the baked kelp/shafts jump
+ * from one frozen sway to another; a content check re-bakes only on a real
+ * geography change (a rig added/removed, or a crew-size radius shift). */
+export function formationsSilhouetteEqual(
+  a: readonly RigFormation[],
+  b: readonly RigFormation[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i];
+    const y = b[i];
+    if (x === undefined || y === undefined) return false;
+    if (
+      x.key !== y.key ||
+      x.seed !== y.seed ||
+      x.radius !== y.radius ||
+      x.anchorX !== y.anchorX ||
+      x.anchorY !== y.anchorY
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Structural invalidation decision (see the INVALIDATION RULE above). Zoom is
  * handled separately by shouldRebakeForZoom so a continuous zoom can scale the
  * existing bake instead of re-baking every frame. */
@@ -107,7 +137,7 @@ export function needsRebake(
   if (key.cssWidth !== viewport.cssWidth || key.cssHeight !== viewport.cssHeight) return true;
   if (key.dpr !== viewport.dpr) return true;
   if (key.palette !== palette) return true;
-  if (key.formations !== formations) return true;
+  if (!formationsSilhouetteEqual(key.formations, formations)) return true;
   if (key.reducedMotion !== reducedMotion) return true;
   const panX = (camera.x - key.camX) * camera.zoom;
   const panY = (camera.y - key.camY) * camera.zoom;

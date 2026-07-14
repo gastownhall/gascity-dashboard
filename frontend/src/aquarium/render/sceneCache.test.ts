@@ -85,7 +85,7 @@ describe('needsRebake (structural invalidation rule)', () => {
     expect(needsRebake(key, beyond, VIEWPORT, PALETTE, FORMATIONS, false, MARGIN)).toBe(true);
   });
 
-  it('rebakes on viewport, dpr, palette, formation-set or reduced-motion change', () => {
+  it('rebakes on viewport, dpr, palette or reduced-motion change', () => {
     const key = keyAt(CAM);
     expect(
       needsRebake(key, CAM, { ...VIEWPORT, cssWidth: 1441 }, PALETTE, FORMATIONS, false, MARGIN),
@@ -95,8 +95,27 @@ describe('needsRebake (structural invalidation rule)', () => {
     );
     const otherPalette = buildScenePalette('dark', TOKENS, 'serif');
     expect(needsRebake(key, CAM, VIEWPORT, otherPalette, FORMATIONS, false, MARGIN)).toBe(true);
-    expect(needsRebake(key, CAM, VIEWPORT, PALETTE, [...FORMATIONS], false, MARGIN)).toBe(true);
     expect(needsRebake(key, CAM, VIEWPORT, PALETTE, FORMATIONS, true, MARGIN)).toBe(true);
+  });
+
+  it('keys the formation re-bake on silhouette content, not array identity or bead count', () => {
+    const key = keyAt(CAM);
+    // a fresh array with identical silhouette content must NOT re-bake — the live
+    // derive rebuilds formations every snapshot refresh, and reference-checking it
+    // jittered the baked kelp/shafts on every SSE tick
+    expect(needsRebake(key, CAM, VIEWPORT, PALETTE, [...FORMATIONS], false, MARGIN)).toBe(false);
+    // a pure open-bead-count bump is a text label, never baked → no re-bake
+    const beadBumped = [{ ...FORMATIONS[0]!, openBeadTotal: 999 }];
+    expect(needsRebake(key, CAM, VIEWPORT, PALETTE, beadBumped, false, MARGIN)).toBe(false);
+    // a real geography change DOES re-bake: a new rig...
+    const grown = [
+      ...FORMATIONS,
+      { key: 'reef-b', anchorX: 2600, anchorY: 1850, radius: 150, seed: 9, openBeadTotal: 0 },
+    ];
+    expect(needsRebake(key, CAM, VIEWPORT, PALETTE, grown, false, MARGIN)).toBe(true);
+    // ...or a crew-size radius shift
+    const bigger = [{ ...FORMATIONS[0]!, radius: 300 }];
+    expect(needsRebake(key, CAM, VIEWPORT, PALETTE, bigger, false, MARGIN)).toBe(true);
   });
 });
 
