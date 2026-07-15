@@ -16,14 +16,20 @@ import { at } from './mathUtil';
 /** maroon ledger hue (OKLCH degrees); reserved for the One Mark, never a fish */
 export const MAROON_HUE = 25;
 
-/** curated vivid reef-fish hues (OKLCH degrees), evenly spread across the
- * non-maroon arc [100, 338] so a busy city's many rigs collide on a shared hue
- * far less often (11 hues vs the old 6; ~21 live rigs). Ordered so ADJACENT
- * array indices are ~120° apart in hue — if the key hash lands two rigs on
- * neighbouring indices, their colours still read as clearly different. Every
- * hue sits well clear of the maroon ledger band (see the rigHue.test greyscale
- * guard) and of the neutral gold the unrigged/city strata carry. */
-export const RIG_HUES: readonly number[] = [100, 243, 124, 267, 148, 290, 172, 314, 195, 338, 219];
+/** curated vivid reef-fish hues (OKLCH degrees), spread as densely as
+ * perceptual distinctness allows across the non-maroon arc [100, 338]: 14 hues
+ * at an even ~18° step, the most that stay mutually ≥18° apart in that span, so
+ * a busy city's many rigs collide on a shared hue far less often (14 vs the old
+ * 11; ~21 live rigs). Assignment stays a pure hash of the key (a rig keeps its
+ * colour across sessions), so this cannot make every rig unique — 21 rigs still
+ * exceed 14 distinct hues; the legend/roster and per-formation label carry the
+ * exact rig. The array is reordered by a stride so ADJACENT indices are ~90°
+ * apart: if the key hash lands two rigs on neighbouring indices their colours
+ * still read clearly different. Every hue clears the maroon ledger band (see the
+ * rigHue.test greyscale guard) and the neutral gold the unrigged/city carry. */
+export const RIG_HUES: readonly number[] = [
+  100, 192, 283, 118, 210, 301, 137, 228, 320, 155, 246, 338, 173, 265,
+];
 
 /** flank chroma of a rig-coloured fish/pellet — vivid, tropical. The
  * countershade and status-shade maths scale this down per station. */

@@ -42,7 +42,7 @@ describe('rigHue', () => {
   it('offers a wide palette of mutually distinct hues (fewer rig collisions)', () => {
     // enough hues that a ~20-rig city rarely doubles up, and no two are so close
     // they read as the same colour.
-    expect(RIG_HUES.length).toBeGreaterThanOrEqual(10);
+    expect(RIG_HUES.length).toBeGreaterThanOrEqual(14);
     for (let i = 0; i < RIG_HUES.length; i += 1) {
       for (let j = i + 1; j < RIG_HUES.length; j += 1) {
         const a = RIG_HUES[i]!;
