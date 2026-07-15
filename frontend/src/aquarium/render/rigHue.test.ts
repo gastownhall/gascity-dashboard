@@ -39,6 +39,25 @@ describe('rigHue', () => {
     }
   });
 
+  it('offers a wide palette of mutually distinct hues (fewer rig collisions)', () => {
+    // enough hues that a ~20-rig city rarely doubles up, and no two are so close
+    // they read as the same colour.
+    expect(RIG_HUES.length).toBeGreaterThanOrEqual(10);
+    for (let i = 0; i < RIG_HUES.length; i += 1) {
+      for (let j = i + 1; j < RIG_HUES.length; j += 1) {
+        const a = RIG_HUES[i]!;
+        const b = RIG_HUES[j]!;
+        expect(hueDistance(a, b), `hues ${a} vs ${b}`).toBeGreaterThanOrEqual(18);
+      }
+    }
+  });
+
+  it('keeps adjacent array indices far apart in hue (hash neighbours read distinct)', () => {
+    for (let i = 1; i < RIG_HUES.length; i += 1) {
+      expect(hueDistance(RIG_HUES[i]!, RIG_HUES[i - 1]!)).toBeGreaterThanOrEqual(60);
+    }
+  });
+
   it('distinguishes at least several rigs (colour actually separates projects)', () => {
     const keys = ['reef-alpha', 'reef-beta', 'reef-gamma', 'harbor', 'delta', 'mesa'];
     const distinct = new Set(keys.map((k) => rigHue(k)));
