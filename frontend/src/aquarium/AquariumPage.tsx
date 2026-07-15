@@ -16,7 +16,10 @@ import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import type { FixtureKind, ScenePalette, Viewport, WorldSnapshot } from './contracts';
 import { deriveWorldSnapshot, type DeriveMemory } from './derive/deriveWorld';
 import { buildScenePalette } from './render/palette';
+import { pelletColors } from './render/pellets';
+import { AquariumLegend, type BeadStatusColors } from './page/AquariumLegend';
 import { AquariumOverlay } from './page/AquariumOverlay';
+import { buildRigLegend } from './page/rigLegend';
 import { EntityCard } from './page/EntityCard';
 import { resolveFixtureKindFromSearch } from './page/fixtureMode';
 import { hitTestScene, type HitResult } from './page/hitTest';
@@ -83,6 +86,13 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
     memoryRef.current = result.memory;
     setSnapshot(result.snapshot);
   }, [inputs]);
+
+  // The reef key: which colour is which rig, and what the three bead shades mean.
+  const rigLegend = useMemo(() => buildRigLegend(snapshot?.formations ?? []), [snapshot]);
+  const statusColors: BeadStatusColors = useMemo(() => {
+    const neutral = pelletColors(palette, null);
+    return { open: neutral.tones[0], inProgress: neutral.held[0], blocked: neutral.sunken[0] };
+  }, [palette]);
 
   // requestPaintRef breaks the circular dependency between the camera hook
   // (which needs to trigger a repaint on gesture) and the render-loop hook
@@ -170,6 +180,7 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
         onZoomOut={camera.zoomOut}
         onReset={camera.resetCamera}
       />
+      <AquariumLegend legend={rigLegend} statusColors={statusColors} />
       {selected === null && hover !== null && (
         <HoverTooltip hit={hover.hit} screenX={hover.screenX} screenY={hover.screenY} />
       )}
