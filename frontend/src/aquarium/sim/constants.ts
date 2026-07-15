@@ -110,3 +110,20 @@ export const WORKING_BAND_GUARD_WU = Math.min(
 /** Soft-repel margin: a fish this close to the world edge is nudged back in,
  * on top of the hard clamp. */
 export const WALL_MARGIN_WU = 60;
+
+// ---------------------------------------------------------------------------
+// Open-bead pellets encode AGE as drift height: fresh food floats high in the
+// column, stale food sinks toward — but stays above — the seabed, so a glance
+// at the vertical spread reads how stale the backlog is. Bounded above the
+// formation crest so open food never blurs with the blocked beads settled ON
+// the seabed. A newly-created bead falls in from the surface (feeding drop-in).
+/** freshest open bead drifts here (high in the column). */
+export const PELLET_FRESH_Y = WORLD.waterlineY + Math.round(COLUMN_SPAN * 0.28);
+/** stalest open bead sinks to here — low, but clear of the seabed. */
+export const PELLET_STALE_Y = WORLD.waterlineY + Math.round(COLUMN_SPAN * 0.72);
+/** per-bead vertical jitter so same-age beads never form a flat line. */
+export const PELLET_AGE_Y_JITTER_WU = 40;
+/** a new bead enters at the surface (food dropped into the tank). */
+export const PELLET_DROP_START_Y = WORLD.waterlineY;
+/** exponential fall time constant for the drop-in — frame-rate independent. */
+export const PELLET_DROP_FOLLOW_TC_S = 0.18;

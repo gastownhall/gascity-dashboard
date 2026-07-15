@@ -17,6 +17,11 @@ export interface BuildPelletsInputs {
   beadsByRig: Readonly<Record<string, { items: readonly Bead[]; total: number }>>;
   /** fish id -> its session id, for resolving a held pellet's holder. */
   sessionIdsByFishId: ReadonlyMap<string, string>;
+  /** wall-clock for bead-age derivation (injected, never Date.now() in derive). */
+  nowMs: number;
+  /** bead ids present on the previous derive — a bead absent here is newly
+   *  arrived and drops in from the surface. Empty on first load (no drop storm). */
+  prevBeadIds: ReadonlySet<string>;
 }
 
 /** Where a live (non-eaten) pellet lives, for the next call's diff-eater. Carries
@@ -44,14 +49,28 @@ const LABEL_HEAD_LEN = 8;
 const LABEL_TAIL_LEN = 4;
 const LABEL_MAX_LEN = LABEL_HEAD_LEN + LABEL_TAIL_LEN;
 
+/** A bead this old (ms) or older sits at the stale floor of the drift column;
+ * a sqrt ramp spreads the many recent beads across the upper column rather than
+ * bunching them all near the top. */
+const AGE_REF_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function buildPellets(inputs: BuildPelletsInputs): BuildPelletsResult {
   const sessionIdToFishId = invert(inputs.sessionIdsByFishId);
+  const hadPrev = inputs.prevBeadIds.size > 0;
   const pellets: PelletEntity[] = [];
   const pelletOverflow: Record<string, number> = {};
   const beadHolders: Record<string, BeadHolder> = {};
 
   for (const [rigKey, entry] of sortedEntries(inputs.beadsByRig)) {
-    const rigPellets = entry.items.flatMap((bead) => toPellet(bead, rigKey, sessionIdToFishId));
+    const rigPellets = entry.items.flatMap((bead) =>
+      toPellet(
+        bead,
+        rigKey,
+        sessionIdToFishId,
+        inputs.nowMs,
+        hadPrev && !inputs.prevBeadIds.has(bead.id),
+      ),
+    );
     for (const p of rigPellets)
       beadHolders[p.beadId] = { rigKey: p.rigKey, fishId: p.fishId, title: p.title };
     const { rendered, overflow } = capPerRig(rigPellets);
@@ -62,10 +81,31 @@ export function buildPellets(inputs: BuildPelletsInputs): BuildPelletsResult {
   return { pellets, pelletOverflow, beadHolders };
 }
 
+/** Bead age normalized 0 (fresh) .. 1 (stale) on a sqrt ramp. Unparseable or
+ * future timestamps read as fresh. */
+export function ageFractionFor(createdAt: string, nowMs: number): number {
+  const created = Date.parse(createdAt);
+  if (!Number.isFinite(created)) return 0;
+  const ageMs = Math.max(0, nowMs - created);
+  return Math.min(1, Math.sqrt(ageMs / AGE_REF_MS));
+}
+
+/** Morsel size multiplier from bead priority (bd: lower number = higher
+ * priority). A higher-priority bead is a bigger, choicer morsel. */
+export function radiusScaleForPriority(priority: number | null | undefined): number {
+  if (priority === null || priority === undefined) return 1;
+  if (priority <= 0) return 1.4;
+  if (priority === 1) return 1.2;
+  if (priority === 2) return 1;
+  return 0.85;
+}
+
 function toPellet(
   bead: Bead,
   rigKey: string,
   sessionIdToFishId: ReadonlyMap<string, string>,
+  nowMs: number,
+  arriving: boolean,
 ): PelletEntity[] {
   const state = pelletStateForStatus(bead.status);
   if (state === undefined) return [];
@@ -80,6 +120,9 @@ function toPellet(
       title: bead.title,
       rigKey,
       state,
+      ageFraction: ageFractionFor(bead.created_at, nowMs),
+      radiusScale: radiusScaleForPriority(bead.priority),
+      ...(arriving ? { arriving } : {}),
       ...(fishId !== undefined ? { fishId } : {}),
     },
   ];

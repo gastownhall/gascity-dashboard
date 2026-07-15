@@ -29,6 +29,8 @@ function pellet(overrides: Partial<PelletEntity> = {}): PelletEntity {
     title: 'test bead',
     rigKey: 'reef-alpha',
     state: 'drifting',
+    ageFraction: 0,
+    radiusScale: 1,
     ...overrides,
   };
 }

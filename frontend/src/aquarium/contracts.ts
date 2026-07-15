@@ -96,6 +96,13 @@ export interface PelletEntity {
   title: string;
   rigKey: string;
   state: PelletState;
+  /** bead age, 0 (just created) .. 1 (stale). Drives an open bead's drift
+   *  height: fresh food floats high, stale food sinks toward the seabed. */
+  ageFraction: number;
+  /** morsel size multiplier from bead priority (higher priority = bigger). */
+  radiusScale: number;
+  /** newly-arrived open bead: falls in from the surface (feeding drop-in). */
+  arriving?: boolean;
   /** fish holding it (state 'held') or that ate it (state 'eaten') */
   fishId?: string;
   /** ms remaining on the gulp animation (state 'eaten' only) */

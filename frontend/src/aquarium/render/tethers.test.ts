@@ -43,7 +43,14 @@ function recordingCtx(): { ctx: CanvasRenderingContext2D; segments: Seg[] } {
 function pellet(
   over: Partial<PelletEntity> & Pick<PelletEntity, 'beadId' | 'state'>,
 ): PelletEntity {
-  return { label: over.beadId, title: '', rigKey: 'alpha', ...over };
+  return {
+    label: over.beadId,
+    title: '',
+    rigKey: 'alpha',
+    ageFraction: 0,
+    radiusScale: 1,
+    ...over,
+  };
 }
 
 const SIM: SimState = {

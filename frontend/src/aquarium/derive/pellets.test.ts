@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
 import { PELLET_RENDER_CAP_PER_RIG } from '../contracts';
-import { buildPellets, type BuildPelletsInputs } from './pellets';
+import {
+  ageFractionFor,
+  buildPellets,
+  radiusScaleForPriority,
+  type BuildPelletsInputs,
+} from './pellets';
+
+/** matches the fixture beads' created_at, so age reads 0 unless a test sets it */
+const NOW = Date.parse('2026-01-01T00:00:00Z');
 
 function bead(id: string, status: string, assignee?: string, title?: string): Bead {
   return {
@@ -28,6 +36,8 @@ describe('buildPellets', () => {
         },
       },
       sessionIdsByFishId: new Map([['fish-1', 'gc-1']]),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
     };
     const { pellets } = buildPellets(inputs);
     const byId = new Map(pellets.map((p) => [p.beadId, p]));
@@ -41,6 +51,8 @@ describe('buildPellets', () => {
     const inputs: BuildPelletsInputs = {
       beadsByRig: { alpha: { items: [bead('a-1', 'closed')], total: 1 } },
       sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
     };
     expect(buildPellets(inputs).pellets).toEqual([]);
   });
@@ -49,6 +61,8 @@ describe('buildPellets', () => {
     const inputs: BuildPelletsInputs = {
       beadsByRig: { alpha: { items: [bead('a-1', ' Open '), bead('a-2', 'BLOCKED')], total: 2 } },
       sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
     };
     const byId = new Map(buildPellets(inputs).pellets.map((p) => [p.beadId, p]));
     expect(byId.get('a-1')?.state).toBe('drifting');
@@ -59,6 +73,8 @@ describe('buildPellets', () => {
     const inputs: BuildPelletsInputs = {
       beadsByRig: { alpha: { items: [bead('a-1', 'in_progress', 'polecat-gc-999')], total: 1 } },
       sessionIdsByFishId: new Map([['fish-1', 'gc-1']]),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
     };
     expect(buildPellets(inputs).pellets[0]?.fishId).toBeUndefined();
   });
@@ -71,6 +87,8 @@ describe('buildPellets', () => {
     const inputs: BuildPelletsInputs = {
       beadsByRig: { alpha: { items, total: items.length } },
       sessionIdsByFishId: new Map([['fish-1', 'gc-1']]),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
     };
     const { pellets, pelletOverflow } = buildPellets(inputs);
     expect(pellets).toHaveLength(PELLET_RENDER_CAP_PER_RIG);
@@ -83,6 +101,8 @@ describe('buildPellets', () => {
     const inputs: BuildPelletsInputs = {
       beadsByRig: { alpha: { items: [bead('a-1', 'open')], total: 1 } },
       sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
     };
     expect(buildPellets(inputs).pelletOverflow.alpha).toBeUndefined();
   });
@@ -100,6 +120,8 @@ describe('buildPellets', () => {
         },
       },
       sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
     };
     const byId = new Map(buildPellets(inputs).pellets.map((p) => [p.beadId, p]));
     // short ids are shown verbatim
@@ -119,6 +141,8 @@ describe('buildPellets', () => {
         alpha: { items: [bead('a-1', 'open', undefined, 'wire the reef legend')], total: 1 },
       },
       sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
     };
     expect(buildPellets(inputs).pellets[0]?.title).toBe('wire the reef legend');
   });
@@ -127,7 +151,66 @@ describe('buildPellets', () => {
     const inputs: BuildPelletsInputs = {
       beadsByRig: { alpha: { items: [bead('a-1', 'open')], total: 1 } },
       sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
     };
     expect(buildPellets(inputs).pellets[0]?.rigKey).toBe('alpha');
+  });
+
+  it('carries bead age and priority onto the pellet (height + morsel size)', () => {
+    const day = 24 * 60 * 60 * 1000;
+    const b: Bead = {
+      ...bead('a-1', 'open'),
+      priority: 0,
+      created_at: new Date(NOW - 2 * day).toISOString(),
+    };
+    const inputs: BuildPelletsInputs = {
+      beadsByRig: { alpha: { items: [b], total: 1 } },
+      sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
+    };
+    const p = buildPellets(inputs).pellets[0];
+    expect(p?.ageFraction).toBeGreaterThan(0);
+    expect(p?.radiusScale).toBeGreaterThan(1);
+  });
+
+  it('marks a bead absent last derive as arriving (drop-in), never on first load', () => {
+    const beadsByRig = { alpha: { items: [bead('new-1', 'open')], total: 1 } };
+    const call = (prevBeadIds: Set<string>) =>
+      buildPellets({ beadsByRig, sessionIdsByFishId: new Map(), nowMs: NOW, prevBeadIds });
+    // first load (no prev): nothing drops in, no feeding storm
+    expect(call(new Set()).pellets[0]?.arriving).toBeUndefined();
+    // a bead not seen last time falls in
+    expect(call(new Set(['old-1'])).pellets[0]?.arriving).toBe(true);
+    // a bead already present last time is settled
+    expect(call(new Set(['new-1'])).pellets[0]?.arriving).toBeUndefined();
+  });
+});
+
+describe('ageFractionFor', () => {
+  const day = 24 * 60 * 60 * 1000;
+  it('reads 0 for fresh, clamps to 1 for ancient, and rises monotonically between', () => {
+    expect(ageFractionFor(new Date(NOW).toISOString(), NOW)).toBe(0);
+    const oneDay = ageFractionFor(new Date(NOW - day).toISOString(), NOW);
+    const fiveDay = ageFractionFor(new Date(NOW - 5 * day).toISOString(), NOW);
+    expect(oneDay).toBeGreaterThan(0);
+    expect(fiveDay).toBeGreaterThan(oneDay);
+    expect(ageFractionFor(new Date(NOW - 400 * day).toISOString(), NOW)).toBe(1);
+  });
+
+  it('reads an unparseable or future timestamp as fresh', () => {
+    expect(ageFractionFor('not-a-date', NOW)).toBe(0);
+    expect(ageFractionFor(new Date(NOW + 1000).toISOString(), NOW)).toBe(0);
+  });
+});
+
+describe('radiusScaleForPriority', () => {
+  it('makes a higher-priority bead (lower number) a bigger morsel; unset is neutral', () => {
+    expect(radiusScaleForPriority(0)).toBeGreaterThan(radiusScaleForPriority(1));
+    expect(radiusScaleForPriority(1)).toBeGreaterThan(radiusScaleForPriority(2));
+    expect(radiusScaleForPriority(2)).toBeGreaterThan(radiusScaleForPriority(3));
+    expect(radiusScaleForPriority(null)).toBe(1);
+    expect(radiusScaleForPriority(undefined)).toBe(1);
   });
 });

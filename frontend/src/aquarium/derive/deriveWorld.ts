@@ -47,6 +47,7 @@ export function deriveWorldSnapshot(
     nowMs,
   );
 
+  const prevBeadHolders = memory?.prevBeadHolders ?? {};
   const {
     pellets: rawPellets,
     pelletOverflow,
@@ -54,11 +55,10 @@ export function deriveWorldSnapshot(
   } = buildPellets({
     beadsByRig: inputs.beadsByRig,
     sessionIdsByFishId: sessionIdByFishId,
+    nowMs,
+    prevBeadIds: new Set(Object.keys(prevBeadHolders)),
   });
-  const eatenPellets = diffEatenPellets(
-    new Map(Object.entries(beadHolders)),
-    memory?.prevBeadHolders ?? {},
-  );
+  const eatenPellets = diffEatenPellets(new Map(Object.entries(beadHolders)), prevBeadHolders);
 
   const formations = buildFormations({
     beadsByRig: inputs.beadsByRig,

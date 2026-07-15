@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { WORLD } from '../contracts';
-import { BAND_WORKING_Y } from './constants';
+import { PELLET_DROP_START_Y } from './constants';
 import { tickPellet, type PelletTickInputs, MOUTH_OFFSET_WU } from './pelletTick';
 
 const ANCHOR = { x: 2000, y: WORLD.seabedY, radius: 200 };
+const CREST = ANCHOR.y - ANCHOR.radius;
 
 function baseInputs(overrides: Partial<PelletTickInputs>): PelletTickInputs {
   return {
@@ -13,6 +14,8 @@ function baseInputs(overrides: Partial<PelletTickInputs>): PelletTickInputs {
     holderKin: undefined,
     prevKin: undefined,
     gulpMsLeft: undefined,
+    ageFraction: 0,
+    arriving: false,
     seed: 99,
     clockMs: 0,
     dtS: 1 / 60,
@@ -78,11 +81,20 @@ describe('tickPellet — sunken', () => {
 });
 
 describe('tickPellet — drifting', () => {
-  it('drifts in the mid-water pellet band, above the crest, over the formation width', () => {
+  it('drifts over the formation width, above the crest (open food, not on the seabed)', () => {
     const kin = tickPellet(baseInputs({ state: 'drifting' }));
-    expect(kin.y).toBeLessThan(ANCHOR.y - ANCHOR.radius);
-    expect(Math.abs(kin.y - BAND_WORKING_Y)).toBeLessThanOrEqual(160);
+    expect(kin.y).toBeLessThan(CREST);
     expect(Math.abs(kin.x - ANCHOR.x)).toBeLessThanOrEqual(ANCHOR.radius);
+  });
+
+  it('encodes age as height: a fresh bead floats high, a stale one sinks lower', () => {
+    const fresh = tickPellet(baseInputs({ state: 'drifting', ageFraction: 0 }));
+    const stale = tickPellet(baseInputs({ state: 'drifting', ageFraction: 1 }));
+    // y grows downward, so the stale bead sits lower in the column
+    expect(stale.y).toBeGreaterThan(fresh.y);
+    // but both stay above the crest — never mistaken for blocked-on-floor beads
+    expect(fresh.y).toBeLessThan(CREST);
+    expect(stale.y).toBeLessThan(CREST);
   });
 
   it('bobs over time (position changes tick to tick even with a fixed seed)', () => {
@@ -94,6 +106,21 @@ describe('tickPellet — drifting', () => {
   it('is deterministic for identical inputs', () => {
     const inputs = baseInputs({ state: 'drifting', clockMs: 4000 });
     expect(tickPellet(inputs)).toEqual(tickPellet(inputs));
+  });
+
+  it('a newly-arrived bead drops in from the surface, then falls to its age height', () => {
+    // first frame spawns at the waterline (food dropped in)
+    const first = tickPellet(baseInputs({ state: 'drifting', arriving: true }));
+    expect(first.y).toBeCloseTo(PELLET_DROP_START_Y, 6);
+    // subsequent frames ease it downward into the food column
+    let kin = first;
+    for (let i = 0; i < 240; i += 1) {
+      kin = tickPellet(
+        baseInputs({ state: 'drifting', arriving: true, prevKin: kin, clockMs: i * 16 }),
+      );
+    }
+    expect(kin.y).toBeGreaterThan(first.y);
+    expect(kin.y).toBeLessThan(CREST);
   });
 });
 

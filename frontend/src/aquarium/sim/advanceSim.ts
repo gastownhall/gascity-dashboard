@@ -178,6 +178,8 @@ function advanceOnePellet(entity: PelletEntity, ctx: PelletTickContext): PelletK
     holderKin,
     prevKin: ctx.prev.pellets[entity.beadId],
     gulpMsLeft: entity.gulpMsLeft,
+    ageFraction: entity.ageFraction,
+    arriving: entity.arriving ?? false,
     seed,
     clockMs: ctx.clockMs,
     dtS: ctx.dtS,

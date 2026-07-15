@@ -90,8 +90,10 @@ function pelletHueKey(rigKey: string): number {
 // Reused batch arrays — a single synchronous caller per frame, no reentrancy.
 const driftX: [number[], number[], number[]] = [[], [], []];
 const driftY: [number[], number[], number[]] = [[], [], []];
+const driftScale: [number[], number[], number[]] = [[], [], []];
 const heldX: [number[], number[], number[]] = [[], [], []];
 const heldY: [number[], number[], number[]] = [[], [], []];
+const heldScale: [number[], number[], number[]] = [[], [], []];
 const sunkX: number[] = [];
 const sunkY: number[] = [];
 const sunkScale: number[] = [];
@@ -105,8 +107,10 @@ function resetBatches(): void {
   for (let b = 0; b < 3; b += 1) {
     at(driftX, b).length = 0;
     at(driftY, b).length = 0;
+    at(driftScale, b).length = 0;
     at(heldX, b).length = 0;
     at(heldY, b).length = 0;
+    at(heldScale, b).length = 0;
   }
   sunkX.length = 0;
   sunkY.length = 0;
@@ -160,7 +164,7 @@ export function paintPellets(
         const h = hashString(pellet.beadId);
         sunkX.push(kin.x);
         sunkY.push(kin.y);
-        sunkScale.push(0.78 + ((h >>> 4) % 100) * 0.005);
+        sunkScale.push((0.78 + ((h >>> 4) % 100) * 0.005) * pellet.radiusScale);
         sunkSquash.push(0.72 + ((h >>> 11) % 100) * 0.0022);
         sunkTone.push(h & 1);
       } else if (pellet.state === 'eaten') {
@@ -171,10 +175,12 @@ export function paintPellets(
         const b = hashString(pellet.beadId) % 3;
         at(heldX, b).push(kin.x);
         at(heldY, b).push(kin.y);
+        at(heldScale, b).push(pellet.radiusScale);
       } else {
         const b = hashString(pellet.beadId) % 3;
         at(driftX, b).push(kin.x);
         at(driftY, b).push(kin.y);
+        at(driftScale, b).push(pellet.radiusScale);
       }
     }
     for (let tone = 0; tone < 3; tone += 1) {
@@ -186,6 +192,7 @@ export function paintPellets(
         PELLET_RADIUS,
         0.82,
         square,
+        at(driftScale, tone),
       );
     }
     // in-progress beads: same morsel shape, brighter/more-saturated shade.
@@ -198,6 +205,7 @@ export function paintPellets(
         PELLET_RADIUS,
         0.82,
         square,
+        at(heldScale, tone),
       );
     }
     paintSunken(ctx, colors, square);
@@ -259,6 +267,8 @@ function paintEaten(ctx: CanvasRenderingContext2D, colors: PelletColors): void {
   ctx.globalAlpha = 1;
 }
 
+/** `scales[i]` is a per-pellet size multiplier (bead priority); the base rx and
+ * squash are shared, so the batch stays one fillStyle + one fill. */
 function fillDots(
   ctx: CanvasRenderingContext2D,
   xs: readonly number[],
@@ -267,10 +277,10 @@ function fillDots(
   rx: number,
   squash: number,
   square: boolean,
+  scales: readonly number[],
 ): void {
   const n = xs.length;
   if (n === 0) return;
-  const ry = rx * squash;
   ctx.fillStyle = color;
   ctx.beginPath();
   if (square) {
@@ -278,12 +288,15 @@ function fillDots(
     // straight edges vs the ellipse's four flattened beziers, and at ~2 css px
     // it is indistinguishable from a dot.
     for (let i = 0; i < n; i += 1) {
-      ctx.rect(at(xs, i) - rx, at(ys, i) - ry, rx * 2, ry * 2);
+      const srx = rx * at(scales, i);
+      const sry = srx * squash;
+      ctx.rect(at(xs, i) - srx, at(ys, i) - sry, srx * 2, sry * 2);
     }
   } else {
     for (let i = 0; i < n; i += 1) {
-      ctx.moveTo(at(xs, i) + rx, at(ys, i));
-      ctx.ellipse(at(xs, i), at(ys, i), rx, ry, 0, 0, TAU);
+      const srx = rx * at(scales, i);
+      ctx.moveTo(at(xs, i) + srx, at(ys, i));
+      ctx.ellipse(at(xs, i), at(ys, i), srx, srx * squash, 0, 0, TAU);
     }
   }
   ctx.fill();

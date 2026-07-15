@@ -30,6 +30,9 @@ export function diffEatenPellets(
       title: holder.title,
       rigKey: holder.rigKey,
       state: 'eaten',
+      // an eaten bead is mid-gulp at the fish's mouth: age/size no longer read.
+      ageFraction: 0,
+      radiusScale: 1,
       gulpMsLeft: GULP_MS,
       ...(holder.fishId !== undefined ? { fishId: holder.fishId } : {}),
     };

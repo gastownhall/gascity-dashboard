@@ -3,7 +3,14 @@
 
 import type { FishKinematics, PelletKinematics, PelletState } from '../contracts';
 import { hashRange } from '../derive/hash';
-import { BAND_WORKING_Y, MOUTH_OFFSET_WU } from './constants';
+import {
+  MOUTH_OFFSET_WU,
+  PELLET_AGE_Y_JITTER_WU,
+  PELLET_DROP_FOLLOW_TC_S,
+  PELLET_DROP_START_Y,
+  PELLET_FRESH_Y,
+  PELLET_STALE_Y,
+} from './constants';
 
 export { MOUTH_OFFSET_WU };
 
@@ -37,6 +44,10 @@ export interface PelletTickInputs {
   prevKin: PelletKinematics | undefined;
   /** entity.gulpMsLeft, eaten only. */
   gulpMsLeft: number | undefined;
+  /** bead age 0..1 — drives a drifting bead's height (fresh high, stale low). */
+  ageFraction: number;
+  /** newly-arrived open bead: falls in from the surface, then eases to height. */
+  arriving: boolean;
   seed: number;
   clockMs: number;
   dtS: number;
@@ -99,19 +110,29 @@ function sunkenPosition(inputs: PelletTickInputs): PelletKinematics {
   };
 }
 
-/** A slow bob in the mid-water pellet band — open food drifts in the same
- * band the working shoal cruises (BAND_WORKING_Y), spread across the
- * formation width and sitting a touch below the shoal so fish reach down to
- * it. Well above the formation crest for every rig, so the mid-water column
- * reads as populated rather than empty. */
+/** Open food drifts in the mid-water column, spread across the formation width,
+ * its HEIGHT carrying bead age: fresh floats high, stale sinks toward (but stays
+ * above) the seabed. A newly-created bead falls in from the surface and eases
+ * down to its age height (feeding drop-in). Well above the formation crest for
+ * every rig, so open food never blurs with the blocked beads settled ON it. */
 function driftingPosition(inputs: PelletTickInputs): PelletKinematics {
   const anchor = inputs.formationAnchor;
   const phase = mouthPhase(inputs.seed);
   const baseX = anchor.x + hashRange(inputs.seed + 2, -anchor.radius, anchor.radius) * 0.9;
-  const baseY = BAND_WORKING_Y + hashRange(inputs.seed + 3, -70, 150);
+  const ageY =
+    PELLET_FRESH_Y +
+    (PELLET_STALE_Y - PELLET_FRESH_Y) * inputs.ageFraction +
+    hashRange(inputs.seed + 3, -PELLET_AGE_Y_JITTER_WU, PELLET_AGE_Y_JITTER_WU);
   const bob =
     Math.sin((inputs.clockMs / DRIFT_BOB_PERIOD_MS) * TAU + phase) * DRIFT_BOB_AMPLITUDE_WU;
-  return { x: baseX, y: baseY + bob, phase };
+  const settledY = ageY + bob;
+  if (inputs.arriving) {
+    // spawn at the surface, then exponentially fall toward the age height.
+    if (inputs.prevKin === undefined) return { x: baseX, y: PELLET_DROP_START_Y, phase };
+    const alpha = 1 - Math.exp(-inputs.dtS / PELLET_DROP_FOLLOW_TC_S);
+    return { x: baseX, y: inputs.prevKin.y + (settledY - inputs.prevKin.y) * alpha, phase };
+  }
+  return { x: baseX, y: settledY, phase };
 }
 
 /** At the holder's mouth (or its last-known position, if the holder is
