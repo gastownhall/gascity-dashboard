@@ -23,6 +23,13 @@ export interface EntityCardProps {
 
 const CARD_OFFSET_PX = 16;
 
+// The card's action link is a neutral affordance, never the ledger's maroon:
+// the One Mark Rule reserves text-accent for the "N need attention" line, and
+// it must appear nowhere else on this route (see AquariumOverlay). Matches the
+// dotted-underline action-link treatment used elsewhere in the dashboard.
+const CARD_LINK_CLASS =
+  'mt-1 inline-block text-label uppercase tracking-wider text-fg-muted hover:text-fg focus-mark underline decoration-dotted underline-offset-2 rounded-sm';
+
 export function EntityCard({ hit, anchorX, anchorY, viewport, onDismiss }: EntityCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -84,7 +91,7 @@ function FishCardBody({ fish }: { fish: FishEntity }) {
         <div className="tnum text-fg-muted">{fish.bellyPct}% context</div>
       )}
       {fish.taskBeadId !== undefined && <div className="text-fg-muted">bead {fish.taskBeadId}</div>}
-      <Link to={fish.linkTo} className="inline-block text-accent focus-mark">
+      <Link to={fish.linkTo} className={CARD_LINK_CLASS}>
         open agent
       </Link>
     </dl>
@@ -100,7 +107,7 @@ function PelletCardBody({ pellet }: { pellet: PelletEntity }) {
         {PELLET_STATE_WORD[pellet.state]}
       </div>
       {hasTitle && <div className="text-fg-muted">bead {pellet.beadId}</div>}
-      <Link to={pellet.linkTo} className="inline-block text-accent focus-mark">
+      <Link to={pellet.linkTo} className={CARD_LINK_CLASS}>
         open bead
       </Link>
     </dl>
