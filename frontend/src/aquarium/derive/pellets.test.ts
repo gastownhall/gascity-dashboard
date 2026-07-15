@@ -301,3 +301,49 @@ describe('isP0Priority', () => {
     expect(p2?.isP0).toBeUndefined();
   });
 });
+
+describe('epic grouping fields (parent → epicId + epicTitle)', () => {
+  it('carries epicId and resolves epicTitle from the parent epic bead in the store', () => {
+    const inputs: BuildPelletsInputs = {
+      beadsByRig: {
+        alpha: {
+          items: [
+            { ...bead('epic-1', 'open'), issue_type: 'epic', title: 'Convoy graph v2' },
+            { ...bead('c-1', 'open'), parent: 'epic-1' },
+            { ...bead('c-2', 'open'), parent: 'epic-1' },
+            bead('orphan', 'open'),
+          ],
+          total: 4,
+        },
+      },
+      sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
+    };
+    const byId = new Map(buildPellets(inputs).pellets.map((p) => [p.beadId, p]));
+    expect(byId.get('c-1')?.epicId).toBe('epic-1');
+    expect(byId.get('c-1')?.epicTitle).toBe('Convoy graph v2');
+    expect(byId.get('c-2')?.epicId).toBe('epic-1');
+    // a parentless bead stays in the general drift (no epic)
+    expect(byId.get('orphan')?.epicId).toBeUndefined();
+    expect(byId.get('orphan')?.epicTitle).toBeUndefined();
+  });
+
+  it('falls back to a short epic id when the parent epic is not in the open store', () => {
+    const inputs: BuildPelletsInputs = {
+      beadsByRig: {
+        alpha: {
+          items: [{ ...bead('c-1', 'open'), parent: 'gascity-dashboard-absent-epic-id' }],
+          total: 1,
+        },
+      },
+      sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
+    };
+    const p = buildPellets(inputs).pellets.find((x) => x.beadId === 'c-1');
+    expect(p?.epicId).toBe('gascity-dashboard-absent-epic-id');
+    // resolved to the elided id (title unknown), never the raw long id
+    expect(p?.epicTitle).toContain('…');
+  });
+});

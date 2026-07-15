@@ -61,6 +61,12 @@ export function buildPellets(inputs: BuildPelletsInputs): BuildPelletsResult {
   const pelletOverflow: Record<string, number> = {};
   const beadHolders: Record<string, BeadHolder> = {};
 
+  // epic-title lookup for the focus-only epic label: a parent id resolves to the
+  // epic bead's title when it is in the open store, else to a short id fallback.
+  const titleById = new Map<string, string>();
+  for (const entry of Object.values(inputs.beadsByRig))
+    for (const bead of entry.items) titleById.set(bead.id, bead.title);
+
   for (const [rigKey, entry] of sortedEntries(inputs.beadsByRig)) {
     const rigPellets = entry.items.flatMap((bead) =>
       toPellet(
@@ -69,6 +75,7 @@ export function buildPellets(inputs: BuildPelletsInputs): BuildPelletsResult {
         sessionIdToFishId,
         inputs.nowMs,
         hadPrev && !inputs.prevBeadIds.has(bead.id),
+        titleById,
       ),
     );
     for (const p of rigPellets)
@@ -115,6 +122,7 @@ function toPellet(
   sessionIdToFishId: ReadonlyMap<string, string>,
   nowMs: number,
   arriving: boolean,
+  titleById: ReadonlyMap<string, string>,
 ): PelletEntity[] {
   const state = pelletStateForStatus(bead.status);
   if (state === undefined) return [];
@@ -123,6 +131,11 @@ function toPellet(
       ? sessionIdToFishId.get(parseAssignee(bead.assignee ?? '').sessionId ?? '')
       : undefined;
   const dependsOn = (bead.dependencies ?? []).map((d) => d.depends_on_id);
+  const parent = bead.parent;
+  const epic =
+    parent !== undefined && parent.length > 0
+      ? { epicId: parent, epicTitle: titleById.get(parent) ?? pelletLabel(parent) }
+      : {};
   return [
     {
       beadId: bead.id,
@@ -137,6 +150,7 @@ function toPellet(
       ...(dependsOn.length > 0 ? { dependsOn } : {}),
       ...(arriving ? { arriving } : {}),
       ...(fishId !== undefined ? { fishId } : {}),
+      ...epic,
     },
   ];
 }

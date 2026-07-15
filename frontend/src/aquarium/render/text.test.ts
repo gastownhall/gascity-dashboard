@@ -207,6 +207,49 @@ describe('held-bead titles (what is being worked on, and by whom)', () => {
   });
 });
 
+describe('epic grouping labels (focus-only, LOD1+; overview stays age-drift)', () => {
+  const pe = (beadId: string, epicId: string, epicTitle: string): PelletEntity =>
+    pellet({ beadId, state: 'drifting', epicId, epicTitle });
+  const SNAP: WorldSnapshot = {
+    formations: SNAPSHOT.formations,
+    fish: [],
+    pellets: [
+      pe('c1', 'e1', 'Convoy graph'),
+      pe('c2', 'e1', 'Convoy graph'),
+      pe('solo', 'e2', 'Freshness spine'),
+    ],
+    needsAttention: 0,
+    pelletOverflow: {},
+    strandedByRig: {},
+  };
+  const sim: SimState = {
+    fish: {},
+    pellets: {
+      c1: { x: 1000, y: 1850, phase: 0 },
+      c2: { x: 1040, y: 1850, phase: 0 },
+      solo: { x: 1200, y: 1850, phase: 0 },
+    },
+    clockMs: 0,
+  };
+  const draw = (zoom: number): DrawnText[] => {
+    const { ctx, drawn } = recordingCtx();
+    paintTextLayers(ctx, SNAP, sim, PALETTE, { x: 1000, y: 1850, zoom }, VIEWPORT);
+    return drawn;
+  };
+
+  it('labels a same-epic cluster (≥2 beads) with the epic title at LOD1', () => {
+    expect(draw(LOD1_ZOOM).some((d) => d.text === 'Convoy graph')).toBe(true);
+  });
+
+  it('does not label a lone epic bead (one bead is not a group)', () => {
+    expect(draw(LOD1_ZOOM).some((d) => d.text === 'Freshness spine')).toBe(false);
+  });
+
+  it('shows no epic labels at the overview (below LOD1) — the drift stays calm', () => {
+    expect(draw(0.5).some((d) => d.text === 'Convoy graph')).toBe(false);
+  });
+});
+
 describe('stranded-work markers (per-rig surface alarm)', () => {
   const STRANDED: WorldSnapshot = {
     formations: [

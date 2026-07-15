@@ -42,9 +42,11 @@ export function paintTextLayers(
     paintOverflow(ctx, snapshot, palette, mid, viewport, fRig);
     paintStrandedMarkers(ctx, snapshot, palette, mid, viewport, fRig);
   }
-  // in-progress bead titles fade in one zoom step before full captions: the few
-  // held morsels name "what's being worked on" while the backlog stays clean.
+  // at LOD1 the drift resolves into its initiatives: same-epic beads get a
+  // shared label, and the few held morsels name "what's being worked on" — while
+  // the LOD0 overview stays a calm, unlabelled age-drift.
   if (f1 > 0.01) {
+    paintEpicGroups(ctx, snapshot, sim, palette, act, viewport, f1);
     paintHeldBeadLabels(ctx, snapshot, sim, palette, act, viewport, f1);
   }
   if (f2 > 0.01) {
@@ -230,6 +232,58 @@ const HELD_TITLE_MAX = 30;
 function clipTitle(title: string): string {
   if (title.length <= HELD_TITLE_MAX) return title;
   return `${title.slice(0, HELD_TITLE_MAX - 1).trimEnd()}…`;
+}
+
+/** A drifting bead's epic cluster while it accumulates on-screen extent. */
+interface EpicCluster {
+  sumX: number;
+  minY: number;
+  count: number;
+  title: string;
+}
+
+/** Focus-only epic grouping: at LOD1 the age-drift resolves into initiatives —
+ * same-epic drifting beads on screen get one shared label at the top of their
+ * cluster, so "what work, grouped by epic" reads without moving any pellet (the
+ * LOD0 overview stays a calm unlabelled drift). Label-only on purpose: the beads
+ * are age-scattered, so a bounding hull would sprawl and overlap; the centred
+ * label is the clean cue. A lone bead is not a group. */
+function paintEpicGroups(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  sim: SimState,
+  palette: ScenePalette,
+  act: LayerTransform,
+  viewport: Viewport,
+  alpha: number,
+): void {
+  const clusters = new Map<string, EpicCluster>();
+  for (const pellet of snapshot.pellets) {
+    if (pellet.state !== 'drifting' || pellet.epicId === undefined) continue;
+    const kin = sim.pellets[pellet.beadId];
+    if (kin === undefined) continue;
+    const pos = worldToScreen(act, kin.x, kin.y);
+    if (offscreen(pos, viewport, 40)) continue;
+    const title = pellet.epicTitle ?? pellet.epicId;
+    const c = clusters.get(pellet.epicId);
+    if (c === undefined) {
+      clusters.set(pellet.epicId, { sumX: pos.x, minY: pos.y, count: 1, title });
+    } else {
+      c.sumX += pos.x;
+      c.minY = Math.min(c.minY, pos.y);
+      c.count += 1;
+    }
+  }
+  if (clusters.size === 0) return;
+  ctx.font = `600 10px ${palette.fontFamily}`;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = palette.textMuted;
+  ctx.globalAlpha = alpha;
+  for (const c of clusters.values()) {
+    if (c.count < 2) continue;
+    ctx.fillText(clipTitle(c.title), c.sumX / c.count, c.minY - 8);
+  }
+  ctx.globalAlpha = 1;
 }
 
 /** Labels each in-progress (held) bead with its short title — the answer to

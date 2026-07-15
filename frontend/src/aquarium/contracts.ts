@@ -100,6 +100,12 @@ export interface PelletEntity {
   /** bead ids this bead depends on (its `depends_on_id`s). Absent when it has
    *  none. Drawn as faint links only while this pellet is the selected one. */
   dependsOn?: readonly string[];
+  /** parent epic id (`bead.parent`), for grouping same-epic beads on focus.
+   *  Absent for a parentless bead (stays in the general drift). */
+  epicId?: string;
+  /** the parent epic's short title, for the focus-only epic label. Falls back to
+   *  the epic id when the epic bead's title isn't in the open store. */
+  epicTitle?: string;
   rigKey: string;
   state: PelletState;
   /** bead age, 0 (just created) .. 1 (stale). Drives an open bead's drift
