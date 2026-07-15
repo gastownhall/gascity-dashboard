@@ -35,12 +35,39 @@ describe('deploy: systemd unit path is the real checkout', () => {
   });
 
   test('unit runs the server from the real ~/gascity-dashboard checkout', () => {
-    assert.match(
-      unit,
-      /ExecStart=\/usr\/bin\/node %h\/gascity-dashboard\/backend\/dist\/server\.js/,
-    );
+    assert.match(unit, /ExecStart=\S+ node %h\/gascity-dashboard\/backend\/dist\/server\.js/);
     assert.match(unit, /WorkingDirectory=%h\/gascity-dashboard$/m);
     assert.match(unit, /ADMIN_FRONTEND_DIST=%h\/gascity-dashboard\/frontend\/dist/);
+  });
+
+  test('unit resolves node via PATH rather than a hard-coded interpreter path', () => {
+    // Criterion 1: the unit must start without a hand-edit. `/usr/bin/node` is
+    // the same defect class as the old `%h/gas-city-dashboard` path — an
+    // absolute path that simply does not exist on hosts where Node was
+    // installed per-user (nvm/fnm/asdf, ~/.local/bin), yielding status=203/EXEC.
+    assert.ok(
+      !/ExecStart=\/usr\/bin\/node\b/.test(unit),
+      'ExecStart hard-codes /usr/bin/node, which is absent on per-user Node installs',
+    );
+    assert.match(unit, /ExecStart=\/usr\/bin\/env node\b/);
+
+    // env resolves `node` off PATH, and a systemd user service does not inherit
+    // the login shell's PATH — so the unit must state one that can find it.
+    const unitPath = unit.match(/^Environment=PATH=(.+)$/m)?.[1];
+    assert.ok(unitPath, 'unit must set Environment=PATH for /usr/bin/env to resolve node');
+    assert.ok(
+      unitPath.split(':').includes('%h/.local/bin'),
+      `Environment=PATH must include %h/.local/bin; got "${unitPath}"`,
+    );
+  });
+
+  test('unit fails loudly (ExecStartPre) when node is not on PATH', () => {
+    // Criterion 2, applied to the interpreter: a bare 203/EXEC names no binary.
+    const execStartPre = unit.split('\n').filter((line) => line.startsWith('ExecStartPre='));
+    assert.ok(
+      execStartPre.some((line) => /command -v node/.test(line)),
+      'expected an ExecStartPre asserting node resolves before start',
+    );
   });
 
   test('unit fails loudly (ExecStartPre) when the build output is missing', () => {
@@ -54,6 +81,32 @@ describe('deploy: systemd unit path is the real checkout', () => {
           /test\s+-[a-z]*[fe]/.test(line),
       ),
       'expected an ExecStartPre asserting server.js exists before start',
+    );
+  });
+
+  test('unit sets no hardening switch a --user manager cannot apply', () => {
+    // Criterion 1: these imply a CapabilityBoundingSet drop, which needs
+    // CAP_SETPCAP effective. A `systemctl --user` manager does not have it, so
+    // systemd rejects the unit at 218/CAPABILITIES *before* ExecStart — an
+    // unstartable unit, not hardening. Verified by bisecting each property
+    // through a probe unit on this host (systemd 255).
+    for (const opt of ['PrivateDevices', 'ProtectKernelModules']) {
+      assert.ok(
+        !new RegExp(`^${opt}=(true|yes|1)$`, 'm').test(unit),
+        `${opt} cannot be applied by a --user manager; the unit fails at 218/CAPABILITIES`,
+      );
+    }
+  });
+
+  test('unit sets no hardening switch that stops node from starting', () => {
+    // Criterion 1, again: MemoryDenyWriteExecute=true reads like free
+    // hardening but is fatal to a V8 process — it blocks the mprotect() the
+    // JIT needs, so node SIGTRAPs at startup and the unit never runs. Verified
+    // empirically via `systemd-run --user --property=MemoryDenyWriteExecute=true
+    // node -e ...` => code=dumped/status=TRAP (and status=0 without it).
+    assert.ok(
+      !/^MemoryDenyWriteExecute=(true|yes|1)$/m.test(unit),
+      'MemoryDenyWriteExecute is incompatible with V8 JIT; the unit will core-dump at start',
     );
   });
 
