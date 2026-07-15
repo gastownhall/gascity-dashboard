@@ -199,10 +199,10 @@ licenses it; outside this route, nothing here applies.
   whole column for scattered distress. Each rises near its home x and trails a
   faint mooring line down to its rig's formation, so "which rig needs you"
   survives the climb; the per-pose silhouette (nose-up open gape / belly-up /
-  level rigid float / tucked) keeps the four reasons distinct within the shelf,
-  so the Greyscale Test still passes — each cue is a frozen posture, never a
-  motion, so it survives a still frame and reduced-motion. Reduced-motion holds
-  the surfaced fish as a truthful still frame.
+  nose-down upright list / tucked-and-narrow) keeps the four reasons distinct
+  within the shelf, so the Greyscale Test still passes — each cue is a frozen
+  posture, never a motion, so it survives a still frame and reduced-motion.
+  Reduced-motion holds the surfaced fish as a truthful still frame.
   Work that is stuck with no agent to be its fish surfaces as a single warn
   **"N stranded"** pill at the surface that expands to a drill-in list (grouped
   by rig, each row linking to the bead), and it counts **orphaned** work only —

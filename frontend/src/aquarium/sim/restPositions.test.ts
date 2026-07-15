@@ -114,7 +114,7 @@ describe('restPosition — surface shelf lanes stay distinct', () => {
     for (const seed of SEEDS) {
       const awaiting = restPosition('awaiting-input', ANCHOR, seed);
       const stalled = restPosition('stalled', ANCHOR, seed);
-      // a full lane between them so the nose-up gape and the rigid level float
+      // a full lane between them so the nose-up gape and the nose-down list
       // never re-muddle on the shelf.
       expect(stalled.y - awaiting.y).toBeGreaterThan(60);
     }
