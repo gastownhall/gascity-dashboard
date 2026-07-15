@@ -151,6 +151,45 @@ describe('buildFormations', () => {
     expect(spread).toBeGreaterThan(60);
   });
 
+  // A busy city (ds-research: 22 rigs) needs more cores+gaps than the 3600-wu
+  // usable band, so the min-gap ratchet used to run the chain off the tank
+  // (max anchorX ~7400, ~2x WORLD.width); those formations were wall-clamped and
+  // their schools piled on the right. The chain must fold back into the band.
+  const largeFleetInputs = (): FormationInputs => {
+    const rigKeys = Array.from({ length: 26 }, (_, i) => `rig-${i.toString().padStart(2, '0')}`);
+    const fishHomeKeys = rigKeys.flatMap((key) => Array(8).fill(key) as string[]);
+    return {
+      beadsByRig: beadsByRig(Object.fromEntries(rigKeys.map((k) => [k, 5]))),
+      fishHomeKeys,
+    };
+  };
+
+  it('folds a tank-overflowing fleet back into the world, centred (no right-wall pile)', () => {
+    const formations = buildFormations(largeFleetInputs());
+    expect(formations).toHaveLength(26);
+    for (const f of formations) {
+      // no anchor past the world (the bug shoved them to ~7400); a wall-clamped
+      // school is what produced the pile.
+      expect(f.anchorX).toBeGreaterThan(0);
+      expect(f.anchorX).toBeLessThan(WORLD.width);
+    }
+    const centroid = formations.reduce((sum, f) => sum + f.anchorX, 0) / formations.length;
+    // centroid lands near the world midpoint the home camera frames on
+    expect(centroid).toBeGreaterThan(WORLD.width / 2 - 350);
+    expect(centroid).toBeLessThan(WORLD.width / 2 + 350);
+  });
+
+  it('leaves a fleet that already fits unchanged and deterministic', () => {
+    // The 8-rig layout fits the band, so folding is a no-op: still deterministic
+    // and still honouring the CORE-gap floor (locked by the tests above).
+    const first = buildFormations(layoutInputs());
+    const second = buildFormations(layoutInputs());
+    expect(second).toEqual(first);
+    const span =
+      Math.max(...first.map((f) => f.anchorX)) - Math.min(...first.map((f) => f.anchorX));
+    expect(span).toBeLessThan(WORLD.width - 2 * 200); // within the usable band → untouched
+  });
+
   it('varies formation depth so bases are not all on one baseline', () => {
     const formations = buildFormations(layoutInputs());
     const distinctDepths = new Set(formations.map((f) => f.anchorY));

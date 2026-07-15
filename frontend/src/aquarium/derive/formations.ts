@@ -164,5 +164,28 @@ function placeAlongSeabed(radii: readonly number[], seeds: readonly number[]): n
       prevX + formationCoreRadius(prevRadius) + formationCoreRadius(radii[i]!) + MIN_CORE_GAP_WU;
     xs.push(Math.max(base, minX));
   }
-  return xs;
+  return fitChainToBand(xs, usableWidth);
+}
+
+/** The left-to-right min-CORE-gap ratchet above can accumulate a chain far wider
+ * than the tank — 22 large rigs need ~7600 wu of cores+gaps in a 3600-wu band —
+ * which shoves the rightmost formations past the wall, where the fish clamp
+ * (sim/fishTick clampToWorld) piles their schools on one line (the "stacked pile
+ * on the right"). A chain that already fits is returned untouched (small cities
+ * and the blind fixture stay byte-identical). A chain that overran is compressed
+ * to the usable band and centred, so its centroid lands at the world midpoint
+ * the home camera frames on. Deterministic: a pure function of the same chain. */
+function fitChainToBand(xs: readonly number[], usableWidth: number): number[] {
+  if (xs.length === 0) return [];
+  let min = xs[0]!;
+  let max = xs[0]!;
+  for (const x of xs) {
+    if (x < min) min = x;
+    if (x > max) max = x;
+  }
+  const span = max - min;
+  if (span <= usableWidth) return [...xs];
+  const scale = usableWidth / span;
+  const left = SEABED_MARGIN_X + (usableWidth - span * scale) / 2;
+  return xs.map((x) => left + (x - min) * scale);
 }
