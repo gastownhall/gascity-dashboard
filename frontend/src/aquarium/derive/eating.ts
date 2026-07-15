@@ -9,7 +9,7 @@
 // from next call's "prev" and can never re-diff as eaten again.
 
 import type { PelletEntity } from '../contracts';
-import { pelletLabel, type BeadHolder } from './pellets';
+import { beadLinkTo, pelletLabel, type BeadHolder } from './pellets';
 
 /** Duration of the gulp animation once a pellet is eaten. */
 export const GULP_MS = 1200;
@@ -28,6 +28,7 @@ export function diffEatenPellets(
       beadId,
       label: pelletLabel(beadId),
       title: holder.title,
+      linkTo: beadLinkTo(beadId),
       rigKey: holder.rigKey,
       state: 'eaten',
       // an eaten bead is mid-gulp at the fish's mouth: age/size no longer read.

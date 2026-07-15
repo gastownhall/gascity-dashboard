@@ -46,6 +46,7 @@ function pellet(
   return {
     label: over.beadId,
     title: '',
+    linkTo: '',
     rigKey: 'alpha',
     ageFraction: 0,
     radiusScale: 1,

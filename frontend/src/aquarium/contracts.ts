@@ -94,6 +94,9 @@ export interface PelletEntity {
   label: string;
   /** the bead's human title, for the hover/click card (may be '' if unset) */
   title: string;
+  /** route to open this bead's detail (the supervisor bead-detail modal),
+   *  mirroring a fish's linkTo to its agent. */
+  linkTo: string;
   rigKey: string;
   state: PelletState;
   /** bead age, 0 (just created) .. 1 (stale). Drives an open bead's drift

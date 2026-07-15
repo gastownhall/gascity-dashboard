@@ -3,6 +3,7 @@ import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
 import { PELLET_RENDER_CAP_PER_RIG } from '../contracts';
 import {
   ageFractionFor,
+  beadLinkTo,
   buildPellets,
   radiusScaleForPriority,
   isP0Priority,
@@ -224,6 +225,23 @@ describe('radiusScaleForPriority', () => {
   it('treats null as NEUTRAL, not low: an unprioritised bead is never smaller than a known P2', () => {
     expect(radiusScaleForPriority(null)).toBe(radiusScaleForPriority(2));
     expect(radiusScaleForPriority(null)).toBeGreaterThan(radiusScaleForPriority(3));
+  });
+});
+
+describe('beadLinkTo', () => {
+  it('links a bead to its supervisor bead-detail route, url-encoded', () => {
+    expect(beadLinkTo('mem-shs5t')).toBe('/beads?bead=mem-shs5t');
+    expect(beadLinkTo('a b/c')).toBe(`/beads?bead=${encodeURIComponent('a b/c')}`);
+  });
+
+  it('is carried onto a derived pellet', () => {
+    const p = buildPellets({
+      beadsByRig: { alpha: { items: [bead('a-1', 'open')], total: 1 } },
+      sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
+    }).pellets[0];
+    expect(p?.linkTo).toBe('/beads?bead=a-1');
   });
 });
 

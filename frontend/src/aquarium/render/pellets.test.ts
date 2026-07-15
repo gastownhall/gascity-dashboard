@@ -95,6 +95,7 @@ function glintPellet(over: Partial<PelletEntity> & Pick<PelletEntity, 'beadId'>)
   return {
     label: over.beadId,
     title: '',
+    linkTo: '',
     rigKey: 'alpha',
     state: 'drifting',
     ageFraction: 0,

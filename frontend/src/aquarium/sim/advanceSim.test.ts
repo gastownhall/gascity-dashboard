@@ -46,6 +46,7 @@ function pellet(
   return {
     label: overrides.beadId,
     title: overrides.beadId,
+    linkTo: '',
     state: 'drifting',
     ageFraction: 0,
     radiusScale: 1,

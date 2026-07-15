@@ -127,6 +127,7 @@ function toPellet(
       beadId: bead.id,
       label: pelletLabel(bead.id),
       title: bead.title,
+      linkTo: beadLinkTo(bead.id),
       rigKey,
       state,
       ageFraction: ageFractionFor(bead.created_at, nowMs),
@@ -153,6 +154,14 @@ function pelletStateForStatus(status: string): PelletState | undefined {
 export function pelletLabel(beadId: string): string {
   if (beadId.length <= LABEL_MAX_LEN) return beadId;
   return `${beadId.slice(0, LABEL_HEAD_LEN)}…${beadId.slice(-LABEL_TAIL_LEN)}`;
+}
+
+/** Route that opens a bead's detail. Reef pellets are supervisor beads, which
+ * the dashboard's /beads page resolves by id into its detail modal (it fetches
+ * the bead independently of the loaded board page), so a pellet links there —
+ * the food-pellet counterpart of a fish linking to its agent. */
+export function beadLinkTo(beadId: string): string {
+  return `/beads?bead=${encodeURIComponent(beadId)}`;
 }
 
 /** Rendered-pellet priority: held (visible work) > sunken (blocked, needs
