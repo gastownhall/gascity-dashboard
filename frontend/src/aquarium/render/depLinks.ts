@@ -4,14 +4,17 @@
 // has hundreds of dependency edges, and drawing them all is spaghetti that
 // re-creates the very "coloured dust" the reef works to avoid. It reveals a
 // relationship on demand, then clears. Dashed (vs the solid fish<->bead tether)
-// so the two relationship lines never read as the same thing. Selection only
-// happens at LOD2, where nothing is thinned, so an in-view dep always has a
-// drawn pellet to point at.
+// so the two relationship lines never read as the same thing. Both endpoints are
+// gated through the same LOD thinning paintPellets uses: selection happens at
+// LOD2 (nothing thinned), but nothing clears the selection on zoom-out, so a
+// link is drawn only to endpoints on screen at the current zoom — never a dashed
+// line to a pellet the overview thinned away.
 
 import type { PelletEntity, ScenePalette, SimState } from '../contracts';
 import type { ViewRect } from './layers';
 import { rectContains } from './layers';
 import { withAlpha } from './oklch';
+import { driftKeepCount, pelletVisibleAtLod } from './pellets';
 
 /** present enough to trace the dependency, quiet enough to stay ambient */
 const DEP_LINK_ALPHA = 0.55;
@@ -38,15 +41,23 @@ export function paintDepLinks(
   const selected = pellets.find((p) => p.beadId === selectedBeadId);
   const deps = selected?.dependsOn;
   if (selected === undefined || deps === undefined || deps.length === 0) return;
+  const keep = driftKeepCount(layerScale);
+  // Selection is only possible at LOD2, but nothing clears it on zoom-out — so
+  // gate on the SAME LOD thinning paintPellets uses. If the selected pellet was
+  // itself thinned away (zoomed back to the overview), draw nothing rather than
+  // a line from empty water.
+  if (!pelletVisibleAtLod(selected, keep)) return;
   const from = sim.pellets[selectedBeadId];
   if (from === undefined || !rectContains(view, from.x, from.y)) return;
 
   let began = false;
   for (const depId of deps) {
+    const dep = pellets.find((p) => p.beadId === depId);
     const to = sim.pellets[depId];
-    // a dep that is closed, uncapped-out, or off screen has no on-screen pellet
-    // to point at — skip rather than draw a line into empty water.
-    if (to === undefined || !rectContains(view, to.x, to.y)) continue;
+    // a dep that is closed, capped out, off screen, or thinned out at this zoom
+    // has no on-screen pellet to point at — skip rather than draw into open water.
+    if (dep === undefined || to === undefined) continue;
+    if (!pelletVisibleAtLod(dep, keep) || !rectContains(view, to.x, to.y)) continue;
     if (!began) {
       ctx.beginPath();
       began = true;
