@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { FishEntity, ScenePalette, SimState } from '../contracts';
 import { buildScenePalette } from './palette';
 import { fishDepthZ } from './depth';
-import { RICH_FISH_BUDGET, paintFishLayer, usesRichFishPath } from './fishPainter';
+import { RICH_FISH_BUDGET, dormantRigKeys, paintFishLayer, usesRichFishPath } from './fishPainter';
+import type { AquariumPose } from '../contracts';
 import type { LayerTransform } from './layers';
 
 const TOKENS: Record<string, string> = {
@@ -181,5 +182,36 @@ describe('paintFishLayer size budget (largest fish richen, rest flat, work bound
     const atBudget = drawFishScene(RICH_FISH_BUDGET, 1.0);
     expect(over.gradients()).toBeGreaterThan(0);
     expect(over.gradients()).toBeLessThanOrEqual(atBudget.gradients());
+  });
+});
+
+describe('dormantRigKeys (a school with no active fish dims)', () => {
+  function at(id: string, homeKey: string, pose: AquariumPose, tombstoned = false): FishEntity {
+    return { ...fish(id), homeKey, pose, tombstoned };
+  }
+
+  it('marks a rig whose every live fish is idle or asleep as dormant', () => {
+    const dormant = dormantRigKeys([at('a1', 'reef-a', 'idle'), at('a2', 'reef-a', 'asleep')]);
+    expect(dormant.has('reef-a')).toBe(true);
+  });
+
+  it('never marks a rig with a working or distressed fish', () => {
+    const dormant = dormantRigKeys([
+      at('a1', 'reef-a', 'idle'),
+      at('a2', 'reef-a', 'working'), // one worker keeps the rig active
+      at('b1', 'reef-b', 'asleep'),
+      at('b2', 'reef-b', 'errored'), // a surfaced distress fish keeps it active
+    ]);
+    expect(dormant.has('reef-a')).toBe(false);
+    expect(dormant.has('reef-b')).toBe(false);
+  });
+
+  it('ignores tombstoned ghosts when deciding activity', () => {
+    // the only non-ghost fish is idle → the rig is dormant despite the ghost worker
+    const dormant = dormantRigKeys([
+      at('a1', 'reef-a', 'working', true),
+      at('a2', 'reef-a', 'idle'),
+    ]);
+    expect(dormant.has('reef-a')).toBe(true);
   });
 });

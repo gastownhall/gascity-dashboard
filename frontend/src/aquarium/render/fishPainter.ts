@@ -6,7 +6,13 @@
 // minimum drawn size, so gradients never fire on the perf fixture.
 // No save/restore per fish: placement is one setTransform.
 
-import type { FishEntity, FishKinematics, ScenePalette, SimState } from '../contracts';
+import type {
+  AquariumPose,
+  FishEntity,
+  FishKinematics,
+  ScenePalette,
+  SimState,
+} from '../contracts';
 import type { FishAttitude, FishHull, FishSpine } from './fishGeometry';
 import {
   SPECIES,
@@ -85,8 +91,35 @@ const drawnScratch: number[] = [];
 const richScratch: boolean[] = [];
 const rankScratch: number[] = [];
 
+/** A dormant-rig school recedes to this fraction of its normal opacity. */
+const DORMANT_ALPHA = 0.62;
+
+/** A pose is "active" if the agent is doing or needs work — working, or any of
+ *  the four distress poses (which rise to the surface shelf). Only idle and
+ *  asleep are inactive. */
+function isActivePose(pose: AquariumPose): boolean {
+  return pose !== 'idle' && pose !== 'asleep';
+}
+
+/** Rig keys whose every live fish is idle or asleep — no working or distressed
+ *  fish. Their school dims so a glance skips a project nobody is pushing. A rig
+ *  with any active fish (or any surfaced distress) is never dormant. */
+export function dormantRigKeys(fishList: readonly FishEntity[]): Set<string> {
+  const active = new Set<string>();
+  const present = new Set<string>();
+  for (const fish of fishList) {
+    if (fish.tombstoned) continue;
+    present.add(fish.homeKey);
+    if (isActivePose(fish.pose)) active.add(fish.homeKey);
+  }
+  const dormant = new Set<string>();
+  for (const key of present) if (!active.has(key)) dormant.add(key);
+  return dormant;
+}
+
 /** Cull + paint every fish, back-to-front by depth so near fish overlap far
- * ones. Leaves the actor layer transform installed. */
+ * ones. A dormant-rig fish recedes (dim shading + lower alpha). Leaves the actor
+ * layer transform installed. */
 export function paintFishLayer(
   ctx: CanvasRenderingContext2D,
   fishList: readonly FishEntity[],
@@ -97,6 +130,7 @@ export function paintFishLayer(
   clockMs: number,
 ): void {
   const n = fishList.length;
+  const dormant = dormantRigKeys(fishList);
   orderScratch.length = n;
   zScratch.length = n;
   drawnScratch.length = n;
@@ -146,12 +180,24 @@ export function paintFishLayer(
     if (kin === undefined) continue;
     const z = at(zScratch, index);
     const attitude = attitudeForPose(fish.pose);
+    const isDormant = dormant.has(fish.homeKey);
     // hue = rig identity (cached per palette+hue+variant, so this is a lookup);
-    // variant = the fish's shading attitude; band = its atmospheric depth.
+    // variant = the fish's shading attitude; band = its atmospheric depth. A
+    // dormant-rig fish also takes the dim shading so the whole school recedes.
     const variant =
-      attitude.dimmed || fish.tombstoned ? 'dim' : attitude.tense ? 'tense' : 'normal';
+      attitude.dimmed || fish.tombstoned || isDormant ? 'dim' : attitude.tense ? 'tense' : 'normal';
     const bands = countershadeBands(palette, variant, rigHue(fish.homeKey));
-    paintFish(ctx, fish, kin, at(bands, depthBand(z)), layer, clockMs, at(richScratch, k), z);
+    paintFish(
+      ctx,
+      fish,
+      kin,
+      at(bands, depthBand(z)),
+      layer,
+      clockMs,
+      at(richScratch, k),
+      z,
+      isDormant,
+    );
   }
   applyLayer(ctx, layer);
 }
@@ -165,6 +211,7 @@ function paintFish(
   clockMs: number,
   rich: boolean,
   z: number,
+  dimmed: boolean,
 ): void {
   const attitude = attitudeForPose(fish.pose);
   const swimPhase = swimPhaseFor(fish.species, kin.phase, clockMs);
@@ -180,7 +227,13 @@ function paintFish(
   placeFish(ctx, kin, attitude, layer, clockMs, dScale);
   const lineWidth = 1.25 / (layer.scale * dScale);
   const drawnPx = SPECIES[fish.species].length * layer.scale * dScale;
-  const alpha = fish.tombstoned ? 0.4 * depthAlpha(z) : depthAlpha(z);
+  // a tombstone is a ghost (0.4); a fish on a fully-dormant rig recedes a little
+  // (DORMANT_ALPHA) so the eye skips a project nobody is actively pushing.
+  const alpha = fish.tombstoned
+    ? 0.4 * depthAlpha(z)
+    : dimmed
+      ? DORMANT_ALPHA * depthAlpha(z)
+      : depthAlpha(z);
   if (alpha < 1) ctx.globalAlpha = alpha;
   const wantsFace = rich && drawnPx >= FACE_MIN_PX;
   if (rich) {
