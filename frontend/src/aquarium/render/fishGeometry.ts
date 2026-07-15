@@ -70,7 +70,11 @@ export const SPECIES: Record<FishSpecies, SpeciesProfile> = {
     noseBlunt: 0.15,
   },
   role: {
-    length: 85,
+    // The named oversight tier (project leads, dispatchers, reviewers) — sized
+    // well above the pool swarm (55) so a lead reads as a present, prominent
+    // creature at the overview, not another small worker. Below the mayor
+    // grouper (160), which stays the single biggest fish.
+    length: 110,
     stations: [0, 0.25, 0.5, 0.75, 1],
     dorsalWidths: [0.04, 0.125, 0.15, 0.076, 0.022],
     ventralWidths: [0.04, 0.14, 0.175, 0.084, 0.022],

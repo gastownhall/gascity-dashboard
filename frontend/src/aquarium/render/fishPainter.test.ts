@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { FishEntity, ScenePalette, SimState } from '../contracts';
 import { buildScenePalette } from './palette';
 import { fishDepthZ } from './depth';
-import { RICH_FISH_BUDGET, dormantRigKeys, paintFishLayer, usesRichFishPath } from './fishPainter';
+import {
+  RICH_FISH_BUDGET,
+  dormantRigKeys,
+  fishDimsForDormancy,
+  paintFishLayer,
+  usesRichFishPath,
+} from './fishPainter';
 import type { AquariumPose } from '../contracts';
 import type { LayerTransform } from './layers';
 
@@ -213,5 +219,27 @@ describe('dormantRigKeys (a school with no active fish dims)', () => {
       at('a2', 'reef-a', 'idle'),
     ]);
     expect(dormant.has('reef-a')).toBe(true);
+  });
+});
+
+describe('fishDimsForDormancy (only the pool swarm recedes on a quiet rig)', () => {
+  const dormant = new Set(['reef-a']);
+
+  it('dims a pool worker on a dormant rig', () => {
+    expect(
+      fishDimsForDormancy({ ...fish('p1'), species: 'pool', homeKey: 'reef-a' }, dormant),
+    ).toBe(true);
+  });
+
+  it('does NOT dim a role/lead fish on a dormant rig (a lead stays present)', () => {
+    expect(
+      fishDimsForDormancy({ ...fish('l1'), species: 'role', homeKey: 'reef-a' }, dormant),
+    ).toBe(false);
+  });
+
+  it('does not dim any fish on an active rig', () => {
+    expect(
+      fishDimsForDormancy({ ...fish('p2'), species: 'pool', homeKey: 'reef-b' }, dormant),
+    ).toBe(false);
   });
 });

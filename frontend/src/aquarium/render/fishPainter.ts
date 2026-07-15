@@ -117,6 +117,15 @@ export function dormantRigKeys(fishList: readonly FishEntity[]): Set<string> {
   return dormant;
 }
 
+/** Whether a fish recedes because its rig is dormant. Only the pool swarm dims;
+ *  the named role tier (project leads and the other oversight agents) stays at
+ *  full presence even on a quiet rig, so an operator can always see who leads a
+ *  project that nobody is actively pushing. The mayor grouper is never in a rig
+ *  school, so it is unaffected either way. */
+export function fishDimsForDormancy(fish: FishEntity, dormantKeys: ReadonlySet<string>): boolean {
+  return fish.species === 'pool' && dormantKeys.has(fish.homeKey);
+}
+
 /** Cull + paint every fish, back-to-front by depth so near fish overlap far
  * ones. A dormant-rig fish recedes (dim shading + lower alpha). Leaves the actor
  * layer transform installed. */
@@ -180,7 +189,7 @@ export function paintFishLayer(
     if (kin === undefined) continue;
     const z = at(zScratch, index);
     const attitude = attitudeForPose(fish.pose);
-    const isDormant = dormant.has(fish.homeKey);
+    const isDormant = fishDimsForDormancy(fish, dormant);
     // hue = rig identity (cached per palette+hue+variant, so this is a lookup);
     // variant = the fish's shading attitude; band = its atmospheric depth. A
     // dormant-rig fish also takes the dim shading so the whole school recedes.
