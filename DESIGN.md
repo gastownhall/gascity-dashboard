@@ -192,6 +192,15 @@ licenses it; outside this route, nothing here applies.
   not a new channel, so the scarce P0s read at a glance in their own colour. Each
   stays truthful: age is `created_at`, size, luminance and bloom are `priority`,
   the drop fires only on a real new bead.
+- **The surface shelf is the "needs a human" scan line.** Every distressed agent
+  (awaiting-input, errored, stalled, rate-limited — the shared
+  `AgentNeedsYouReason`) rises to a stack of micro-lanes just under the waterline,
+  so one glance at the top strip reads what needs you instead of scanning the
+  whole column for scattered distress. Each rises near its home x and trails a
+  faint mooring line down to its rig's formation, so "which rig needs you"
+  survives the climb; the per-pose silhouette (open gape / belly-up / tremor /
+  tucked) keeps the four reasons distinct within the shelf, so the Greyscale Test
+  still passes. Reduced-motion holds the surfaced fish as a truthful still frame.
 - **The backlog thins with distance so the fleet stays the subject.** A busy
   city has hundreds of open beads and only a handful of live sessions, so at the
   whole-tank overview the drifting backlog is sampled to a representative slice
