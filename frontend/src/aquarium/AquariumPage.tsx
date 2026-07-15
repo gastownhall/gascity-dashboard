@@ -25,6 +25,7 @@ import { hitTestScene, type HitResult } from './page/hitTest';
 import { HoverTooltip } from './page/HoverTooltip';
 import { readBodyFontFamily, readThemeTokens } from './page/paletteTokens';
 import { SrFishList } from './page/SrFishList';
+import { StrandedShelf } from './page/StrandedShelf';
 import { useAquariumCamera } from './page/useAquariumCamera';
 import { useAquariumData } from './page/useAquariumData';
 import { useAquariumRenderLoop } from './page/useAquariumRenderLoop';
@@ -182,6 +183,7 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
         onReset={camera.resetCamera}
       />
       <AquariumLegend legend={rigLegend} />
+      <StrandedShelf work={snapshot?.strandedWork ?? []} />
       {selected === null && hover !== null && (
         <HoverTooltip
           hit={hover.hit}

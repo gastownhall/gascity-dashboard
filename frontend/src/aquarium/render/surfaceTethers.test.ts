@@ -67,7 +67,7 @@ function snapshot(fishList: FishEntity[], formations: RigFormation[] = [FORMATIO
     pellets: [],
     needsAttention: 0,
     pelletOverflow: {},
-    strandedByRig: {},
+    strandedWork: [],
   };
 }
 function simWith(entries: Record<string, { x: number; y: number }>): SimState {

@@ -136,9 +136,20 @@ export interface WorldSnapshot {
    *  marker (the formation label already carries the full openBeadTotal); kept
    *  for the cap-correctness tests and a future "N more" drill-in. */
   pelletOverflow: Record<string, number>;
-  /** per-rig count of stranded beads (orphaned work whose assigned owner's
-   *  session died); rigs with none are absent. Surfaced as a per-rig shelf marker. */
-  strandedByRig: Record<string, number>;
+  /** orphaned work whose assigned owner's session died — surfaced as the
+   *  drillable "N stranded" shelf pill (grouped by rig, each linking to the
+   *  bead). Empty when nothing is orphaned. */
+  strandedWork: StrandedWorkItem[];
+}
+
+/** One orphaned bead for the stranded shelf drill-in. */
+export interface StrandedWorkItem {
+  beadId: string;
+  title: string;
+  /** owning rig key, for grouping in the drill-in list */
+  rigKey: string;
+  /** route to the bead's detail (same target a pellet links to) */
+  linkTo: string;
 }
 
 export const PELLET_RENDER_CAP_PER_RIG = 40;

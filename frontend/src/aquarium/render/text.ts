@@ -10,7 +10,7 @@
 // every string here is a snapshot fact; nothing is invented to fill the glass.
 
 import type { Camera, ScenePalette, SimState, Viewport, WorldSnapshot } from '../contracts';
-import { CITY_KEY, WORLD } from '../contracts';
+import { CITY_KEY } from '../contracts';
 import { SPECIES } from './fishGeometry';
 import type { LayerTransform } from './layers';
 import { PARALLAX, applyScreenSpace, layerTransform, worldToScreen } from './layers';
@@ -39,7 +39,6 @@ export function paintTextLayers(
   // whole-tank view (where they would read as categorical bars)
   if (fRig > 0.01) {
     paintRigLabels(ctx, snapshot, palette, mid, viewport, fRig);
-    paintStrandedMarkers(ctx, snapshot, palette, mid, viewport, fRig);
   }
   // at LOD1 the drift resolves into its initiatives: same-epic beads get a
   // shared label, and the few held morsels name "what's being worked on" — while
@@ -73,31 +72,6 @@ function setLetterSpacing(ctx: CanvasRenderingContext2D, value: string): void {
  *  Stranded WORK has no agent to be a fish, so it surfaces as this marker while
  *  its pellet stays sunk. Present at the working overview (rigLabelFade) so the
  *  alarm reads at a glance, gone only at the fully zoomed-out tank. */
-function paintStrandedMarkers(
-  ctx: CanvasRenderingContext2D,
-  snapshot: WorldSnapshot,
-  palette: ScenePalette,
-  mid: LayerTransform,
-  viewport: Viewport,
-  alpha: number,
-): void {
-  const entries = Object.entries(snapshot.strandedByRig);
-  if (entries.length === 0) return;
-  const anchorByKey = new Map(snapshot.formations.map((f) => [f.key, f]));
-  ctx.font = `600 11px ${palette.fontFamily}`;
-  ctx.textAlign = 'center';
-  ctx.fillStyle = palette.warn;
-  ctx.globalAlpha = alpha;
-  for (const [rigKey, count] of entries) {
-    const formation = anchorByKey.get(rigKey);
-    if (formation === undefined || count <= 0) continue;
-    const pos = worldToScreen(mid, formation.anchorX, WORLD.waterlineY + 8);
-    if (offscreen(pos, viewport, 60)) continue;
-    ctx.fillText(`◆ ${count} stranded`, pos.x, pos.y);
-  }
-  ctx.globalAlpha = 1;
-}
-
 function paintRigLabels(
   ctx: CanvasRenderingContext2D,
   snapshot: WorldSnapshot,

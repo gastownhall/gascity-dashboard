@@ -201,11 +201,13 @@ licenses it; outside this route, nothing here applies.
   survives the climb; the per-pose silhouette (open gape / belly-up / tremor /
   tucked) keeps the four reasons distinct within the shelf, so the Greyscale Test
   still passes. Reduced-motion holds the surfaced fish as a truthful still frame.
-  Work that is stuck with no agent to be its fish surfaces as a small per-rig
-  marker on the same shelf, and it counts **orphaned** work only — a bead whose
-  assigned agent's session died mid-flight. An idle rig's unassigned backlog is
-  backlog, not an alarm: surfacing every ready bead of every agentless rig would
-  drown this scan line, so it stays in the drift and the formation totals.
+  Work that is stuck with no agent to be its fish surfaces as a single warn
+  **"N stranded"** pill at the surface that expands to a drill-in list (grouped
+  by rig, each row linking to the bead), and it counts **orphaned** work only —
+  a bead whose assigned agent's session died mid-flight. An idle rig's unassigned
+  backlog is backlog, not an alarm: surfacing every ready bead of every agentless
+  rig would drown this scan line, so it stays in the drift and the formation
+  totals. The pill is warn, never the ledger's reserved maroon.
 - **The backlog thins with distance so the fleet stays the subject.** A busy
   city has hundreds of open beads and only a handful of live sessions, so at the
   whole-tank overview the drifting backlog is sampled to a representative slice
@@ -250,7 +252,8 @@ licenses it; outside this route, nothing here applies.
 ### Named Rules
 
 **The Pane Rule.** The reef is a window, not a page. Chrome inside the glass
-is limited to the ledger line, the connection state, the zoom controls, and a
+is limited to the ledger line, the connection state, the zoom controls, the
+drillable "N stranded" pill (present only when work is orphaned), and a
 collapsible key (the rig roster mapping colour to rig name + open-bead count,
 and the bead **zone** key naming where each state's morsel lives); everything
 else the operator learns by looking at the water. The key is translucent and collapses to a single toggle,

@@ -12,6 +12,8 @@
 
 import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
 import { parseAssignee } from 'gas-city-dashboard-shared';
+import type { StrandedWorkItem } from '../contracts';
+import { beadLinkTo } from './pellets';
 
 export interface StrandedInputs {
   beadsByRig: Readonly<Record<string, { items: readonly Bead[]; total: number }>>;
@@ -20,21 +22,22 @@ export interface StrandedInputs {
   liveSessionIds: ReadonlySet<string>;
 }
 
-/** Per-rig count of stranded beads (rigs with none are absent from the map). */
-export function buildStrandedByRig(inputs: StrandedInputs): Record<string, number> {
+/** The orphaned beads across all rigs (empty when nothing is stranded), each
+ *  carrying its rig and bead-detail link for the drillable shelf. */
+export function buildStrandedWork(inputs: StrandedInputs): StrandedWorkItem[] {
   // Only beads present in the active store exist here; a dependency that has
   // left the store has closed and no longer blocks.
   const activeIds = new Set<string>();
   for (const entry of Object.values(inputs.beadsByRig))
     for (const bead of entry.items) activeIds.add(bead.id);
 
-  const out: Record<string, number> = {};
+  const out: StrandedWorkItem[] = [];
   for (const [rigKey, entry] of Object.entries(inputs.beadsByRig)) {
-    let n = 0;
     for (const bead of entry.items) {
-      if (isStranded(bead, activeIds, inputs.liveSessionIds)) n += 1;
+      if (isStranded(bead, activeIds, inputs.liveSessionIds)) {
+        out.push({ beadId: bead.id, title: bead.title, rigKey, linkTo: beadLinkTo(bead.id) });
+      }
     }
-    if (n > 0) out[rigKey] = n;
   }
   return out;
 }

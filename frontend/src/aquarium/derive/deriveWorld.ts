@@ -12,7 +12,7 @@ import { buildPellets, type BeadHolder } from './pellets';
 import { diffEatenPellets } from './eating';
 import { reconcileFishTombstones, type FishMemory } from './tombstones';
 import { isDistressPose } from './pose';
-import { buildStrandedByRig } from './stranded';
+import { buildStrandedWork } from './stranded';
 
 export interface DeriveInputs {
   sessions: SessionResponse[];
@@ -76,7 +76,7 @@ export function deriveWorldSnapshot(
     const sid = sessionIdByFishId.get(f.id);
     if (sid !== undefined) liveSessionIds.add(sid);
   }
-  const strandedByRig = buildStrandedByRig({
+  const strandedWork = buildStrandedWork({
     beadsByRig: inputs.beadsByRig,
     liveSessionIds,
   });
@@ -88,7 +88,7 @@ export function deriveWorldSnapshot(
       pellets: [...rawPellets, ...eatenPellets],
       needsAttention,
       pelletOverflow,
-      strandedByRig,
+      strandedWork,
     },
     memory: { fish: fishMemory, prevBeadHolders: beadHolders },
   };
