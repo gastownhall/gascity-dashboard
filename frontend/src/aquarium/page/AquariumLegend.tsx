@@ -42,7 +42,7 @@ export function AquariumLegend({ legend }: AquariumLegendProps) {
   const [quietOpen, setQuietOpen] = useState(false);
   if (legend.active.length === 0 && legend.quiet.length === 0) return null;
   return (
-    <div className="absolute bottom-4 left-4 z-10 flex w-[15rem] flex-col items-start gap-2 border border-rule bg-surface/70 px-3 py-2 text-label backdrop-blur-sm">
+    <div className="absolute bottom-4 left-4 z-10 flex w-[16rem] flex-col items-start gap-2 border border-rule bg-surface/70 px-3 py-2 text-label backdrop-blur-sm">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -128,7 +128,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
  *  the signal, never the colour. */
 function ZoneKey() {
   return (
-    <div className="relative" style={{ height: '3.5rem' }}>
+    <div className="relative" style={{ height: '6rem' }}>
       <span aria-hidden="true" className="absolute bottom-1 left-[3px] top-1 w-px bg-rule" />
       {ZONES.map((zone) => (
         <div
@@ -150,13 +150,13 @@ function ZoneKey() {
  *  rig hue, not a fixed colour. */
 function PriorityNote() {
   return (
-    <div className="flex items-center gap-2 pt-1 uppercase tracking-wider text-fg-muted">
+    <div className="flex items-center gap-2 pt-1 uppercase tracking-normal text-fg-muted">
       <span aria-hidden="true" className="flex items-center gap-1">
         <span className="h-1 w-1 rounded-full bg-fg-faint" />
         <span className="h-1.5 w-1.5 rounded-full bg-fg-muted" />
         <span className="h-2.5 w-2.5 rounded-full bg-fg" />
       </span>
-      <span>bigger · brighter = priority</span>
+      <span className="whitespace-nowrap">bigger · brighter = priority</span>
     </div>
   );
 }
