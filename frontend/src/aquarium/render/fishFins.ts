@@ -23,6 +23,11 @@ export interface FishFins {
 
 const DEG = Math.PI / 180;
 
+/** Station the caudal fin roots on. Forward of the s=1 tail tip so the fin's
+ *  base overlaps the body (which is painted over it), keeping the tail visually
+ *  continuous with the flank instead of connecting at the near-zero peduncle. */
+const CAUDAL_ROOT_S = 0.86;
+
 export function fishFins(spine: FishSpine, hull: FishHull, swimPhase: number): FishFins {
   const p = SPECIES[spine.species];
   // finClamp is 1 for a spread fish and the pose's clamp fraction when folded;
@@ -152,13 +157,15 @@ function buildCaudal(
     y: last.y + (td.x * Math.sin(a) + td.y * Math.cos(a)) * len * k,
   });
   const midLen = p.caudal === 'forked' ? 0.45 : p.caudal === 'rounded' ? 1.12 : 1.0;
-  return [
-    at(hull.dorsal, n - 1),
-    tipAt(-spread, 1),
-    tipAt(0, midLen),
-    tipAt(spread, 1),
-    at(hull.ventral, n - 1),
-  ];
+  // Root the fin on a chord forward of the tail tip, not on the near-zero-width
+  // s=1 peduncle: at s=1 the body has already tapered to a point, so a fin
+  // rooted there connects by a pinpoint and reads as a detached shape. Sampling
+  // the wider hull outline at CAUDAL_ROOT_S buries the fin's base under the body
+  // (the caudal is painted before the body, so the overlap is covered) and the
+  // tail emerges continuous with the flank.
+  const rootTop = outlineAt(hull.dorsal, spine.stations, CAUDAL_ROOT_S);
+  const rootBottom = outlineAt(hull.ventral, spine.stations, CAUDAL_ROOT_S);
+  return [rootTop, tipAt(-spread, 1), tipAt(0, midLen), tipAt(spread, 1), rootBottom];
 }
 
 function lerpPt(a: Pt, b: Pt, t: number): Pt {

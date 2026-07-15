@@ -162,14 +162,35 @@ describe('fishHull', () => {
     expect(pelvicRootY(1.5)).toBeGreaterThan(pelvicRootY(1));
   });
 
-  it('the caudal roots exactly on the hull peduncle (tail is not a floating wedge)', () => {
+  it('the caudal roots forward of the tail tip so its base tucks under the body (not a floating wedge)', () => {
+    // Rooting exactly on the s=1 peduncle connected the fin at the point where
+    // the body has already tapered to nothing, so it read as a detached wedge.
+    // The root must sit forward of the tail tip — but still on the peduncle —
+    // so the body (painted over the fin) covers the overlap and the tail stays
+    // continuous with the flank at every point in the swim cycle.
     for (const species of ALL_SPECIES) {
-      const spine = spineFor('working', species);
-      const hull = fishHull(spine, species, 1);
-      const n = spine.points.length;
-      const caudal = fishFins(spine, hull, 0).caudal;
-      expect(at(caudal, 0)).toEqual(at(hull.dorsal, n - 1));
-      expect(at(caudal, caudal.length - 1)).toEqual(at(hull.ventral, n - 1));
+      for (let k = 0; k < 16; k += 1) {
+        const spine = spineFor('working', species, (k / 16) * TAU, 1);
+        const hull = fishHull(spine, species, 1);
+        const caudal = fishFins(spine, hull, (k / 16) * TAU).caudal;
+        const rootTop = at(caudal, 0);
+        const rootBottom = at(caudal, caudal.length - 1);
+        const tailTip = at(spine.points, spine.points.length - 1);
+        // project onto the nose→tail axis: 0 at nose, 1 at the tail tip
+        const ax = { x: tailTip.x - hull.nose.x, y: tailTip.y - hull.nose.y };
+        const axLen2 = ax.x ** 2 + ax.y ** 2 || 1;
+        const proj = (pt: Pt): number =>
+          ((pt.x - hull.nose.x) * ax.x + (pt.y - hull.nose.y) * ax.y) / axLen2;
+        // forward of the tail tip (base overlaps the body) …
+        expect(proj(rootTop), `${species} top @${k}`).toBeLessThan(1);
+        expect(proj(rootBottom), `${species} bottom @${k}`).toBeLessThan(1);
+        // … but still back on the peduncle, not a mid-body flap
+        expect(proj(rootTop), `${species} top fwd @${k}`).toBeGreaterThan(0.7);
+        // a real chord, not the near-zero-width s=1 pinpoint
+        expect(dist(rootTop, rootBottom), `${species} chord @${k}`).toBeGreaterThan(
+          0.04 * SPECIES[species].length,
+        );
+      }
     }
   });
 
