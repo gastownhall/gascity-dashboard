@@ -97,6 +97,9 @@ export interface PelletEntity {
   /** route to open this bead's detail (the supervisor bead-detail modal),
    *  mirroring a fish's linkTo to its agent. */
   linkTo: string;
+  /** bead ids this bead depends on (its `depends_on_id`s). Absent when it has
+   *  none. Drawn as faint links only while this pellet is the selected one. */
+  dependsOn?: readonly string[];
   rigKey: string;
   state: PelletState;
   /** bead age, 0 (just created) .. 1 (stale). Drives an open bead's drift
@@ -235,7 +238,7 @@ export type PaintScene = (
   camera: Camera,
   viewport: Viewport,
   palette: ScenePalette,
-  opts: { reducedMotion: boolean },
+  opts: { reducedMotion: boolean; selectedBeadId?: string | null },
 ) => void;
 
 // ---------------------------------------------------------------------------

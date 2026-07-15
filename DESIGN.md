@@ -195,6 +195,13 @@ licenses it; outside this route, nothing here applies.
   visible pellets never means fewer beads — the same truthful contract as the
   per-rig render cap. This keeps the operator's subject, the fleet, from
   drowning in a cloud of near-identical food.
+- **Dependencies reveal on focus, never globally.** Selecting a bead pellet
+  draws a faint dashed link to each bead it depends on whose pellet is on screen
+  (dashed so it never reads as the solid fish-to-bead tether). A busy city has
+  hundreds of dependency edges; drawing them all at once is spaghetti that
+  re-creates the coloured-dust problem, so the graph is revealed one bead at a
+  time and clears when the selection does — the honest-zoom principle applied to
+  interaction, not just distance.
 - **The One Voice Rule and tabular figures** for all overlay and in-scene
   text. The scene draws creatures; the type stays the system's type.
 - **`prefers-reduced-motion`.** The scene freezes to a truthful still frame:

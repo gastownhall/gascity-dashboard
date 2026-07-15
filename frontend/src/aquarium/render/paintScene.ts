@@ -17,6 +17,7 @@ import type { Camera, PaintScene, ScenePalette, Viewport, WorldSnapshot } from '
 import { paintFormations } from './formations';
 import { paintFishLayer } from './fishPainter';
 import { PARALLAX, applyLayer, applyScreenSpace, layerTransform, visibleWorldRect } from './layers';
+import { paintDepLinks } from './depLinks';
 import { paintPellets } from './pellets';
 import { paintTethers } from './tethers';
 import {
@@ -68,6 +69,7 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
   blitStatic(ctx, cache, camera, viewport, CACHE_MARGIN);
 
   applyLayer(ctx, actors);
+  paintDepLinks(ctx, opts.selectedBeadId, snapshot.pellets, sim, palette, actorView, actors.scale);
   paintTethers(ctx, snapshot.pellets, sim, palette, actorView, actors.scale);
   paintPellets(ctx, snapshot.pellets, sim, palette, actorView, actors.scale);
   paintFishLayer(ctx, snapshot.fish, sim, palette, actors, actorView, clockMs);

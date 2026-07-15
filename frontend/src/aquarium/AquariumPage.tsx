@@ -98,6 +98,12 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
   // (which needs to trigger a repaint on gesture) and the render-loop hook
   // (which needs the camera's ref to paint from) — same "keep a ref pointed
   // at the latest callback" idiom useCachedData.ts uses for its fetcher.
+  const [hover, setHover] = useState<SelectedHit | null>(null);
+  const [selected, setSelected] = useState<SelectedHit | null>(null);
+  const lastHoverAtRef = useRef(0);
+  // Only a selected PELLET drives dependency links; a selected fish draws none.
+  const selectedBeadId = selected?.hit.kind === 'pellet' ? selected.hit.entity.beadId : null;
+
   const requestPaintRef = useRef<() => void>(() => {});
   const camera = useAquariumCamera(viewport, () => requestPaintRef.current());
   const renderLoop = useAquariumRenderLoop({
@@ -108,12 +114,9 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
     palette,
     reducedMotion,
     isFixture: fixtureKind !== null,
+    selectedBeadId,
   });
   requestPaintRef.current = renderLoop.requestPaint;
-
-  const [hover, setHover] = useState<SelectedHit | null>(null);
-  const [selected, setSelected] = useState<SelectedHit | null>(null);
-  const lastHoverAtRef = useRef(0);
 
   const resolveHit = useCallback(
     (cssX: number, cssY: number): SelectedHit | null => {

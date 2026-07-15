@@ -38,6 +38,8 @@ export interface UseAquariumRenderLoopArgs {
   palette: ScenePalette;
   reducedMotion: boolean;
   isFixture: boolean;
+  /** bead id of the selected pellet, if any — draws its dependency links. */
+  selectedBeadId: string | null;
 }
 
 export interface AquariumRenderLoopApi {
@@ -58,6 +60,7 @@ export function useAquariumRenderLoop({
   palette,
   reducedMotion,
   isFixture,
+  selectedBeadId,
 }: UseAquariumRenderLoopArgs): AquariumRenderLoopApi {
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
@@ -69,6 +72,8 @@ export function useAquariumRenderLoop({
   reducedMotionRef.current = reducedMotion;
   const isFixtureRef = useRef(isFixture);
   isFixtureRef.current = isFixture;
+  const selectedBeadIdRef = useRef(selectedBeadId);
+  selectedBeadIdRef.current = selectedBeadId;
   const simRef = useRef<SimState>(INITIAL_SIM_STATE);
 
   useCanvasDprSizing(canvasRef, viewport);
@@ -91,7 +96,7 @@ export function useAquariumRenderLoop({
         cameraRef.current,
         viewportRef.current,
         paletteRef.current,
-        { reducedMotion: reducedMotionRef.current },
+        { reducedMotion: reducedMotionRef.current, selectedBeadId: selectedBeadIdRef.current },
       );
     },
     [canvasRef, cameraRef],
@@ -123,7 +128,7 @@ export function useAquariumRenderLoop({
   useEffect(() => {
     if (!reducedMotion) return;
     paintOnce(0);
-  }, [reducedMotion, snapshot, viewport, palette, paintOnce]);
+  }, [reducedMotion, snapshot, viewport, palette, selectedBeadId, paintOnce]);
 
   const requestPaint = useCallback(() => {
     if (reducedMotionRef.current) paintOnce(0);

@@ -228,6 +228,35 @@ describe('radiusScaleForPriority', () => {
   });
 });
 
+describe('bead dependencies onto the pellet', () => {
+  it('carries dependsOn from bead.dependencies (the depends_on_id list)', () => {
+    const b: Bead = {
+      ...bead('a-1', 'open'),
+      dependencies: [
+        { depends_on_id: 'x-1', issue_id: 'a-1', type: 'blocks' },
+        { depends_on_id: 'x-2', issue_id: 'a-1', type: 'blocks' },
+      ],
+    };
+    const p = buildPellets({
+      beadsByRig: { alpha: { items: [b], total: 1 } },
+      sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
+    }).pellets[0];
+    expect(p?.dependsOn).toEqual(['x-1', 'x-2']);
+  });
+
+  it('omits dependsOn when the bead has none', () => {
+    const p = buildPellets({
+      beadsByRig: { alpha: { items: [bead('a-1', 'open')], total: 1 } },
+      sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
+    }).pellets[0];
+    expect(p?.dependsOn).toBeUndefined();
+  });
+});
+
 describe('beadLinkTo', () => {
   it('links a bead to its supervisor bead-detail route, url-encoded', () => {
     expect(beadLinkTo('mem-shs5t')).toBe('/beads?bead=mem-shs5t');

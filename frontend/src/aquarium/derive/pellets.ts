@@ -122,6 +122,7 @@ function toPellet(
     state === 'held'
       ? sessionIdToFishId.get(parseAssignee(bead.assignee ?? '').sessionId ?? '')
       : undefined;
+  const dependsOn = (bead.dependencies ?? []).map((d) => d.depends_on_id);
   return [
     {
       beadId: bead.id,
@@ -133,6 +134,7 @@ function toPellet(
       ageFraction: ageFractionFor(bead.created_at, nowMs),
       radiusScale: radiusScaleForPriority(bead.priority),
       ...(isP0Priority(bead.priority) ? { isP0: true } : {}),
+      ...(dependsOn.length > 0 ? { dependsOn } : {}),
       ...(arriving ? { arriving } : {}),
       ...(fishId !== undefined ? { fishId } : {}),
     },
