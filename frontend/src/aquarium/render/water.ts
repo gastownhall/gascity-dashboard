@@ -131,9 +131,14 @@ export function paintSeabed(
   const left = Math.max(view.left, 0);
   const right = Math.min(view.right, WORLD.width);
   if (right <= left) return;
-  fillBand(ctx, left, right, (x) => seabedRidgeY(x, WORLD.seabedY - 150) - 40, c.farDune);
-  fillBand(ctx, left, right, (x) => seabedRidgeY(x, WORLD.seabedY - 78) - 22, c.backDune);
-  fillBand(ctx, left, right, (x) => seabedRidgeY(x, WORLD.seabedY), sandGradient(ctx, c));
+  // The floor fills to the bottom of the visible rect, never stopping short at
+  // WORLD.height — a tall viewport used to reveal a flat dead band of water
+  // colour below the seabed. Below WORLD.height the sand gradient clamps to its
+  // front (darkest) tone, so the extra depth reads as more of the same near sand.
+  const floorY = Math.max(WORLD.height, view.bottom);
+  fillBand(ctx, left, right, (x) => seabedRidgeY(x, WORLD.seabedY - 150) - 40, c.farDune, floorY);
+  fillBand(ctx, left, right, (x) => seabedRidgeY(x, WORLD.seabedY - 78) - 22, c.backDune, floorY);
+  fillBand(ctx, left, right, (x) => seabedRidgeY(x, WORLD.seabedY), sandGradient(ctx, c), floorY);
   strokeRidge(ctx, left, right, (x) => seabedRidgeY(x, WORLD.seabedY), c.ridge, c.trough);
   paintGrain(ctx, left, right, c);
 }
@@ -153,14 +158,15 @@ function fillBand(
   right: number,
   topAt: (x: number) => number,
   fill: string | CanvasGradient,
+  bottomY: number,
 ): void {
   ctx.fillStyle = fill;
   ctx.beginPath();
-  ctx.moveTo(left, WORLD.height);
+  ctx.moveTo(left, bottomY);
   ctx.lineTo(left, topAt(left));
   for (let x = left; x <= right; x += 42) ctx.lineTo(x, topAt(x));
   ctx.lineTo(right, topAt(right));
-  ctx.lineTo(right, WORLD.height);
+  ctx.lineTo(right, bottomY);
   ctx.closePath();
   ctx.fill();
 }

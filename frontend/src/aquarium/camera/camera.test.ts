@@ -131,6 +131,20 @@ describe('clampCamera', () => {
     expect(clamped.x).toBeCloseTo(WORLD.width / 2, 5);
   });
 
+  it('anchors the water surface near the top of a too-tall viewport, not the world midpoint', () => {
+    const tall = { cssWidth: 1200, cssHeight: 1600, dpr: 1 };
+    const zoom = fitTankCamera(tall).zoom; // width-fit → the view is taller than the world
+    const clamped = clampCamera({ x: 2000, y: 50, zoom }, tall);
+    const halfHeightWu = tall.cssHeight / 2 / clamped.zoom;
+    const viewTop = clamped.y - halfHeightWu;
+    // the surface sits just below the top of the view (a small sliver of sky),
+    // so the over-tall remainder falls below the seabed instead of stranding
+    // empty water above the waterline (which centring on WORLD.height/2 did).
+    expect(viewTop).toBeLessThan(WORLD.waterlineY);
+    expect(viewTop).toBeGreaterThan(WORLD.waterlineY - 200);
+    expect(clamped.y).not.toBeCloseTo(WORLD.height / 2, 0);
+  });
+
   it('never lets the visible rect cross the world edge at high zoom', () => {
     const cam: Camera = { x: -500, y: -500, zoom: 3 };
     const clamped = clampCamera(cam, VIEWPORT_1440);

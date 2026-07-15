@@ -44,21 +44,38 @@ export function homeCamera(viewport: Viewport): Camera {
   return clampCamera({ x: WORLD.width / 2, y: WORLD.height / 2, zoom }, viewport);
 }
 
-/** Clamp zoom to [tank-fit, MAX_ZOOM], then clamp x/y so the visible rect
- * never crosses the world bounds. When the visible rect is wider/taller than
- * the world on an axis, that axis is forced to the world midpoint. */
+/** A sliver of open surface kept above the waterline when the tank can't fill
+ * the viewport height, so the surface still reads as a surface. */
+const OVERTALL_SURFACE_MARGIN_WU = 60;
+
+/** Clamp zoom to [tank-fit, MAX_ZOOM], then clamp x/y so the visible rect never
+ * crosses the world bounds. When the visible rect is wider than the world, x is
+ * forced to the world midpoint. When it is TALLER than the world, y anchors the
+ * water surface near the top of the view rather than centring the world — the
+ * over-tall remainder then falls below the seabed (which the sand paints all the
+ * way down) instead of stranding empty water above the waterline. */
 export function clampCamera(cam: Camera, viewport: Viewport): Camera {
   const zoom = clamp(cam.zoom, minZoom(viewport), MAX_ZOOM);
   const halfWidthWu = viewport.cssWidth / 2 / zoom;
   const halfHeightWu = viewport.cssHeight / 2 / zoom;
   const x = clampAxis(cam.x, halfWidthWu, WORLD.width);
-  const y = clampAxis(cam.y, halfHeightWu, WORLD.height);
+  const y = clampVerticalAxis(cam.y, halfHeightWu);
   return { x, y, zoom };
 }
 
 function clampAxis(value: number, halfExtent: number, worldExtent: number): number {
   if (halfExtent * 2 >= worldExtent) return worldExtent / 2;
   return clamp(value, halfExtent, worldExtent - halfExtent);
+}
+
+/** Vertical clamp: like clampAxis, but when the world can't fill the view height
+ * it anchors the waterline just below the top of the view (excess falls below
+ * the seabed, which is painted over with sand) instead of centring the world. */
+function clampVerticalAxis(value: number, halfHeightWu: number): number {
+  if (halfHeightWu * 2 >= WORLD.height) {
+    return WORLD.waterlineY - OVERTALL_SURFACE_MARGIN_WU + halfHeightWu;
+  }
+  return clamp(value, halfHeightWu, WORLD.height - halfHeightWu);
 }
 
 function clamp(v: number, lo: number, hi: number): number {

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ScenePalette, ThemeMood } from '../contracts';
 import { WORLD } from '../contracts';
+import type { ViewRect } from './layers';
 import { buildScenePalette } from './palette';
-import { seabedColors, seabedRidgeY } from './water';
+import { paintSeabed, seabedColors, seabedRidgeY } from './water';
 import { parseOklch } from './oklch';
 
 const TOKENS: Record<string, string> = {
@@ -77,5 +78,51 @@ describe('seabedColors (front-to-back depth gradient)', () => {
       expect(toHaze(c.farDune), `${mood} farDune haziest`).toBeLessThan(toHaze(c.backDune));
       expect(toHaze(c.backDune), `${mood} backDune hazier than mid`).toBeLessThan(toHaze(c.sand));
     }
+  });
+});
+
+// Records every vertex y the seabed polygons touch, so we can assert the floor
+// fills to the bottom of a too-tall viewport instead of stopping at WORLD.height.
+function seabedRecordingCtx(): { ctx: CanvasRenderingContext2D; ys: number[] } {
+  const ys: number[] = [];
+  const stub = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    globalAlpha: 1,
+    beginPath(): void {},
+    closePath(): void {},
+    fill(): void {},
+    stroke(): void {},
+    moveTo(_x: number, y: number): void {
+      ys.push(y);
+    },
+    lineTo(_x: number, y: number): void {
+      ys.push(y);
+    },
+    arc(_x: number, y: number): void {
+      ys.push(y);
+    },
+    createLinearGradient(): { addColorStop(): void } {
+      return { addColorStop(): void {} };
+    },
+  };
+  return { ctx: stub as unknown as CanvasRenderingContext2D, ys };
+}
+
+describe('paintSeabed (fills to the bottom of a tall viewport)', () => {
+  const fullWidth = (bottom: number): ViewRect => ({ left: 0, top: 0, right: WORLD.width, bottom });
+
+  it('extends the floor below WORLD.height when the visible rect bottom is lower', () => {
+    const { ctx, ys } = seabedRecordingCtx();
+    paintSeabed(ctx, palette('light'), fullWidth(WORLD.height + 800));
+    // no flat dead band below the seabed: the sand polygons reach the view bottom
+    expect(Math.max(...ys)).toBeGreaterThanOrEqual(WORLD.height + 800 - 1e-6);
+  });
+
+  it('does not extend the floor past WORLD.height when the view already fits', () => {
+    const { ctx, ys } = seabedRecordingCtx();
+    paintSeabed(ctx, palette('light'), fullWidth(WORLD.height - 400));
+    expect(Math.max(...ys)).toBeCloseTo(WORLD.height, 0);
   });
 });
