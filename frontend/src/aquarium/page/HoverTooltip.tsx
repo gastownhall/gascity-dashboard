@@ -3,25 +3,44 @@
 // div (not native title)"). Purely positional — no dismiss logic, no focus
 // trap; it disappears the moment the hover target changes.
 
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { FishEntity, PelletEntity } from '../contracts';
 import { PELLET_STATE_WORD } from '../contracts';
 import type { HitResult } from './hitTest';
+import { placeNearCursor, type PlacementViewport } from './placeNearCursor';
 
 export interface HoverTooltipProps {
   hit: NonNullable<HitResult>;
   screenX: number;
   screenY: number;
+  /** live css viewport, so a long tooltip flips off the right/bottom edge. */
+  viewport: PlacementViewport;
 }
 
 const TOOLTIP_OFFSET_PX = 12;
 
-export function HoverTooltip({ hit, screenX, screenY }: HoverTooltipProps) {
+export function HoverTooltip({ hit, screenX, screenY, viewport }: HoverTooltipProps) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el !== null) setSize({ w: el.offsetWidth, h: el.offsetHeight });
+  }, [hit]);
+  const { left, top } = placeNearCursor(
+    screenX,
+    screenY,
+    size.w,
+    size.h,
+    viewport,
+    TOOLTIP_OFFSET_PX,
+  );
   return (
     <div
+      ref={ref}
       role="status"
       aria-live="off"
-      className="pointer-events-none absolute z-10 whitespace-nowrap border border-rule bg-surface px-2 py-1 text-label uppercase tracking-wider text-fg-muted"
-      style={{ left: screenX + TOOLTIP_OFFSET_PX, top: screenY + TOOLTIP_OFFSET_PX }}
+      className="pointer-events-none absolute z-10 max-w-xs border border-rule bg-surface px-2 py-1 text-label uppercase tracking-wider text-fg-muted"
+      style={{ left, top }}
     >
       {hit.kind === 'fish' ? (
         <FishSummary fish={hit.entity} />

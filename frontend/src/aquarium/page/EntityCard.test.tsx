@@ -21,10 +21,18 @@ function pellet(over: Partial<PelletEntity> = {}): PelletEntity {
   };
 }
 
-function renderCard(hit: NonNullable<HitResult>) {
+const VIEWPORT = { cssWidth: 1200, cssHeight: 800 };
+
+function renderCard(hit: NonNullable<HitResult>, anchorX = 0, anchorY = 0) {
   render(
     <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-      <EntityCard hit={hit} anchorX={0} anchorY={0} onDismiss={vi.fn()} />
+      <EntityCard
+        hit={hit}
+        anchorX={anchorX}
+        anchorY={anchorY}
+        viewport={VIEWPORT}
+        onDismiss={vi.fn()}
+      />
     </MemoryRouter>,
   );
 }
@@ -44,5 +52,14 @@ describe('EntityCard pellet body', () => {
     expect(screen.getByText('Finalize the workflow')).toBeTruthy();
     expect(screen.getByText(/in progress/i)).toBeTruthy(); // held → "in progress"
     expect(screen.getByText(/mem-shs5t/)).toBeTruthy();
+  });
+});
+
+describe('EntityCard placement', () => {
+  it('offsets the card down-and-right of its anchor (placeNearCursor is wired)', () => {
+    renderCard({ kind: 'pellet', entity: pellet() }, 40, 60);
+    const card = screen.getByRole('dialog');
+    expect(card.style.left).toBe('56px'); // 40 + CARD_OFFSET_PX
+    expect(card.style.top).toBe('76px'); // 60 + CARD_OFFSET_PX
   });
 });

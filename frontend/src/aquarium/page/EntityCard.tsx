@@ -4,24 +4,33 @@
 // /reef keeps "the type stays the system's type" binding even inside the
 // diorama.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { FishEntity, PelletEntity } from '../contracts';
 import { PELLET_STATE_WORD } from '../contracts';
 import type { HitResult } from './hitTest';
+import { placeNearCursor, type PlacementViewport } from './placeNearCursor';
 
 export interface EntityCardProps {
   hit: NonNullable<HitResult>;
   /** css px, relative to the canvas container's own positioning context. */
   anchorX: number;
   anchorY: number;
+  /** live css viewport, so the card flips off the right/bottom edge. */
+  viewport: PlacementViewport;
   onDismiss: () => void;
 }
 
 const CARD_OFFSET_PX = 16;
 
-export function EntityCard({ hit, anchorX, anchorY, onDismiss }: EntityCardProps) {
+export function EntityCard({ hit, anchorX, anchorY, viewport, onDismiss }: EntityCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useLayoutEffect(() => {
+    const el = cardRef.current;
+    if (el !== null) setSize({ w: el.offsetWidth, h: el.offsetHeight });
+  }, [hit]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -49,7 +58,7 @@ export function EntityCard({ hit, anchorX, anchorY, onDismiss }: EntityCardProps
       role="dialog"
       aria-label={label}
       className="absolute z-10 max-w-xs border border-rule bg-surface px-4 py-3 text-body"
-      style={{ left: anchorX + CARD_OFFSET_PX, top: anchorY + CARD_OFFSET_PX }}
+      style={placeNearCursor(anchorX, anchorY, size.w, size.h, viewport, CARD_OFFSET_PX)}
     >
       {hit.kind === 'fish' ? (
         <FishCardBody fish={hit.entity} />

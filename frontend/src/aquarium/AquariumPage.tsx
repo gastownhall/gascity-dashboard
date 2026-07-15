@@ -183,13 +183,19 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
       />
       <AquariumLegend legend={rigLegend} />
       {selected === null && hover !== null && (
-        <HoverTooltip hit={hover.hit} screenX={hover.screenX} screenY={hover.screenY} />
+        <HoverTooltip
+          hit={hover.hit}
+          screenX={hover.screenX}
+          screenY={hover.screenY}
+          viewport={viewport}
+        />
       )}
       {selected !== null && (
         <EntityCard
           hit={selected.hit}
           anchorX={selected.screenX}
           anchorY={selected.screenY}
+          viewport={viewport}
           onDismiss={() => setSelected(null)}
         />
       )}
