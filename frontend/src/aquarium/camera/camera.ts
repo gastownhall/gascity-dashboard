@@ -37,11 +37,22 @@ export const HOME_ZOOM_FACTOR = 1.4;
  * fish read as creatures and the wide empty water crops away. Capped just below
  * LOD1 so the default view never shows rig labels regardless of viewport, and
  * clamped to the world bounds. The full tank stays reachable by zooming out —
- * fitTankCamera remains the zoom-out floor. */
+ * fitTankCamera remains the zoom-out floor. Centred on the POSE COLUMN midpoint
+ * (waterline↔seabed), not WORLD.height/2 — the latter includes the below-seabed
+ * sand and biased the view down, cropping the surface attention shelf; centring
+ * the pose column keeps the shelf (top) and the formations (seabed) both in the
+ * default view, which is what "needs help at a glance" requires. */
 export function homeCamera(viewport: Viewport): Camera {
   const fit = fitTankCamera(viewport);
-  const zoom = Math.min(fit.zoom * HOME_ZOOM_FACTOR, LOD1_ZOOM * 0.98);
-  return clampCamera({ x: WORLD.width / 2, y: WORLD.height / 2, zoom }, viewport);
+  // Cap the zoom so the full pose column (waterline↔seabed, plus a surface
+  // sliver) always fits the viewport height — otherwise 1.4×fit crops the
+  // surface shelf on taller aspect ratios. This realises the "full
+  // surface→seabed column shows" intent for every viewport, not just wide ones.
+  const columnFitZoom =
+    viewport.cssHeight / (WORLD.seabedY - WORLD.waterlineY + OVERTALL_SURFACE_MARGIN_WU);
+  const zoom = Math.min(fit.zoom * HOME_ZOOM_FACTOR, LOD1_ZOOM * 0.98, columnFitZoom);
+  const poseColumnMidY = (WORLD.waterlineY + WORLD.seabedY) / 2;
+  return clampCamera({ x: WORLD.width / 2, y: poseColumnMidY, zoom }, viewport);
 }
 
 /** A sliver of open surface kept above the waterline when the tank can't fill

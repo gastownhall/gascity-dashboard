@@ -40,6 +40,23 @@ describe('homeCamera (default / reset framing)', () => {
     expect(home.zoom).toBeGreaterThan(fit.zoom);
   });
 
+  it('frames the surface shelf AND the seabed (needs-help reads at a glance)', () => {
+    for (const vp of [VIEWPORT_1440, { cssWidth: 1920, cssHeight: 1080, dpr: 1 }]) {
+      const home = homeCamera(vp);
+      const halfHeightWu = vp.cssHeight / 2 / home.zoom;
+      const viewTop = home.y - halfHeightWu;
+      const viewBottom = home.y + halfHeightWu;
+      // the surface attention shelf (just under the waterline) is in view...
+      expect(viewTop, `${vp.cssWidth}x${vp.cssHeight} top`).toBeLessThanOrEqual(
+        WORLD.waterlineY + 40,
+      );
+      // ...and the seabed formations still show at the bottom.
+      expect(viewBottom, `${vp.cssWidth}x${vp.cssHeight} bottom`).toBeGreaterThanOrEqual(
+        WORLD.seabedY - 40,
+      );
+    }
+  });
+
   it('stays below the LOD1 label threshold at any viewport (an unlabelled overview)', () => {
     for (const vp of [
       VIEWPORT_1440,
