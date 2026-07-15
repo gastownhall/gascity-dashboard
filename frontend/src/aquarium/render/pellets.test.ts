@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { PelletEntity, ScenePalette, SimState, ThemeMood } from '../contracts';
-import { LOD1_ZOOM } from '../contracts';
+import { LOD1_ZOOM, LOD2_ZOOM } from '../contracts';
 import type { ViewRect } from './layers';
 import { buildScenePalette } from './palette';
-import { paintPellets, pelletColors } from './pellets';
+import { driftKeepCount, paintPellets, pelletColors, pelletVisibleAtLod } from './pellets';
 import { parseOklch } from './oklch';
 
 const TOKENS: Record<string, string> = {
@@ -135,5 +135,37 @@ describe('paintPellets P0 glint', () => {
     const { ctx, arcs } = glintRecordingCtx();
     paintPellets(ctx, pellets, simFor(['p0']), palette('dark'), WIDE, 2.0);
     expect(arcs).toHaveLength(0);
+  });
+});
+
+describe('LOD-aware backlog thinning', () => {
+  it('draws more of the backlog the closer you zoom (overview < LOD1 < LOD2)', () => {
+    expect(driftKeepCount(0.5)).toBeLessThan(driftKeepCount(LOD1_ZOOM));
+    expect(driftKeepCount(LOD1_ZOOM)).toBeLessThan(driftKeepCount(LOD2_ZOOM));
+    expect(driftKeepCount(LOD2_ZOOM)).toBe(driftKeepCount(5)); // saturated at LOD2
+  });
+
+  it('always keeps held, blocked, eaten and P0 at any zoom', () => {
+    for (const state of ['held', 'sunken', 'eaten'] as const) {
+      expect(pelletVisibleAtLod(glintPellet({ beadId: `x-${state}`, state }), 0)).toBe(true);
+    }
+    const p0 = glintPellet({ beadId: 'p0', state: 'drifting', isP0: true });
+    expect(pelletVisibleAtLod(p0, 0)).toBe(true);
+  });
+
+  it('thins ordinary drifting backlog at the overview, keeps all of it at LOD2, and only grows', () => {
+    const ids = Array.from({ length: 60 }, (_, i) =>
+      glintPellet({ beadId: `d-${i}`, state: 'drifting' }),
+    );
+    const overview = driftKeepCount(0.5);
+    const lod2 = driftKeepCount(LOD2_ZOOM);
+    const shownOverview = ids.filter((p) => pelletVisibleAtLod(p, overview)).length;
+    expect(ids.filter((p) => pelletVisibleAtLod(p, lod2)).length).toBe(60); // all at LOD2
+    expect(shownOverview).toBeLessThan(60); // thinned at the overview
+    expect(shownOverview).toBeGreaterThan(0); // a representative slice, not empty
+    // monotonic: anything shown at the overview is still shown zoomed in
+    for (const p of ids) {
+      if (pelletVisibleAtLod(p, overview)) expect(pelletVisibleAtLod(p, lod2)).toBe(true);
+    }
   });
 });

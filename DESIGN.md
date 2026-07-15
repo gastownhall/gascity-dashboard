@@ -187,6 +187,14 @@ licenses it; outside this route, nothing here applies.
   scarce P0s read at a glance without inventing a new variable. Each stays
   truthful: age is `created_at`, size and glint are `priority`, the drop fires
   only on a real new bead.
+- **The backlog thins with distance so the fleet stays the subject.** A busy
+  city has hundreds of open beads and only a handful of live sessions, so at the
+  whole-tank overview the drifting backlog is sampled to a representative slice
+  (held, blocked and P0 morsels always draw); zooming in only ever adds pellets,
+  and the exact per-rig totals stay in the formation label and the key. Fewer
+  visible pellets never means fewer beads — the same truthful contract as the
+  per-rig render cap. This keeps the operator's subject, the fleet, from
+  drowning in a cloud of near-identical food.
 - **The One Voice Rule and tabular figures** for all overlay and in-scene
   text. The scene draws creatures; the type stays the system's type.
 - **`prefers-reduced-motion`.** The scene freezes to a truthful still frame:

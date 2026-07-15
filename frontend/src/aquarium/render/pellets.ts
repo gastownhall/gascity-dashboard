@@ -12,7 +12,7 @@
 // allocation.
 
 import type { PelletEntity, ScenePalette, SimState } from '../contracts';
-import { LOD1_ZOOM } from '../contracts';
+import { LOD1_ZOOM, LOD2_ZOOM } from '../contracts';
 import { hashString } from './hash';
 import type { ViewRect } from './layers';
 import { rectContains } from './layers';
@@ -146,6 +146,32 @@ const GLINT_OFFSET_FRACTION = 0.34;
  * tinted morsel in both the sunlit and the midnight tank. */
 const GLINT_COLOR = 'rgba(255, 255, 255, 0.9)';
 
+/** LOD-aware backlog thinning: at the whole-tank overview ~1000 near-identical
+ * open pellets swamp the ~50 sparse fish (the fleet reads as "coloured dust").
+ * Held (in-progress), blocked, eaten and every P0 always draw; the ordinary
+ * drifting backlog is sampled by a stable id hash so the overview shows a
+ * REPRESENTATIVE slice of each rig's food and zooming in only ever ADDS pellets
+ * (honest zoom). The exact per-rig totals stay in the formation label + legend,
+ * so a thinned pellet is never a lost bead — the same truthful contract the
+ * per-rig render cap already relies on. */
+const DRIFT_SAMPLE_DENOM = 6;
+
+/** How many of the DRIFT_SAMPLE_DENOM hash buckets of ordinary drifting backlog
+ * to draw at a given zoom: ~1/6 at the overview, half at LOD1, all at LOD2. */
+export function driftKeepCount(layerScale: number): number {
+  if (layerScale >= LOD2_ZOOM) return DRIFT_SAMPLE_DENOM;
+  if (layerScale >= LOD1_ZOOM) return DRIFT_SAMPLE_DENOM / 2;
+  return 1;
+}
+
+/** Whether a pellet draws at the current LOD. Everything but ordinary drifting
+ * backlog always draws; drifting non-P0 beads pass only if their stable hash
+ * bucket is within the keep count, so the sample grows monotonically with zoom. */
+export function pelletVisibleAtLod(pellet: PelletEntity, keep: number): boolean {
+  if (pellet.state !== 'drifting' || pellet.isP0 === true) return true;
+  return hashString(pellet.beadId) % DRIFT_SAMPLE_DENOM < keep;
+}
+
 /** distinct rig-hue keys present this frame (few; reused, so no per-frame alloc) */
 const presentHues: number[] = [];
 
@@ -163,6 +189,7 @@ export function paintPellets(
 ): void {
   const square = PELLET_RADIUS * layerScale < CHEAP_MARK_PX;
   const glintOn = layerScale >= GLINT_MIN_SCALE;
+  const keep = driftKeepCount(layerScale);
   presentHues.length = 0;
   glintX.length = 0;
   glintY.length = 0;
@@ -171,6 +198,7 @@ export function paintPellets(
     const kin = sim.pellets[pellet.beadId];
     // sim can lag a fresh snapshot by one frame; skip rather than invent
     if (kin === undefined || !rectContains(view, kin.x, kin.y)) continue;
+    if (!pelletVisibleAtLod(pellet, keep)) continue;
     const key = pelletHueKey(pellet.rigKey);
     if (!presentHues.includes(key)) presentHues.push(key);
     // a P0 morsel glints (redundant priority emphasis) once it is a real
@@ -188,6 +216,7 @@ export function paintPellets(
     for (const pellet of pellets) {
       const kin = sim.pellets[pellet.beadId];
       if (kin === undefined || !rectContains(view, kin.x, kin.y)) continue;
+      if (!pelletVisibleAtLod(pellet, keep)) continue;
       if (pelletHueKey(pellet.rigKey) !== key) continue;
       if (pellet.state === 'sunken') {
         const h = hashString(pellet.beadId);
