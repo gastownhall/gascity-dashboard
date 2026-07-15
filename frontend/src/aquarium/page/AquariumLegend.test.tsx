@@ -1,22 +1,16 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AquariumLegend, type BeadStatusColors } from './AquariumLegend';
+import { AquariumLegend } from './AquariumLegend';
 import type { RigLegend } from './rigLegend';
 
 afterEach(cleanup);
 
-const STATUS: BeadStatusColors = {
-  open: 'oklch(74% 0.095 80)',
-  inProgress: 'oklch(85% 0.14 85)',
-  blocked: 'oklch(50% 0.035 75)',
-};
-
 function renderLegend(legend: RigLegend) {
-  return render(<AquariumLegend legend={legend} statusColors={STATUS} />);
+  return render(<AquariumLegend legend={legend} />);
 }
 
 describe('AquariumLegend', () => {
-  it('lists each rig with its open-bead count and a bead-status key', () => {
+  it('lists each rig with its open-bead count and a bead-zone key', () => {
     renderLegend({
       entries: [
         { key: 'geo', hue: 245, openBeadTotal: 26 },
@@ -27,10 +21,13 @@ describe('AquariumLegend', () => {
     expect(screen.getByText('geo')).toBeTruthy();
     expect(screen.getByText('26')).toBeTruthy();
     expect(screen.getByText('aoa')).toBeTruthy();
-    // the status key names every bead status the shades encode
+    // the zone key names each bead state by WHERE its morsel lives (position,
+    // not colour — hue is pure rig identity)
     expect(screen.getByText('open')).toBeTruthy();
     expect(screen.getByText('in progress')).toBeTruthy();
     expect(screen.getByText('blocked')).toBeTruthy();
+    expect(screen.getByText('needs help')).toBeTruthy();
+    expect(screen.getByText('seabed')).toBeTruthy();
   });
 
   it('folds the long tail into a "+N more" line', () => {

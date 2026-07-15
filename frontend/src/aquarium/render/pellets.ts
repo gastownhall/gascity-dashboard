@@ -1,9 +1,12 @@
 // Bead pellets: small rounded morsels batched by fill style (one fillStyle,
-// many arcs). Tone variation is a deterministic 3-bucket hash of the bead id.
-// Shade carries bead status (DESIGN §7's shade channel): open drifts at the
-// base tone, in-progress (held) is brighter + more saturated so an active bead
-// pops, blocked (sunken) settles darker and squashed, eaten shrinks+fades over
-// the gulp window. Positions (drift bob, mouth-hold) are sim facts.
+// many arcs). Colour is PURE rig identity (hue), never status: status is read
+// from position/behaviour — open drifts in the water column, in-progress (held)
+// sits at a fish's mouth, blocked (sunken) settles squashed on the seabed with a
+// contact shadow, eaten shrinks+fades over the gulp window. Those positions are
+// sim facts. The three tone tiers carry PRIORITY (dim P3 / base P2 / bright
+// P0-P1) as luminance within the rig hue — size stays the authoritative priority
+// channel and luminance only reinforces it. A P0 additionally blooms in its own
+// rig hue (replacing the old foreign white specular glint).
 //
 // Hot path (≤1000 pellets/frame): a single pass sorts pellets into reused
 // module-level number arrays (batched by style), then each batch draws as one
@@ -20,40 +23,46 @@ import { TAU, at, clamp01 } from './mathUtil';
 import { adjustL, withAlpha, withHueChroma } from './oklch';
 import { rigHue } from './rigHue';
 
-const PELLET_RADIUS = 5; // world units
+export const PELLET_RADIUS = 5; // world units
 /** render-side normalization of gulpMsLeft into a shrink/fade ramp */
 const GULP_WINDOW_MS = 600;
 
 export interface PelletColors {
-  /** open (drifting) beads — the base tone */
+  /** priority-luminance tiers of the rig hue: index 0 = dim (explicit-low P3),
+   *  1 = base (P2 / unprioritised), 2 = bright (P0/P1). Status is NOT carried
+   *  by colour — drift, held and sunken morsels all read from these same tiers;
+   *  their state is read from position (drift height / held at a mouth / settled
+   *  on the seabed), never a shade. Selected per pellet by {@link priorityTone}. */
   tones: readonly [string, string, string];
-  /** in-progress (held) beads — brighter + more saturated so an active bead pops */
-  held: readonly [string, string, string];
-  /** two settled-morsel tones for blocked/sunken beads */
-  sunken: readonly [string, string];
-  /** soft contact shadow under a settled morsel */
+  /** soft contact shadow under a settled morsel — a physical cue of resting on
+   *  the sand, not a status colour. */
   sunkenShadow: string;
+  /** soft same-hue bloom for a P0 morsel: replaces the old white specular glint
+   *  so the highest-priority beads glow in their own rig colour rather than
+   *  carrying a foreign white catchlight. */
+  bloom: string;
 }
 
 /** rig-tinted pellet chroma; matches a fish's rig hue so a school and its food
  * read as one project. A touch below the fish flank so 1000 tiny morsels don't
  * scream. */
 const PELLET_RIG_CHROMA = 0.12;
-/** in-progress (held) beads carry a little more chroma than open/blocked, so an
- * active bead reads as the vivid one of its rig even at a small size. */
-const PELLET_HELD_CHROMA = 0.16;
+/** priority-luminance spread (oklch L%) of the bright/dim tiers around the base
+ * tone. Deliberately modest: size is the authoritative priority channel and a
+ * distant pellet is dimmed by depth haze, so luminance only reinforces size. */
+const PRIORITY_L_STEP = 8;
 /** neutral (no-rig) cache key; real rig hues are their degree value */
 const NEUTRAL_HUE_KEY = -1;
 
-/** Retint a base pellet pigment to a rig's identity hue (keeping its lightness,
- * which is what carries bead status), or leave it the neutral gold for the
- * unrigged / city strata. */
+/** Retint a base pellet pigment to a rig's identity hue, or leave it the neutral
+ * gold for the unrigged / city strata. */
 function tintPellet(base: string, hue: number | null, chroma: number): string {
   return hue === null ? base : withHueChroma(base, hue, chroma);
 }
 
-// Cached per palette, then per rig hue: status shade survives the tint because
-// the drift (open/held) and sunken (blocked) bases keep their own lightness.
+// Cached per palette, then per rig hue: one base pigment per rig, spread into
+// three priority-luminance tiers. Hue is the only project signal; lightness is
+// priority, not status.
 const colorCache = new WeakMap<ScenePalette, Map<number, PelletColors>>();
 
 export function pelletColors(palette: ScenePalette, hue: number | null): PelletColors {
@@ -65,17 +74,25 @@ export function pelletColors(palette: ScenePalette, hue: number | null): PelletC
   const k = hue ?? NEUTRAL_HUE_KEY;
   const hit = byHue.get(k);
   if (hit !== undefined) return hit;
-  const drift = tintPellet(palette.pellet, hue, PELLET_RIG_CHROMA);
-  const held = tintPellet(palette.pelletHeld, hue, PELLET_HELD_CHROMA);
-  const settled = tintPellet(palette.pelletSunken, hue, PELLET_RIG_CHROMA);
+  const base = tintPellet(palette.pellet, hue, PELLET_RIG_CHROMA);
   const built: PelletColors = {
-    tones: [drift, adjustL(drift, 6), adjustL(drift, -6)],
-    held: [held, adjustL(held, 5), adjustL(held, -5)],
-    sunken: [settled, adjustL(settled, -7)],
-    sunkenShadow: withAlpha(adjustL(settled, -20), 0.34),
+    tones: [adjustL(base, -PRIORITY_L_STEP), base, adjustL(base, PRIORITY_L_STEP)],
+    sunkenShadow: withAlpha(adjustL(base, -26), 0.34),
+    bloom: withAlpha(adjustL(base, 16), 0.5),
   };
   byHue.set(k, built);
   return built;
+}
+
+/** Priority-luminance tier index for a pellet from its size multiplier (the same
+ * `radiusScale` that already carries priority): P0/P1 (>= 1.35) read bright, an
+ * explicit-low P3 (< 0.9) dim, and P2 / unprioritised (== 1.0) sit at the base
+ * tier. Size stays the authoritative priority channel — this only picks the
+ * reinforcing luminance, so a haze-dimmed distant pellet is never mis-ranked. */
+export function priorityTone(radiusScale: number): 0 | 1 | 2 {
+  if (radiusScale >= 1.35) return 2;
+  if (radiusScale < 0.9) return 0;
+  return 1;
 }
 
 // rigKey → hue cache key, memoised so the hot path never re-hashes a rig name.
@@ -103,10 +120,11 @@ const sunkTone: number[] = [];
 const eatenX: number[] = [];
 const eatenY: number[] = [];
 const eatenT: number[] = [];
-// P0 specular glints — collected once per frame (hue-independent), painted last.
-const glintX: number[] = [];
-const glintY: number[] = [];
-const glintScale: number[] = [];
+// P0 blooms — collected per hue pass (the glow is tinted to the rig hue) and
+// painted after that hue's fills.
+const bloomX: number[] = [];
+const bloomY: number[] = [];
+const bloomScale: number[] = [];
 
 function resetBatches(): void {
   for (let b = 0; b < 3; b += 1) {
@@ -133,18 +151,14 @@ function resetBatches(): void {
  * indistinguishable at that size. Round morsels return at any real zoom. */
 const CHEAP_MARK_PX = 2.2;
 
-/** A P0 pellet carries a fixed specular catchlight from LOD1 up (layerScale ===
- * camera zoom for the actor layer). Below LOD1 the whole reef is an unlabelled
- * overview and the glint could not occupy a full css px, so it stays off —
- * honest zoom: the P0 emphasis is true detail that arrives with proximity. */
-const GLINT_MIN_SCALE = LOD1_ZOOM;
-/** glint disc radius as a fraction of the pellet radius, and its up-left offset
- * from the pellet centre (a single fixed light direction for every P0). */
-const GLINT_RADIUS_FRACTION = 0.32;
-const GLINT_OFFSET_FRACTION = 0.34;
-/** one neutral catchlight colour: a bright specular reflection reads on the
- * tinted morsel in both the sunlit and the midnight tank. */
-const GLINT_COLOR = 'rgba(255, 255, 255, 0.9)';
+/** A P0 pellet blooms from LOD1 up (layerScale === camera zoom for the actor
+ * layer). Below LOD1 the whole reef is an unlabelled overview where a P0 reads
+ * by its size alone; the same-hue glow is true detail that arrives with
+ * proximity (honest zoom), so it stays off there. */
+const BLOOM_MIN_SCALE = LOD1_ZOOM;
+/** bloom disc radius as a fraction of the pellet radius — larger than the morsel
+ * so the glow reads as a soft halo around it, centred (no offset). */
+const BLOOM_RADIUS_FRACTION = 1.7;
 
 /** LOD-aware backlog thinning: at the whole-tank overview ~1000 near-identical
  * open pellets swamp the ~50 sparse fish (the fleet reads as "coloured dust").
@@ -188,12 +202,9 @@ export function paintPellets(
   layerScale: number,
 ): void {
   const square = PELLET_RADIUS * layerScale < CHEAP_MARK_PX;
-  const glintOn = layerScale >= GLINT_MIN_SCALE;
+  const bloomOn = layerScale >= BLOOM_MIN_SCALE;
   const keep = driftKeepCount(layerScale);
   presentHues.length = 0;
-  glintX.length = 0;
-  glintY.length = 0;
-  glintScale.length = 0;
   for (const pellet of pellets) {
     const kin = sim.pellets[pellet.beadId];
     // sim can lag a fresh snapshot by one frame; skip rather than invent
@@ -201,18 +212,14 @@ export function paintPellets(
     if (!pelletVisibleAtLod(pellet, keep)) continue;
     const key = pelletHueKey(pellet.rigKey);
     if (!presentHues.includes(key)) presentHues.push(key);
-    // a P0 morsel glints (redundant priority emphasis) once it is a real
-    // morsel; the closing gulp (eaten) is not re-marked as it leaves.
-    if (glintOn && pellet.isP0 === true && pellet.state !== 'eaten') {
-      glintX.push(kin.x);
-      glintY.push(kin.y);
-      glintScale.push(pellet.radiusScale);
-    }
   }
   for (let hi = 0; hi < presentHues.length; hi += 1) {
     const key = at(presentHues, hi);
     const colors = pelletColors(palette, key === NEUTRAL_HUE_KEY ? null : key);
     resetBatches();
+    bloomX.length = 0;
+    bloomY.length = 0;
+    bloomScale.length = 0;
     for (const pellet of pellets) {
       const kin = sim.pellets[pellet.beadId];
       if (kin === undefined || !rectContains(view, kin.x, kin.y)) continue;
@@ -220,29 +227,39 @@ export function paintPellets(
       // the current hue's pellets, not all of them once per present hue.
       if (pelletHueKey(pellet.rigKey) !== key) continue;
       if (!pelletVisibleAtLod(pellet, keep)) continue;
+      // tone tier is priority (dim/base/bright), shared by every state — colour
+      // never carries status, only rig hue and priority luminance.
+      const tier = priorityTone(pellet.radiusScale);
+      // a P0 morsel blooms in its own hue (redundant priority emphasis) once it
+      // is a real morsel; the closing gulp (eaten) is not re-marked as it leaves.
+      if (bloomOn && pellet.isP0 === true && pellet.state !== 'eaten') {
+        bloomX.push(kin.x);
+        bloomY.push(kin.y);
+        bloomScale.push(pellet.radiusScale);
+      }
       if (pellet.state === 'sunken') {
         const h = hashString(pellet.beadId);
         sunkX.push(kin.x);
         sunkY.push(kin.y);
         sunkScale.push((0.78 + ((h >>> 4) % 100) * 0.005) * pellet.radiusScale);
         sunkSquash.push(0.72 + ((h >>> 11) % 100) * 0.0022);
-        sunkTone.push(h & 1);
+        sunkTone.push(tier);
       } else if (pellet.state === 'eaten') {
         eatenX.push(kin.x);
         eatenY.push(kin.y);
         eatenT.push(clamp01((pellet.gulpMsLeft ?? 0) / GULP_WINDOW_MS));
       } else if (pellet.state === 'held') {
-        const b = hashString(pellet.beadId) % 3;
-        at(heldX, b).push(kin.x);
-        at(heldY, b).push(kin.y);
-        at(heldScale, b).push(pellet.radiusScale);
+        at(heldX, tier).push(kin.x);
+        at(heldY, tier).push(kin.y);
+        at(heldScale, tier).push(pellet.radiusScale);
       } else {
-        const b = hashString(pellet.beadId) % 3;
-        at(driftX, b).push(kin.x);
-        at(driftY, b).push(kin.y);
-        at(driftScale, b).push(pellet.radiusScale);
+        at(driftX, tier).push(kin.x);
+        at(driftY, tier).push(kin.y);
+        at(driftScale, tier).push(pellet.radiusScale);
       }
     }
+    // drift (open) and held (in-progress) share the same rig-hue priority tiers;
+    // their state is the position (mid-water vs a fish's mouth), not the colour.
     for (let tone = 0; tone < 3; tone += 1) {
       fillDots(
         ctx,
@@ -254,14 +271,11 @@ export function paintPellets(
         square,
         at(driftScale, tone),
       );
-    }
-    // in-progress beads: same morsel shape, brighter/more-saturated shade.
-    for (let tone = 0; tone < 3; tone += 1) {
       fillDots(
         ctx,
         at(heldX, tone),
         at(heldY, tone),
-        at(colors.held, tone),
+        at(colors.tones, tone),
         PELLET_RADIUS,
         0.82,
         square,
@@ -270,26 +284,24 @@ export function paintPellets(
     }
     paintSunken(ctx, colors, square);
     paintEaten(ctx, colors);
+    // one same-hue glow pass over this hue's visible P0 morsels, on top of fills
+    paintBloom(ctx, colors.bloom);
   }
-  // One hue-independent pass over every visible P0 morsel, on top of all fills.
-  paintGlints(ctx);
 }
 
-/** A fixed upper-left specular disc on each collected P0 morsel — one fillStyle,
- * one path, no gradient, no per-frame allocation. Reserved strictly for P0, so
- * the catchlight reads as "a choicer morsel" rather than decoration. */
-function paintGlints(ctx: CanvasRenderingContext2D): void {
-  const n = glintX.length;
+/** A soft same-hue glow centred on each collected P0 morsel — one fillStyle, one
+ * path, no per-frame allocation. Reserved strictly for P0, so the bloom reads as
+ * "a choicer morsel" rather than decoration, and in the rig's own colour so it
+ * never introduces a foreign white pixel. */
+function paintBloom(ctx: CanvasRenderingContext2D, color: string): void {
+  const n = bloomX.length;
   if (n === 0) return;
-  ctx.fillStyle = GLINT_COLOR;
+  ctx.fillStyle = color;
   ctx.beginPath();
   for (let i = 0; i < n; i += 1) {
-    const r = PELLET_RADIUS * at(glintScale, i);
-    const gr = r * GLINT_RADIUS_FRACTION;
-    const gx = at(glintX, i) - r * GLINT_OFFSET_FRACTION;
-    const gy = at(glintY, i) - r * GLINT_OFFSET_FRACTION;
-    ctx.moveTo(gx + gr, gy);
-    ctx.arc(gx, gy, gr, 0, TAU);
+    const r = PELLET_RADIUS * at(bloomScale, i) * BLOOM_RADIUS_FRACTION;
+    ctx.moveTo(at(bloomX, i) + r, at(bloomY, i));
+    ctx.arc(at(bloomX, i), at(bloomY, i), r, 0, TAU);
   }
   ctx.fill();
 }
@@ -312,8 +324,8 @@ function paintSunken(ctx: CanvasRenderingContext2D, colors: PelletColors, square
     }
     ctx.fill();
   }
-  for (let tone = 0; tone < colors.sunken.length; tone += 1) {
-    ctx.fillStyle = at(colors.sunken, tone);
+  for (let tone = 0; tone < colors.tones.length; tone += 1) {
+    ctx.fillStyle = at(colors.tones, tone);
     ctx.beginPath();
     for (let i = 0; i < n; i += 1) {
       if (at(sunkTone, i) !== tone) continue;
@@ -334,7 +346,7 @@ function paintSunken(ctx: CanvasRenderingContext2D, colors: PelletColors, square
 function paintEaten(ctx: CanvasRenderingContext2D, colors: PelletColors): void {
   const n = eatenX.length;
   if (n === 0) return;
-  const color = at(colors.tones, 0);
+  const color = at(colors.tones, 1);
   for (let i = 0; i < n; i += 1) {
     const t = at(eatenT, i);
     ctx.globalAlpha = t;

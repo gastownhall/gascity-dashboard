@@ -160,33 +160,38 @@ licenses it; outside this route, nothing here applies.
   _group_, never the _state_ — state stays in pose, position, eye, and fin, so
   the Greyscale Test above still passes: strip colour and every state is still
   legible; only the group label is lost. The rig palette is a curated, vivid,
-  non-maroon set (the ledger keeps maroon to itself). The four channels stay
-  orthogonal: **hue** = rig, **shade** = bead status, **size and shape** = agent
-  type, **pose** = agent state. The mayor's city stratum and unrigged agents
+  non-maroon set (the ledger keeps maroon to itself). Hue is the ONLY project
+  signal and never carries state. The fish channels stay orthogonal: **hue** =
+  rig, **size and shape** = agent type, **pose** = agent state. Pellets carry
+  **hue** = rig and **luminance** = priority (below); their status is not a
+  colour at all. The mayor's city stratum and unrigged agents
   carry no project, so they swim neutral against the coloured schools. A busy
   city has more rigs than curated hues, so hue is a _coarse_ group, not a unique
   per-rig key; the collapsible key (below) and the per-formation coloured label
-  carry the exact rig. Bead status reads as three shades of the rig hue — open
-  (mid), in progress (bright), blocked (dark, settled on the seabed) — and a
-  hairline tethers a working fish to the in-progress bead held at its mouth, so
-  the working pair reads as one unit without a hover.
+  carry the exact rig. Bead status is read from WHERE a morsel lives in the
+  water, never a shade: drifting in the column (open), held at a fish's mouth (in
+  progress), settled squashed on the seabed (blocked). A hairline tethers a
+  working fish to the in-progress bead held at its mouth, so the working pair
+  reads as one unit without a hover.
 - **Pellets carry bead metadata as food behaviour, not a chart.** Beyond hue
-  (rig) and shade (status), an open bead's other facts read diegetically: its
+  (rig), an open bead's other facts read diegetically: its
   **age** is its drift height (fresh food floats high, stale food sinks toward
   but stays above the seabed, so the vertical spread reads backlog staleness);
   its **priority** is its morsel size (a higher-priority bead is a bigger,
   choicer morsel), spread wide enough that a P0 is a different order of morsel
   rather than a subtly larger dot, with an unprioritised bead sized neutrally
   (never smaller than a known low priority — absence of a priority is not
-  evidence of low priority); and a **newly-created** bead falls in from the
-  surface like scattered food (the arrival twin of the closing gulp). Pellet
-  size is bead priority here, distinct from fish size = agent type — the two
-  marks never collide. A **P0** morsel additionally carries a fixed specular
-  glint from LOD1 up (a single up-left catchlight, no gradient, no animation):
-  redundant emphasis on the highest-priority beads, not a fifth channel, so the
-  scarce P0s read at a glance without inventing a new variable. Each stays
-  truthful: age is `created_at`, size and glint are `priority`, the drop fires
-  only on a real new bead.
+  evidence of low priority), and reinforced by a same-hue **luminance** (dim P3 →
+  bright P0/P1) — size stays authoritative because depth haze dims a distant
+  morsel, so luminance never decides priority alone; and a **newly-created** bead
+  falls in from the surface like scattered food (the arrival twin of the closing
+  gulp). Pellet size is bead priority here, distinct from fish size = agent type
+  — the two marks never collide. A **P0** morsel additionally **blooms in its own
+  rig hue** from LOD1 up (a soft same-hue glow, no gradient, no animation, no
+  foreign white catchlight): redundant emphasis on the highest-priority beads,
+  not a new channel, so the scarce P0s read at a glance in their own colour. Each
+  stays truthful: age is `created_at`, size, luminance and bloom are `priority`,
+  the drop fires only on a real new bead.
 - **The backlog thins with distance so the fleet stays the subject.** A busy
   city has hundreds of open beads and only a handful of live sessions, so at the
   whole-tank overview the drifting backlog is sampled to a representative slice
@@ -233,8 +238,8 @@ licenses it; outside this route, nothing here applies.
 **The Pane Rule.** The reef is a window, not a page. Chrome inside the glass
 is limited to the ledger line, the connection state, the zoom controls, and a
 collapsible key (the rig roster mapping colour to rig name + open-bead count,
-and the bead-status shade legend); everything else the operator learns by
-looking at the water. The key is translucent and collapses to a single toggle,
+and the bead **zone** key naming where each state's morsel lives); everything
+else the operator learns by looking at the water. The key is translucent and collapses to a single toggle,
 so the glass clears on demand.
 
 **The Honest Zoom Rule.** Zooming in may only reveal true detail. If a label,

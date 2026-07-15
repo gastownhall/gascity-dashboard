@@ -65,7 +65,6 @@ describe('buildScenePalette', () => {
       'fishOutline',
       'fishDim',
       'pellet',
-      'pelletSunken',
     ] as const;
     for (const key of aquaticKeys) {
       expect(light[key], key).not.toBe(dark[key]);

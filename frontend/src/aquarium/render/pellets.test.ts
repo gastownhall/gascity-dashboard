@@ -3,7 +3,14 @@ import type { PelletEntity, ScenePalette, SimState, ThemeMood } from '../contrac
 import { LOD1_ZOOM, LOD2_ZOOM } from '../contracts';
 import type { ViewRect } from './layers';
 import { buildScenePalette } from './palette';
-import { driftKeepCount, paintPellets, pelletColors, pelletVisibleAtLod } from './pellets';
+import {
+  PELLET_RADIUS,
+  driftKeepCount,
+  paintPellets,
+  pelletColors,
+  pelletVisibleAtLod,
+  priorityTone,
+} from './pellets';
 import { parseOklch } from './oklch';
 
 const TOKENS: Record<string, string> = {
@@ -24,42 +31,47 @@ function palette(mood: ThemeMood): ScenePalette {
 const L = (c: string): number => parseOklch(c).l;
 const H = (c: string): number => parseOklch(c).h;
 
-describe('pelletColors (rig-hue identity)', () => {
-  it('tints drift and settled pellets to the rig hue (a rig eats its own colour)', () => {
+describe('pelletColors (rig-hue identity, priority luminance)', () => {
+  it('tints every tier to the rig hue (a rig eats its own colour)', () => {
     for (const mood of ['light', 'dark'] as const) {
       const c = pelletColors(palette(mood), 300);
-      expect(H(c.tones[0]), `${mood} open pellet hue`).toBeCloseTo(300, 5);
-      expect(H(c.sunken[0]), `${mood} blocked pellet hue`).toBeCloseTo(300, 5);
+      for (const tier of [0, 1, 2] as const) {
+        expect(H(c.tones[tier]), `${mood} tier ${tier} hue`).toBeCloseTo(300, 5);
+      }
     }
   });
 
-  it('preserves status shade under the tint: open (drift) reads brighter than blocked (sunken)', () => {
+  it('carries priority (not status) in luminance: dim < base < bright', () => {
     for (const mood of ['light', 'dark'] as const) {
       const c = pelletColors(palette(mood), 300);
-      expect(L(c.tones[0]), `${mood} open>blocked`).toBeGreaterThan(L(c.sunken[0]));
+      expect(L(c.tones[0]), `${mood} dim<base`).toBeLessThan(L(c.tones[1]));
+      expect(L(c.tones[1]), `${mood} base<bright`).toBeLessThan(L(c.tones[2]));
     }
   });
 
-  it('gives in-progress (held) its own brighter shade so status reads by shade: blocked < open < held', () => {
-    for (const mood of ['light', 'dark'] as const) {
-      const c = pelletColors(palette(mood), 300);
-      expect(L(c.sunken[0]), `${mood} blocked<open`).toBeLessThan(L(c.tones[0]));
-      expect(L(c.tones[0]), `${mood} open<held`).toBeLessThan(L(c.held[0]));
-      expect(H(c.held[0]), `${mood} held hue`).toBeCloseTo(300, 5);
-    }
-  });
-
-  it('leaves the unrigged / city pellet the neutral gold (hue = null)', () => {
+  it('leaves the unrigged / city pellet the neutral gold base (hue = null)', () => {
     const p = palette('light');
     const neutral = pelletColors(p, null);
-    expect(neutral.tones[0]).toBe(p.pellet);
-    expect(neutral.held[0]).toBe(p.pelletHeld);
-    expect(neutral.sunken[0]).toBe(p.pelletSunken);
+    expect(neutral.tones[1]).toBe(p.pellet);
+  });
+
+  it('a P0 morsel blooms in its own rig hue, never a foreign white', () => {
+    const c = pelletColors(palette('dark'), 300);
+    expect(H(c.bloom), 'bloom hue matches rig').toBeCloseTo(300, 5);
   });
 
   it('two rigs get two distinct pellet hues', () => {
     const p = palette('dark');
-    expect(H(pelletColors(p, 195).tones[0])).not.toBeCloseTo(H(pelletColors(p, 338).tones[0]), 0);
+    expect(H(pelletColors(p, 195).tones[1])).not.toBeCloseTo(H(pelletColors(p, 338).tones[1]), 0);
+  });
+});
+
+describe('priorityTone (size is authoritative; luminance only reinforces)', () => {
+  it('maps P0/P1 to bright, P2/unprioritised to base, explicit-low P3 to dim', () => {
+    expect(priorityTone(1.8)).toBe(2); // P0
+    expect(priorityTone(1.35)).toBe(2); // P1
+    expect(priorityTone(1)).toBe(1); // P2 / unprioritised (null == 1.0)
+    expect(priorityTone(0.78)).toBe(0); // P3
   });
 });
 
@@ -109,8 +121,8 @@ function simFor(ids: string[]): SimState {
   return { fish: {}, pellets, clockMs: 0 };
 }
 
-describe('paintPellets P0 glint', () => {
-  it('draws exactly one specular disc for a P0 morsel and none for its non-P0 neighbour', () => {
+describe('paintPellets P0 bloom (same-hue glow, replaces the white glint)', () => {
+  it('blooms exactly one P0 morsel and not its non-P0 neighbour, in the rig hue not white', () => {
     const pellets = [
       glintPellet({ beadId: 'p0', isP0: true, radiusScale: 1.8 }),
       glintPellet({ beadId: 'plain' }),
@@ -118,20 +130,23 @@ describe('paintPellets P0 glint', () => {
     const { ctx, arcs } = glintRecordingCtx();
     paintPellets(ctx, pellets, simFor(['p0', 'plain']), palette('dark'), WIDE, 2.0);
     expect(arcs).toHaveLength(1);
-    // white catchlight, up-left of the P0 centre (100, 200)
-    expect(arcs[0]!.fill).toContain('255');
-    expect(arcs[0]!.x).toBeLessThan(100);
-    expect(arcs[0]!.y).toBeLessThan(200);
+    // a same-hue oklch glow, never a foreign white catchlight
+    expect(arcs[0]!.fill).toContain('oklch');
+    expect(arcs[0]!.fill).not.toContain('255');
+    // centred on the P0 (100, 200) and larger than the morsel itself (a glow)
+    expect(arcs[0]!.x).toBeCloseTo(100, 5);
+    expect(arcs[0]!.y).toBeCloseTo(200, 5);
+    expect(arcs[0]!.r).toBeGreaterThan(PELLET_RADIUS);
   });
 
-  it('holds the glint off below LOD1 (an unlabelled overview stays clean)', () => {
+  it('holds the bloom off below LOD1 (an unlabelled overview reads P0 by size alone)', () => {
     const pellets = [glintPellet({ beadId: 'p0', isP0: true, radiusScale: 1.8 })];
     const { ctx, arcs } = glintRecordingCtx();
     paintPellets(ctx, pellets, simFor(['p0']), palette('dark'), WIDE, LOD1_ZOOM * 0.9);
     expect(arcs).toHaveLength(0);
   });
 
-  it('never glints a closing (eaten) P0', () => {
+  it('never blooms a closing (eaten) P0', () => {
     const pellets = [glintPellet({ beadId: 'p0', isP0: true, state: 'eaten', gulpMsLeft: 300 })];
     const { ctx, arcs } = glintRecordingCtx();
     paintPellets(ctx, pellets, simFor(['p0']), palette('dark'), WIDE, 2.0);
