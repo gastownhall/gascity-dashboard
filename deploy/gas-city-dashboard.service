@@ -46,13 +46,14 @@ ExecStartPre=/bin/sh -c 'case "$1" in /*) ;; *) echo "gas-city-dashboard: ADMIN_
 # node and exits 127; this adds the one thing it can't know — which line of
 # this unit to edit.
 ExecStartPre=/bin/sh -c 'command -v node >/dev/null 2>&1 || { echo "gas-city-dashboard: no runnable \"node\" on this unit PATH — install Node.js, or add its directory to the Environment=PATH line in this unit" >&2; exit 1; }'
-# Refuse to start if a stale process holds the port we bind. Scope the filter to
-# `src 127.0.0.1:8082`, NOT `sport = :8082`: the latter matches the port on EVERY
-# interface, so an unrelated listener elsewhere on 8082 aborts a start whose own
-# loopback address is free. `tailscale serve` is the live case — it holds
-# <tailnet-ip>:8082 to proxy INTO 127.0.0.1:8082, so the wide filter made the unit
-# refuse to start the very backend tailscale was proxying to.
-ExecStartPre=/bin/sh -c '! ss -tln "src 127.0.0.1:8082" | grep -q LISTEN || (echo "gas-city-dashboard: 127.0.0.1:8082 already bound — stop the process holding it (ss -tlnp \"src 127.0.0.1:8082\")" >&2; exit 1)'
+# Refuse to start if the address we bind is already held. This probes the bind
+# itself rather than filtering `ss`, because no ss filter is correct here: a wide
+# `sport = :8082` aborts on tailscale's own <tailnet-ip>:8082 (which proxies INTO
+# loopback), while a narrow `src 127.0.0.1:8082` misses the 0.0.0.0 and
+# dual-stack [::] wildcards that really do block the bind. Rationale and the
+# proofs live in the script. ${PORT} is passed as an argument, so the guard
+# tracks the Environment=PORT above and cannot drift off it.
+ExecStartPre=/usr/bin/env node %h/gascity-dashboard/deploy/assert-port-free.mjs 127.0.0.1 "${PORT}"
 ExecStart=/usr/bin/env node %h/gascity-dashboard/backend/dist/server.js
 Restart=on-failure
 RestartSec=3

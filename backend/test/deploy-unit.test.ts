@@ -5,6 +5,7 @@ import { createServer, type Server } from 'node:net';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Regression guard for the shipped systemd unit and its runbook. An earlier copy
 // hard-coded `~/gas-city-dashboard`, which exists on no host — the unit silently
@@ -19,8 +20,18 @@ const unit = readFileSync(
   'utf8',
 );
 const readme = readFileSync(new URL('../../deploy/README.md', import.meta.url), 'utf8');
+const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
 
 const EXEC_START_PRE = unit.split('\n').filter((line) => line.startsWith('ExecStartPre='));
+
+// Directives only. Assertions about what the unit DOES must not read its
+// comments: the port guard's rationale necessarily names the wildcard addresses
+// (0.0.0.0, [::]) it exists to catch, which a naive whole-file search reads as
+// the unit widening its bind.
+const DIRECTIVES = unit
+  .split('\n')
+  .filter((line) => line.trim() !== '' && !line.trim().startsWith('#'))
+  .join('\n');
 
 // ---------------------------------------------------------------------------
 // Run guards AT THE LAYER THAT SHIPS.
@@ -34,6 +45,7 @@ const EXEC_START_PRE = unit.split('\n').filter((line) => line.startsWith('ExecSt
 // CI and broken in production — a false guard by construction. So: write a real
 // unit file, let the shipping systemd parse it, and read the unit's Result.
 const UNIT_ENV_VAR = 'ADMIN_FRONTEND_DIST';
+const PORT_GUARD_SCRIPT = 'assert-port-free.mjs';
 
 function systemdUserUnavailable(): string | false {
   const probe = spawnSync(
@@ -44,9 +56,6 @@ function systemdUserUnavailable(): string | false {
     },
   );
   if (probe.error || probe.status !== 0) {
-    // No --user manager (the common CI case: no session, no lingering). The
-    // structural tests below still run everywhere and are what actually pins
-    // the fix; this suite refuses to fake the behavioral proof at a wrong layer.
     return 'no systemd --user manager on this host';
   }
   return false;
@@ -54,11 +63,27 @@ function systemdUserUnavailable(): string | false {
 
 const NO_SYSTEMD_USER = systemdUserUnavailable();
 
+// Where a manager is absent the real-unit suites skip, so `npm test` still works
+// on a dev box without one. That is exactly how these proofs went missing from
+// the merge gate for two rounds: ubuntu-latest provides no --user manager, and
+// node:test reports a skipped SUITE as a passing `ok`, so the summary prints
+// "# skipped 0" whether the proofs ran or not. Only the test TOTAL discriminated
+// (18 vs 25), and nothing was watching it.
+//
+// REQUIRE_SYSTEMD_USER=1 is the opt-out from that silence: CI sets it, and the
+// always-on gate test below turns a missing manager into a FAILURE instead of a
+// skip. A test that cannot run must never read as a test that passed.
+const REQUIRE_SYSTEMD_USER = process.env.REQUIRE_SYSTEMD_USER === '1';
+
 /**
  * Install a throwaway unit carrying `execStartPreLines` verbatim, start it, and
  * return systemd's own verdict. `success` means every ExecStartPre passed.
+ *
+ * `environment` becomes unit-file `Environment=` lines. Those are safe for plain
+ * values (systemd's unit parser escapes and word-splits them), which is why the
+ * frontend guard's payloads cannot go through here — see runFrontendGuard.
  */
-function runGuardViaRealUnit(execStartPreLines: string[]): string {
+function runGuardViaRealUnit(execStartPreLines: string[], environment: string[] = []): string {
   const name = `gcd-guard-probe-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
   const unitDir = join(homedir(), '.config', 'systemd', 'user');
   const unitPath = join(unitDir, `${name}.service`);
@@ -70,6 +95,7 @@ function runGuardViaRealUnit(execStartPreLines: string[]): string {
       'Description=gascity-dashboard guard probe (test-generated, disposable)',
       '[Service]',
       'Type=oneshot',
+      ...environment.map((e) => `Environment=${e}`),
       ...execStartPreLines,
       'ExecStart=/bin/true',
       '',
@@ -94,6 +120,14 @@ function runGuardViaRealUnit(execStartPreLines: string[]): string {
   }
 }
 
+// A test-scoped variable name, so this suite never reads, writes, or unsets the
+// manager's real ADMIN_FRONTEND_DIST — another user unit may depend on it, and
+// capture/restore would still leave a window where a unit starting mid-test sees
+// the payload. The exploit is a property of systemd's substitution, not of the
+// name, so renaming costs the test nothing: derive the line from the shipped one
+// and a vulnerable form stays vulnerable (mutation-proven).
+const GUARD_ENV_VAR = `GCD_TEST_AFD_${process.pid}`;
+
 function frontendGuardLine(): string {
   const line = EXEC_START_PRE.find((l) => l.includes(UNIT_ENV_VAR));
   assert.ok(line, `no ExecStartPre references ${UNIT_ENV_VAR}`);
@@ -101,28 +135,25 @@ function frontendGuardLine(): string {
 }
 
 /**
- * systemd's Result for the shipped frontend guard when the var holds `value`.
+ * systemd's Result for the shipped frontend guard when its var holds `value`.
  *
  * The value goes in through the MANAGER environment, not through a unit-file
  * `Environment=` line, and that distinction is the whole test. A unit-file
- * `Environment=` value is escaped and word-split by systemd's unit parser
- * (a `$(...)` payload arrives at the service as the literal `\$(...`), so a
- * probe built that way cannot see this bug — it passes against the vulnerable
- * guard and against the fixed one alike. `set-environment` does no such
- * escaping, and it is one of the surfaces the runbook itself points operators
- * at (alongside `.d/` drop-ins), so it is where the guard has to hold.
- *
- * Safe against the live service: a unit's own `Environment=` overrides the
- * manager environment, and the shipped unit pins ADMIN_FRONTEND_DIST itself.
+ * `Environment=` value is escaped and word-split by systemd's unit parser (a
+ * `$(...)` payload reaches the service as the literal `\$(...`), so a probe built
+ * that way cannot see this bug at all — it passes against the vulnerable guard
+ * and the fixed one alike. `set-environment` does no such escaping, and it is a
+ * surface the runbook points operators at, so it is where the guard must hold.
  */
 function runFrontendGuard(value: string): string {
-  execFileSync('systemctl', ['--user', 'set-environment', `${UNIT_ENV_VAR}=${value}`], {
+  const line = frontendGuardLine().replaceAll(UNIT_ENV_VAR, GUARD_ENV_VAR);
+  execFileSync('systemctl', ['--user', 'set-environment', `${GUARD_ENV_VAR}=${value}`], {
     stdio: 'ignore',
   });
   try {
-    return runGuardViaRealUnit([frontendGuardLine()]);
+    return runGuardViaRealUnit([line]);
   } finally {
-    spawnSync('systemctl', ['--user', 'unset-environment', UNIT_ENV_VAR], { stdio: 'ignore' });
+    spawnSync('systemctl', ['--user', 'unset-environment', GUARD_ENV_VAR], { stdio: 'ignore' });
   }
 }
 
@@ -146,6 +177,40 @@ const UNSTARTABLE_SWITCHES: Record<string, string> = {
   MemoryDenyWriteExecute:
     "blocks the mprotect() V8's JIT needs; node SIGTRAPs at startup before running a line of the server",
 };
+
+// These two run EVERYWHERE, including where no --user manager exists. They are
+// the reason a green gate now means the proofs actually ran.
+describe('deploy: the shipping-layer proofs reach the merge gate', () => {
+  test('REQUIRE_SYSTEMD_USER=1 turns a missing --user manager into a failure', () => {
+    if (!REQUIRE_SYSTEMD_USER) {
+      // Opt-in: a dev box without a manager still runs `npm test` cleanly, and
+      // the real-unit suites announce themselves as skipped.
+      return;
+    }
+    assert.equal(
+      NO_SYSTEMD_USER,
+      false,
+      'REQUIRE_SYSTEMD_USER=1 but no systemd --user manager is available, so the real-unit proofs cannot run. A merge gate must not go green on tests that never executed.',
+    );
+  });
+
+  test('CI runs the backend tests with REQUIRE_SYSTEMD_USER=1', () => {
+    // Without this the suites skip, and node:test counts a skipped SUITE as a
+    // passing `ok` — "# skipped 0" prints whether the proofs ran or not, so only
+    // the test TOTAL (18 vs 25) discriminates and nothing watches a total. That
+    // is how these proofs sat outside the gate for two rounds. Pin the gate's own
+    // configuration here: deleting the CI wiring must fail a test, not go quiet.
+    assert.match(
+      ci,
+      /REQUIRE_SYSTEMD_USER:\s*['"]?1['"]?/,
+      'ci.yml must set REQUIRE_SYSTEMD_USER=1 for the backend tests, or a host without a --user manager silently skips every real-unit proof',
+    );
+    assert.ok(
+      /enable-linger/.test(ci),
+      'ci.yml must provision a systemd --user manager (loginctl enable-linger), or REQUIRE_SYSTEMD_USER=1 just fails the job',
+    );
+  });
+});
 
 describe('deploy: systemd unit path is the real checkout', () => {
   test('unit contains no reference to the non-existent ~/gas-city-dashboard path', () => {
@@ -239,20 +304,24 @@ describe('deploy: systemd unit path is the real checkout', () => {
     );
   });
 
-  test('port guard scopes to the loopback address the unit binds (AC1)', () => {
-    // `sport = :8082` matches the port on EVERY interface. `tailscale serve`
-    // holds <tailnet-ip>:8082 to proxy INTO 127.0.0.1:8082, so the wide filter
-    // false-positives on tailscale's own listener and refuses to start the very
-    // backend tailscale proxies to. Behavioral proof in the port-guard suite.
-    const line = EXEC_START_PRE.find((l) => l.includes('ss -tln'));
-    assert.ok(line, 'expected an ExecStartPre port guard using ss');
+  test('port guard probes the bind instead of filtering ss (AC1, M1)', () => {
+    // No `ss` filter is correct here, which is why the guard does not use one:
+    //   `sport = :PORT`        aborts on tailscale's <tailnet-ip>:PORT (AC1).
+    //   `src 127.0.0.1:PORT`   misses 0.0.0.0 and dual-stack [::] (M1).
+    //   any [::] filter        cannot separate dual-stack (conflicts) from
+    //                          v6only (does not) — ss never reports IPV6_V6ONLY
+    //                          and its filters match both identically.
+    // Behavioral proof, all directions, in the port-guard suite below.
     assert.ok(
-      !/sport\s*=\s*:8082/.test(line),
-      'port guard must not use `sport = :8082` — it matches 8082 on every interface and aborts on unrelated listeners',
+      !EXEC_START_PRE.some((l) => l.includes('ss -tln')),
+      'port guard must not filter ss output — no filter separates a conflicting dual-stack [::] bind from a harmless v6only one',
     );
-    assert.ok(
-      line.includes('src 127.0.0.1:8082'),
-      'port guard must scope to `src 127.0.0.1:8082`, the address the unit actually binds',
+    const line = EXEC_START_PRE.find((l) => l.includes(PORT_GUARD_SCRIPT));
+    assert.ok(line, `expected an ExecStartPre running ${PORT_GUARD_SCRIPT}`);
+    assert.match(
+      line,
+      /assert-port-free\.mjs 127\.0\.0\.1 "\$\{PORT\}"$/,
+      'port guard must probe 127.0.0.1 on the configured "${PORT}" — passed as an argument so the check tracks Environment=PORT',
     );
   });
 
@@ -274,10 +343,14 @@ describe('deploy: systemd unit path is the real checkout', () => {
     }
   });
 
-  test('bind and port are unchanged', () => {
+  test('bind and port are unchanged (AC5)', () => {
     assert.match(unit, /Environment=PORT=8082/);
-    assert.ok(!unit.includes('0.0.0.0'), 'unit must not widen the bind');
-    assert.ok(!unit.includes('8081'), 'stale port 8081 must not reappear');
+    assert.ok(!DIRECTIVES.includes('0.0.0.0'), 'unit must not widen the bind');
+    assert.ok(!DIRECTIVES.includes('8081'), 'stale port 8081 must not reappear');
+    assert.ok(
+      DIRECTIVES.includes('assert-port-free.mjs 127.0.0.1'),
+      'the port guard must probe the loopback address the app binds',
+    );
   });
 });
 
@@ -363,65 +436,140 @@ describe(
 );
 
 describe(
-  'deploy: the port guard ignores other interfaces (AC1, real unit)',
+  'deploy: the port guard matches real bind conflicts (AC1, M1, real unit)',
   { skip: NO_SYSTEMD_USER },
   () => {
-    // The unit hard-codes :8082, which is the live operator port — binding it in a
-    // test would fight the running dashboard. The defect is in the ss FILTER, not
-    // the number, so run the shipped guard verbatim with the port substituted for
-    // one the OS hands us. The listener owns that port for the test's lifetime, so
-    // there is no allocation race.
-    function portGuardLineFor(port: number): string {
-      const line = EXEC_START_PRE.find((l) => l.includes('ss -tln'));
-      assert.ok(line, 'expected an ExecStartPre port guard using ss');
-      return line.replaceAll('8082', String(port));
+    // The unit's port comes from Environment=PORT=8082 — the live operator port,
+    // which a test must not bind. The guard takes the port as an ARGUMENT, so
+    // point Environment=PORT at one the OS hands us and run the shipped line
+    // otherwise verbatim. The listener owns that port for the test's lifetime, so
+    // there is no allocation race. The script path is repointed at this checkout:
+    // %h/gascity-dashboard is a different tree, which would fail on a missing
+    // module rather than on the conflict under test.
+    const scriptPath = fileURLToPath(new URL('../../deploy/assert-port-free.mjs', import.meta.url));
+
+    function portGuardLine(): string {
+      const line = EXEC_START_PRE.find((l) => l.includes(PORT_GUARD_SCRIPT));
+      assert.ok(line, `expected an ExecStartPre running ${PORT_GUARD_SCRIPT}`);
+      return line.replace(/\S*assert-port-free\.mjs/, scriptPath);
     }
 
-    function listen(host: string): Promise<Server> {
+    /** systemd's Result for the shipped port guard against a real listener. */
+    function runPortGuard(port: number): string {
+      // The guard resolves node off the unit's own Environment=PATH — a user
+      // service inherits no login PATH — so the probe unit must carry the real
+      // one, not a hand-written stand-in.
+      const path = /^Environment=(PATH=.+)$/m.exec(unit)?.[1];
+      assert.ok(path, 'unit must set Environment=PATH for the port guard to resolve node');
+      return runGuardViaRealUnit([portGuardLine()], [path, `PORT=${port}`]);
+    }
+
+    function portOf(srv: Server): number {
+      // net.Server.address() is AddressInfo | string | null; a TCP listener always
+      // yields AddressInfo, but narrow rather than cast the union away.
+      const addr = srv.address();
+      assert.ok(
+        addr !== null && typeof addr === 'object',
+        'expected AddressInfo from a TCP listener',
+      );
+      return addr.port;
+    }
+
+    /** Hold an ephemeral port on `host`. `ipv6Only` controls dual-stack vs v6only. */
+    function hold(host: string, ipv6Only = false): Promise<Server> {
       return new Promise((resolve, reject) => {
         const srv = createServer();
         srv.once('error', reject);
-        srv.listen(0, host, () => resolve(srv));
+        srv.listen({ port: 0, host, ipv6Only }, () => resolve(srv));
       });
+    }
+
+    async function withListener(
+      host: string,
+      ipv6Only: boolean,
+      check: (port: number) => void,
+    ): Promise<void> {
+      const srv = await hold(host, ipv6Only);
+      try {
+        check(portOf(srv));
+      } finally {
+        srv.close();
+      }
     }
 
     const nonLoopback = Object.values(networkInterfaces())
       .flat()
       .find((ni) => ni && ni.family === 'IPv4' && !ni.internal)?.address;
 
+    test('starts when nothing holds the port', async () => {
+      const srv = await hold('127.0.0.1');
+      const port = portOf(srv);
+      await new Promise((r) => srv.close(r));
+      assert.equal(runPortGuard(port), 'success');
+    });
+
     test(
-      'starts when another interface holds the port but loopback is free',
+      'starts when another interface holds the port but loopback is free (AC1)',
       { skip: nonLoopback ? false : 'no non-loopback IPv4 interface' },
       async () => {
         // The tailscale-serve shape, and the reason :8082 stayed dark: something
-        // else holds the port on a different interface while 127.0.0.1 is free.
-        const srv = await listen(nonLoopback as string);
-        try {
-          const port = (srv.address() as { port: number }).port;
+        // else holds the port on a specific other interface while 127.0.0.1 is
+        // free. Binding loopback here genuinely succeeds, so the guard must pass.
+        await withListener(nonLoopback as string, false, (port) => {
           assert.equal(
-            runGuardViaRealUnit([portGuardLineFor(port)]),
+            runPortGuard(port),
             'success',
             'port guard aborted the start over a listener on a non-loopback interface',
           );
-        } finally {
-          srv.close();
-        }
+        });
       },
     );
 
-    test('still refuses when loopback itself is held', async () => {
-      // The narrowed filter must not have simply become permissive.
-      const srv = await listen('127.0.0.1');
-      try {
-        const port = (srv.address() as { port: number }).port;
+    test('refuses when an IPv4 wildcard 0.0.0.0 holds the port (M1)', async () => {
+      // 0.0.0.0:PORT really does block a 127.0.0.1:PORT bind. Missing it let
+      // ExecStart run, node die EADDRINUSE, and Restart=on-failure turn a clean
+      // abort into an uninformative crash-loop.
+      await withListener('0.0.0.0', false, (port) => {
         assert.notEqual(
-          runGuardViaRealUnit([portGuardLineFor(port)]),
+          runPortGuard(port),
+          'success',
+          'port guard missed a 0.0.0.0 wildcard that blocks the loopback bind',
+        );
+      });
+    });
+
+    test('refuses when a dual-stack [::] holds the port (M1)', async () => {
+      await withListener('::', false, (port) => {
+        assert.notEqual(
+          runPortGuard(port),
+          'success',
+          'port guard missed a dual-stack [::] wildcard that blocks the loopback bind',
+        );
+      });
+    });
+
+    test('starts when a v6only [::] holds the port — it does not conflict', async () => {
+      // The case that rules out every ss-filter fix: ss renders this the same way
+      // its filters match a dual-stack bind, but a v6only listener leaves
+      // 127.0.0.1:PORT bindable. Treating it as a conflict would be AC1 again.
+      await withListener('::', true, (port) => {
+        assert.equal(
+          runPortGuard(port),
+          'success',
+          'port guard refused over a v6only [::] listener that does not block the bind',
+        );
+      });
+    });
+
+    test('refuses when loopback itself is held', async () => {
+      // The guard must not have become permissive.
+      await withListener('127.0.0.1', false, (port) => {
+        assert.notEqual(
+          runPortGuard(port),
           'success',
           'port guard let the unit start while 127.0.0.1 was already bound',
         );
-      } finally {
-        srv.close();
-      }
+      });
     });
   },
 );
@@ -499,7 +647,7 @@ describe('deploy: README matches the unit', () => {
       !/Four of those are asserted/.test(readme),
       'README miscounts the ExecStartPre-checked paths (the checkout is a WorkingDirectory failure, not an ExecStartPre one)',
     );
-    const pathGuards = EXEC_START_PRE.filter((l) => !l.includes('ss -tln'));
+    const pathGuards = EXEC_START_PRE.filter((l) => !l.includes(PORT_GUARD_SCRIPT));
     assert.equal(
       pathGuards.length,
       3,
@@ -518,5 +666,17 @@ describe('deploy: README matches the unit', () => {
     const para = readme.split('\n').find((line) => line.includes('ADMIN_FRONTEND_DIST'));
     assert.ok(para, 'README must mention ADMIN_FRONTEND_DIST');
     assert.ok(/absolute/i.test(para), 'README must state ADMIN_FRONTEND_DIST is an absolute path');
+  });
+
+  test('README narrates no unreachable relative-path failure mode', () => {
+    // The README described a relative value serving a 404. No test proves that
+    // app behaviour, and the guard now REJECTS relative values, so the narrated
+    // state is unreachable — prose about a mechanism nothing can reach is the
+    // same class as the deletions above. The absoluteness REQUIREMENT stays; it
+    // is what the shipping-layer test actually proves.
+    assert.ok(
+      !/404/.test(readme),
+      'README narrates a 404 failure mode no test proves and the guard makes unreachable',
+    );
   });
 });
