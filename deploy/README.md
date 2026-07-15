@@ -4,7 +4,7 @@ Single-user, localhost-only systemd user unit. Designed to **outlive gc-supervis
 
 The unit file ([`gas-city-dashboard.service`](gas-city-dashboard.service)) uses systemd's `%h` substitution so the same file works on any operator's host when installed under `systemctl --user`. It expects the repo at `~/gascity-dashboard` (the `gastownhall/gascity-dashboard` clone default). If yours lives elsewhere, repoint the `WorkingDirectory` / `ExecStart` / `Environment=` / `ReadWritePaths` paths before installing.
 
-Four of those are asserted at start by `ExecStartPre` and fail **loudly**, naming what they could not reach: the checkout (`WorkingDirectory`), the interpreter (`node`, off the unit's `PATH`), the backend build output (`backend/dist/server.js`), and the frontend bundle (`ADMIN_FRONTEND_DIST`). `ADMIN_FRONTEND_DIST` must be an **absolute** path — the server resolves a relative value from `backend/` while the start check resolves it from the repo root, so a relative value would pass the check yet serve a 404; the check rejects a relative value up front. The unit's other `Environment=` values (such as `ADMIN_AUDIT_LOG_PATH`) are **not** asserted at start; if you change one, verify it by hand.
+Three are asserted at start by `ExecStartPre` and fail **loudly**, naming what they could not reach: the interpreter (`node`, off the unit's `PATH`), the backend build output (`backend/dist/server.js`), and the frontend bundle (`ADMIN_FRONTEND_DIST`). `ADMIN_FRONTEND_DIST` must be an **absolute** path — the server resolves a relative value from `backend/` while the start check resolves it from the repo root, so a relative value would pass the check yet serve a 404; the check rejects a relative value up front. The unit's other `Environment=` values (such as `ADMIN_AUDIT_LOG_PATH`) are **not** asserted at start; if you change one, verify it by hand.
 
 The unit runs `node` off its own `Environment=PATH` (`~/.local/bin` first, then the system paths) rather than a hard-coded interpreter location, because a systemd user service does not inherit your login shell's `PATH`. If your Node lives outside those directories — nvm, fnm, and asdf all keep theirs under their own roots — add it to that `Environment=PATH` line.
 
@@ -48,18 +48,16 @@ systemctl --user restart gas-city-dashboard.service
 ```bash
 systemctl --user status gas-city-dashboard.service
 journalctl --user -u gas-city-dashboard.service -f
-ss -tln 'sport = :8082'                       # port-in-use check
+ss -tlnp 'src 127.0.0.1:8082'                 # who holds the port we bind
 curl -fsS http://127.0.0.1:8082/api/health    # smoke test
 ```
 
-## Kill switch
+## Stopping it
 
 ```bash
-ADMIN_DASHBOARD_DISABLED=1 systemctl --user start gas-city-dashboard.service
-# → the service refuses to bind the listener; clean exit.
+systemctl --user stop gas-city-dashboard.service            # until next start
+systemctl --user disable --now gas-city-dashboard.service   # permanently
 ```
-
-For permanent disable: `systemctl --user disable --now gas-city-dashboard.service`.
 
 ## Notes
 

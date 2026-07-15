@@ -35,25 +35,34 @@ ExecStartPre=/bin/sh -c 'test -f %h/gascity-dashboard/backend/dist/server.js || 
 # resolves a relative value from backend/ (path.resolve(__dirname, '..', value)),
 # a different directory than this check's cwd (WorkingDirectory=repo root), so a
 # relative value would pass here yet 404 there. Reject relative up front.
-ExecStartPre=/bin/sh -c 'case "${ADMIN_FRONTEND_DIST}" in /*) ;; *) echo "gas-city-dashboard: ADMIN_FRONTEND_DIST must be an absolute path, got: ${ADMIN_FRONTEND_DIST}" >&2; exit 1 ;; esac; test -f "${ADMIN_FRONTEND_DIST}/index.html" || { echo "gas-city-dashboard: frontend bundle missing at ${ADMIN_FRONTEND_DIST} — build the frontend (npm run build), or fix the ADMIN_FRONTEND_DIST line in this unit" >&2; exit 1; }'
+#
+# The value is passed POSITIONALLY as "$1" — never written as ${ADMIN_FRONTEND_DIST}
+# inside the sh -c script text. systemd substitutes ${VAR} into the command line
+# before sh parses it, so a value spliced into the script body is re-parsed as
+# shell PROGRAM TEXT: $(...) in it executes as the service user at start. Passing
+# it after the script makes sh treat it as opaque data. Do not inline it back.
+ExecStartPre=/bin/sh -c 'case "$1" in /*) ;; *) echo "gas-city-dashboard: ADMIN_FRONTEND_DIST must be an absolute path, got: $1" >&2; exit 1 ;; esac; test -f "$1/index.html" || { echo "gas-city-dashboard: frontend bundle missing at $1 — build the frontend (npm run build), or fix the ADMIN_FRONTEND_DIST line in this unit" >&2; exit 1; }' _ "${ADMIN_FRONTEND_DIST}"
 # Same guard for the interpreter. `/usr/bin/env node` already names a missing
 # node and exits 127; this adds the one thing it can't know — which line of
 # this unit to edit.
 ExecStartPre=/bin/sh -c 'command -v node >/dev/null 2>&1 || { echo "gas-city-dashboard: no runnable \"node\" on this unit PATH — install Node.js, or add its directory to the Environment=PATH line in this unit" >&2; exit 1; }'
-# Refuse to start if a stale process holds the port. Bound to 127.0.0.1 only,
-# so the ss check is sufficient — no public-interface race.
-ExecStartPre=/bin/sh -c '! ss -tln "sport = :8082" | grep -q LISTEN || (echo "port 8082 already bound" >&2; exit 1)'
+# Refuse to start if a stale process holds the port we bind. Scope the filter to
+# `src 127.0.0.1:8082`, NOT `sport = :8082`: the latter matches the port on EVERY
+# interface, so an unrelated listener elsewhere on 8082 aborts a start whose own
+# loopback address is free. `tailscale serve` is the live case — it holds
+# <tailnet-ip>:8082 to proxy INTO 127.0.0.1:8082, so the wide filter made the unit
+# refuse to start the very backend tailscale was proxying to.
+ExecStartPre=/bin/sh -c '! ss -tln "src 127.0.0.1:8082" | grep -q LISTEN || (echo "gas-city-dashboard: 127.0.0.1:8082 already bound — stop the process holding it (ss -tlnp \"src 127.0.0.1:8082\")" >&2; exit 1)'
 ExecStart=/usr/bin/env node %h/gascity-dashboard/backend/dist/server.js
 Restart=on-failure
 RestartSec=3
 StandardOutput=journal
 StandardError=journal
-# Hardening. ProtectSystem=strict makes the filesystem read-only except the
-# ReadWritePaths listed below; the service appends its audit log under %h/.gc
-# (ADMIN_AUDIT_LOG_PATH).
+# Hardening. The service appends its audit log under %h/.gc
+# (ADMIN_AUDIT_LOG_PATH) and reads the checkout it runs from.
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=%h/.gc %h/gascity-dashboard %h/gas-city
+ReadWritePaths=%h/.gc %h/gascity-dashboard
 ProtectHome=read-only
 PrivateTmp=true
 # NO PrivateDevices / ProtectKernelModules: both imply a CapabilityBoundingSet
