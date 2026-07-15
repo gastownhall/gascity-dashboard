@@ -39,7 +39,6 @@ export function paintTextLayers(
   // whole-tank view (where they would read as categorical bars)
   if (fRig > 0.01) {
     paintRigLabels(ctx, snapshot, palette, mid, viewport, fRig);
-    paintOverflow(ctx, snapshot, palette, mid, viewport, fRig);
     paintStrandedMarkers(ctx, snapshot, palette, mid, viewport, fRig);
   }
   // at LOD1 the drift resolves into its initiatives: same-epic beads get a
@@ -116,7 +115,11 @@ function paintRigLabels(
     const pos = worldToScreen(mid, formation.anchorX, formation.anchorY);
     if (offscreen(pos, viewport, 140)) continue;
     ctx.fillStyle = rigLabelColor(formation.key, palette);
-    ctx.fillText(`${formation.key.toUpperCase()} · ${formation.openBeadTotal}`, pos.x, pos.y + 26);
+    // A rig with no open work reads as just its name; "· 0" is noise (and read
+    // as odd on the neutral UNRIGGED stratum). The name still maps colour→rig.
+    const name = formation.key.toUpperCase();
+    const label = formation.openBeadTotal > 0 ? `${name} · ${formation.openBeadTotal}` : name;
+    ctx.fillText(label, pos.x, pos.y + 26);
   }
   setLetterSpacing(ctx, '0px');
   ctx.globalAlpha = 1;
@@ -130,33 +133,6 @@ function paintRigLabels(
 function rigLabelColor(key: string, palette: ScenePalette): string {
   const hue = rigHue(key);
   return hue === null ? palette.textMuted : withHueChroma(palette.textMuted, hue, RIG_CHROMA);
-}
-
-function paintOverflow(
-  ctx: CanvasRenderingContext2D,
-  snapshot: WorldSnapshot,
-  palette: ScenePalette,
-  mid: LayerTransform,
-  viewport: Viewport,
-  alpha: number,
-): void {
-  ctx.font = `600 11px ${palette.fontFamily}`;
-  ctx.textAlign = 'center';
-  ctx.fillStyle = palette.textMuted;
-  ctx.globalAlpha = alpha;
-  for (const formation of snapshot.formations) {
-    if (formation.key === CITY_KEY) continue;
-    const overflow = snapshot.pelletOverflow[formation.key];
-    if (overflow === undefined || overflow <= 0) continue;
-    const pos = worldToScreen(
-      mid,
-      formation.anchorX + formation.radius * 0.55,
-      formation.anchorY - formation.radius * 1.15,
-    );
-    if (offscreen(pos, viewport, 60)) continue;
-    ctx.fillText(`+${overflow}`, pos.x, pos.y);
-  }
-  ctx.globalAlpha = 1;
 }
 
 interface FishAnchor {

@@ -131,10 +131,13 @@ export interface WorldSnapshot {
   pellets: PelletEntity[];
   /** count of distress fish (the overlay ledger line's number) */
   needsAttention: number;
-  /** per-rig overflow beyond the rendered pellet cap, for "+N" labels */
+  /** per-rig count of open beads sampled out beyond the rendered pellet cap —
+   *  the truthful "how many more than shown" accounting. Not drawn as a floating
+   *  marker (the formation label already carries the full openBeadTotal); kept
+   *  for the cap-correctness tests and a future "N more" drill-in. */
   pelletOverflow: Record<string, number>;
-  /** per-rig count of stranded beads (actionable work with no live owner);
-   *  rigs with none are absent. Surfaced as a per-rig shelf marker. */
+  /** per-rig count of stranded beads (orphaned work whose assigned owner's
+   *  session died); rigs with none are absent. Surfaced as a per-rig shelf marker. */
   strandedByRig: Record<string, number>;
 }
 

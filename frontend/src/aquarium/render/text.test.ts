@@ -91,6 +91,35 @@ describe('rig labels across zoom (map labels at the working overview)', () => {
   });
 });
 
+describe('rig label with no open work drops the "· 0" count noise', () => {
+  const ZERO_SNAPSHOT: WorldSnapshot = {
+    formations: [
+      { key: 'decisions', anchorX: 1000, anchorY: 1850, radius: 220, seed: 7, openBeadTotal: 0 },
+      { key: UNRIGGED_KEY, anchorX: 1400, anchorY: 1850, radius: 220, seed: 3, openBeadTotal: 0 },
+    ],
+    fish: [],
+    pellets: [],
+    needsAttention: 0,
+    pelletOverflow: {},
+    strandedByRig: {},
+  };
+
+  it('names a zero-work rig without a "· 0" suffix', () => {
+    const { ctx, drawn } = recordingCtx();
+    paintTextLayers(
+      ctx,
+      ZERO_SNAPSHOT,
+      EMPTY_SIM,
+      PALETTE,
+      { x: 1000, y: 1850, zoom: 0.5 },
+      VIEWPORT,
+    );
+    expect(drawn.some((d) => d.text === 'DECISIONS')).toBe(true);
+    expect(drawn.some((d) => d.text.includes('· 0'))).toBe(false);
+    expect(drawn.some((d) => d.text === 'UNRIGGED')).toBe(true);
+  });
+});
+
 const HUE_SNAPSHOT: WorldSnapshot = {
   formations: [
     { key: 'cension', anchorX: 1000, anchorY: 1850, radius: 220, seed: 7, openBeadTotal: 12 },
