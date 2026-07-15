@@ -32,6 +32,12 @@ Environment=ADMIN_FRONTEND_DIST=%h/gascity-dashboard/frontend/dist
 # stack trace naming an internal loader path. (A wrong repo path never reaches
 # here: systemd aborts on WorkingDirectory at 200/CHDIR first, saying so.)
 ExecStartPre=/bin/sh -c 'test -f %h/gascity-dashboard/backend/dist/server.js || { echo "gas-city-dashboard: %h/gascity-dashboard/backend/dist/server.js not found — is the repo at ~/gascity-dashboard and built (npm install && npm run build)?" >&2; exit 1; }'
+# The frontend bundle the UI is served from. A stale or mis-edited
+# ADMIN_FRONTEND_DIST otherwise starts, binds the port, and reads active/green
+# while GET / returns 404 — a dead dashboard (backend/src/app.ts mountFrontend:
+# existsSync -> log -> API-only, no throw). Assert the *configured* path so the
+# check moves with the var; that makes it loud at start, not silent at load.
+ExecStartPre=/bin/sh -c 'test -f "${ADMIN_FRONTEND_DIST}/index.html" || { echo "gas-city-dashboard: frontend bundle missing at ${ADMIN_FRONTEND_DIST} — build the frontend (npm run build), or fix the ADMIN_FRONTEND_DIST line in this unit" >&2; exit 1; }'
 # Same guard for the interpreter. `/usr/bin/env node` already names a missing
 # node and exits 127; this adds the one thing it can't know — which line of
 # this unit to edit.

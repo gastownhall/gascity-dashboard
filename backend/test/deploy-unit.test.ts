@@ -92,6 +92,19 @@ describe('deploy: systemd unit path is the real checkout', () => {
     );
   });
 
+  test('unit asserts the frontend bundle before start', () => {
+    // A stale or mis-edited ADMIN_FRONTEND_DIST otherwise starts, binds the
+    // port, and reads active/green while GET / returns 404 — the exact silent
+    // dead-dashboard class this bead exists to kill, one path segment over
+    // (backend/src/app.ts mountFrontend: existsSync -> log -> API-only).
+    assert.ok(
+      EXEC_START_PRE.some(
+        (line) => /ADMIN_FRONTEND_DIST/.test(line) && /test\s+-[a-z]*[fed]/.test(line),
+      ),
+      'expected an ExecStartPre asserting the ADMIN_FRONTEND_DIST bundle exists before start',
+    );
+  });
+
   test('unit sets no hardening switch that prevents it from starting', () => {
     for (const [opt, why] of Object.entries(UNSTARTABLE_SWITCHES)) {
       assert.ok(!new RegExp(`^${opt}=(true|yes|1)$`, 'm').test(unit), `${opt} ${why}`);
@@ -122,5 +135,29 @@ describe('deploy: README matches the unit', () => {
       !/edit the unit's `WorkingDirectory`/.test(readme),
       'README still tells operators to hand-edit the path without enforcement',
     );
+  });
+
+  test('README makes no blanket "nothing fails silently" claim (AC3)', () => {
+    // The rejected copy claimed every repointed path fails loud. Disproven: a
+    // stale ADMIN_FRONTEND_DIST serves a 404 dead dashboard, and GC_CITY_PATH /
+    // ADMIN_AUDIT_LOG_PATH / a missing ReadWritePaths entry each degrade without
+    // stopping the unit.
+    assert.ok(
+      !/none of these fail silently/i.test(readme),
+      'README still makes the disproven blanket "nothing fails silently" claim',
+    );
+  });
+
+  test('README names which paths are NOT start-checked and how they degrade (AC3)', () => {
+    assert.ok(
+      readme.includes('checked at start'),
+      'README must distinguish the start-checked paths from the unchecked ones',
+    );
+    for (const unguarded of ['GC_CITY_PATH', 'ADMIN_AUDIT_LOG_PATH', 'ReadWritePaths']) {
+      assert.ok(
+        readme.includes(unguarded),
+        `README must name the unchecked var ${unguarded} and its degradation`,
+      );
+    }
   });
 });
