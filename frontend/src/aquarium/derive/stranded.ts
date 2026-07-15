@@ -1,28 +1,23 @@
-// Stranded work: actionable beads with no live owner. A distressed AGENT rises
-// to the surface shelf as a fish; stranded WORK has no agent to be, so it
-// surfaces as a per-rig marker instead (the pellet stays sunk — "blocked" is
-// already its position). The predicate is deliberately structural, not
-// age-scored: a bead is stranded when every dependency is closed (so it is
-// actually workable) AND it has no live owner — either it is assigned to an
-// agent whose session is gone, or it is unassigned on a rig with no live agent
-// to pick it up. NOT "any blocked bead" (a bead with an open dependency is
-// waiting, not stranded) and NOT a staleness threshold (no hidden clock).
+// Stranded work: actionable beads whose assigned owner is gone. A distressed
+// AGENT rises to the surface shelf as a fish; stranded WORK has no agent to be,
+// so it surfaces as a per-rig marker instead (the pellet stays sunk — "blocked"
+// is already its position). The predicate is deliberately structural, not
+// age-scored: a bead is stranded when it was ASSIGNED to an agent whose session
+// is no longer live (orphaned mid-flight) AND every dependency is closed (so it
+// is actually workable). Unassigned backlog is NOT stranded — a rig with no live
+// agent has a backlog waiting to be picked up, not an alarm; surfacing the whole
+// ready queue of every idle rig would drown the "needs a human" scan line. And
+// NOT "any blocked bead" (an open dependency = waiting, not stranded), NOT a
+// staleness threshold (no hidden clock).
 
 import type { Bead } from 'gas-city-dashboard-shared/gc-supervisor';
-import {
-  isBlockedStatus,
-  isInFlightStatus,
-  isOpenStatus,
-  parseAssignee,
-} from 'gas-city-dashboard-shared';
+import { parseAssignee } from 'gas-city-dashboard-shared';
 
 export interface StrandedInputs {
   beadsByRig: Readonly<Record<string, { items: readonly Bead[]; total: number }>>;
   /** session ids of live (non-ghost) agents; an assignee whose session is not
    *  here is a dead owner. */
   liveSessionIds: ReadonlySet<string>;
-  /** live-agent count per rig key; a rig at 0 has no one to grab unclaimed work. */
-  liveAgentsByRig: ReadonlyMap<string, number>;
 }
 
 /** Per-rig count of stranded beads (rigs with none are absent from the map). */
@@ -37,7 +32,7 @@ export function buildStrandedByRig(inputs: StrandedInputs): Record<string, numbe
   for (const [rigKey, entry] of Object.entries(inputs.beadsByRig)) {
     let n = 0;
     for (const bead of entry.items) {
-      if (isStranded(bead, rigKey, activeIds, inputs)) n += 1;
+      if (isStranded(bead, activeIds, inputs.liveSessionIds)) n += 1;
     }
     if (n > 0) out[rigKey] = n;
   }
@@ -46,22 +41,15 @@ export function buildStrandedByRig(inputs: StrandedInputs): Record<string, numbe
 
 function isStranded(
   bead: Bead,
-  rigKey: string,
   activeIds: ReadonlySet<string>,
-  inputs: StrandedInputs,
+  liveSessionIds: ReadonlySet<string>,
 ): boolean {
-  // in-progress work has a live holder; only open/blocked beads can strand.
-  if (isInFlightStatus(bead.status)) return false;
-  if (!isOpenStatus(bead.status) && !isBlockedStatus(bead.status)) return false;
-  if (!isActionable(bead, activeIds)) return false; // an open dep = waiting, not stranded
   const assignee = bead.assignee ?? '';
-  if (assignee.length > 0) {
-    // orphaned: assigned to an agent whose session is no longer live.
-    const sid = parseAssignee(assignee).sessionId;
-    return sid === undefined || !inputs.liveSessionIds.has(sid);
-  }
-  // unassigned: stranded only when the rig has no live agent to claim it.
-  return (inputs.liveAgentsByRig.get(rigKey) ?? 0) === 0;
+  if (assignee.length === 0) return false; // unassigned backlog is not an alarm
+  const sessionId = parseAssignee(assignee).sessionId;
+  const ownerLive = sessionId !== undefined && liveSessionIds.has(sessionId);
+  if (ownerLive) return false; // the assigned agent is still working it
+  return isActionable(bead, activeIds); // an open dep = waiting, not stranded
 }
 
 /** Actionable = every dependency has left the active store (closed). A dependency

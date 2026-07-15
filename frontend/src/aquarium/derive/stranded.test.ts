@@ -23,30 +23,30 @@ function assigneeFor(session: string): string {
   return `worker-${session}`;
 }
 
-describe('buildStrandedByRig', () => {
-  it('strands an unassigned actionable bead on a rig with no live agent', () => {
+describe('buildStrandedByRig (orphaned = assigned to a dead session)', () => {
+  it('does NOT strand unassigned backlog, even on a rig with no live agent', () => {
+    // The key rule change: an idle rig's ready backlog is backlog, not an alarm.
     const out = buildStrandedByRig({
-      beadsByRig: { geo: rigStore([bead({ id: 'b1' })]) },
+      beadsByRig: { geo: rigStore([bead({ id: 'b1' }), bead({ id: 'b2', status: 'blocked' })]) },
       liveSessionIds: new Set(),
-      liveAgentsByRig: new Map([['geo', 0]]),
-    });
-    expect(out).toEqual({ geo: 1 });
-  });
-
-  it('does NOT strand unassigned work on a rig that still has live agents', () => {
-    const out = buildStrandedByRig({
-      beadsByRig: { geo: rigStore([bead({ id: 'b1' })]) },
-      liveSessionIds: new Set(),
-      liveAgentsByRig: new Map([['geo', 2]]),
     });
     expect(out).toEqual({});
   });
 
-  it('strands a bead assigned to a dead agent (orphaned work), even on a crewed rig', () => {
+  it('strands a bead whose assigned agent session is gone (orphaned mid-flight)', () => {
     const out = buildStrandedByRig({
       beadsByRig: { geo: rigStore([bead({ id: 'b1', assignee: assigneeFor('gc-900') })]) },
       liveSessionIds: new Set(['gc-100']),
-      liveAgentsByRig: new Map([['geo', 3]]),
+    });
+    expect(out).toEqual({ geo: 1 });
+  });
+
+  it('strands an orphaned bead even while it still reads in_progress (stale holder)', () => {
+    const out = buildStrandedByRig({
+      beadsByRig: {
+        geo: rigStore([bead({ id: 'b1', status: 'in_progress', assignee: assigneeFor('gc-900') })]),
+      },
+      liveSessionIds: new Set(['gc-100']),
     });
     expect(out).toEqual({ geo: 1 });
   });
@@ -56,57 +56,46 @@ describe('buildStrandedByRig', () => {
     const out = buildStrandedByRig({
       beadsByRig: { geo: rigStore([bead({ id: 'b1', assignee: assigneeFor('gc-100') })]) },
       liveSessionIds: new Set([live]),
-      liveAgentsByRig: new Map([['geo', 0]]),
     });
     expect(out).toEqual({});
   });
 
-  it('does NOT strand a bead still blocked by an OPEN dependency (it is waiting, not stranded)', () => {
+  it('does NOT strand an orphaned bead still blocked by an OPEN dependency (waiting)', () => {
     const out = buildStrandedByRig({
       beadsByRig: {
         geo: rigStore([
-          bead({ id: 'child', dependencies: [dep('parent')] }),
-          bead({ id: 'parent' }), // still in the store = still open = blocks
+          bead({ id: 'child', assignee: assigneeFor('gc-900'), dependencies: [dep('parent')] }),
+          bead({ id: 'parent', assignee: assigneeFor('gc-900') }), // still open = blocks
         ]),
       },
-      liveSessionIds: new Set(),
-      liveAgentsByRig: new Map([['geo', 0]]),
+      liveSessionIds: new Set(['gc-100']),
     });
-    // only 'parent' (unassigned, empty rig, no deps) is stranded; 'child' waits
+    // 'parent' (orphaned, no deps) strands; 'child' waits on the open dep
     expect(out).toEqual({ geo: 1 });
   });
 
-  it('treats a dependency absent from the store as closed → the bead is actionable', () => {
+  it('treats a dependency absent from the store as closed → the orphaned bead is actionable', () => {
     const out = buildStrandedByRig({
       beadsByRig: {
-        geo: rigStore([bead({ id: 'child', dependencies: [dep('closed-parent')] })]),
+        geo: rigStore([
+          bead({ id: 'child', assignee: assigneeFor('gc-900'), dependencies: [dep('closed')] }),
+        ]),
       },
-      liveSessionIds: new Set(),
-      liveAgentsByRig: new Map([['geo', 0]]),
+      liveSessionIds: new Set(['gc-100']),
     });
     expect(out).toEqual({ geo: 1 });
-  });
-
-  it('never strands in-progress work (it has a live holder)', () => {
-    const out = buildStrandedByRig({
-      beadsByRig: { geo: rigStore([bead({ id: 'b1', status: 'in_progress' })]) },
-      liveSessionIds: new Set(),
-      liveAgentsByRig: new Map([['geo', 0]]),
-    });
-    expect(out).toEqual({});
   });
 
   it('counts per rig and omits rigs with none stranded', () => {
     const out = buildStrandedByRig({
       beadsByRig: {
-        geo: rigStore([bead({ id: 'g1' }), bead({ id: 'g2', status: 'blocked' })]),
-        aoa: rigStore([bead({ id: 'a1' })]),
+        geo: rigStore([
+          bead({ id: 'g1', assignee: assigneeFor('gc-900') }),
+          bead({ id: 'g2', status: 'blocked', assignee: assigneeFor('gc-901') }),
+        ]),
+        aoa: rigStore([bead({ id: 'a1' })]), // unassigned backlog → not stranded
       },
-      liveSessionIds: new Set(),
-      liveAgentsByRig: new Map([
-        ['geo', 0],
-        ['aoa', 5],
-      ]),
+      liveSessionIds: new Set(['gc-100']),
     });
     expect(out).toEqual({ geo: 2 });
   });

@@ -201,6 +201,11 @@ licenses it; outside this route, nothing here applies.
   survives the climb; the per-pose silhouette (open gape / belly-up / tremor /
   tucked) keeps the four reasons distinct within the shelf, so the Greyscale Test
   still passes. Reduced-motion holds the surfaced fish as a truthful still frame.
+  Work that is stuck with no agent to be its fish surfaces as a small per-rig
+  marker on the same shelf, and it counts **orphaned** work only — a bead whose
+  assigned agent's session died mid-flight. An idle rig's unassigned backlog is
+  backlog, not an alarm: surfacing every ready bead of every agentless rig would
+  drown this scan line, so it stays in the drift and the formation totals.
 - **The backlog thins with distance so the fleet stays the subject.** A busy
   city has hundreds of open beads and only a handful of live sessions, so at the
   whole-tank overview the drifting backlog is sampled to a representative slice
