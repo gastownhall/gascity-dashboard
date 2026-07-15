@@ -39,6 +39,12 @@ Two coordinated changes:
   formation, and strengthen the exact `RIG · N` label so ownership reads at
   overview/LOD1 (not only at the default framing). Spatial proximity + exact text do
   the grouping, so reused hues no longer force a legend lookup. No halos/outlines.
+  > **Status: NOT SHIPPED this session (deferred/optional).** A1 + the fish-pile
+  > placement fix (formations now spread across the tank) + the existing
+  > formation anchoring already delivered a legible team-ownership read
+  > (live-verified), so the sim-side spread tightening was scoped out as marginal
+  > for the risk of touching settled sim. Revisit only if ownership still reads
+  > weakly after A1.
 
 ### 2. Priority = binary P0 read (her pick: "P0 glints")
 
@@ -50,7 +56,7 @@ Two coordinated changes:
   gradient, no animation, skipped below 1 css-px. Redundant P0 emphasis, not a 5th channel.
 
 > **Judgment flagged for morning review:** her chosen option's blurb said "keeps size
-> out of it entirely (size failed anyway)." I kept + *repaired* size (B1) rather than
+> out of it entirely (size failed anyway)." I kept + _repaired_ size (B1) rather than
 > removing it, because (a) DESIGN §7 makes size the priority channel and gutting a
 > contract channel autonomously is over-reach, and (b) Codex showed size didn't fail —
 > it was under-tuned (0.85–1.4); 0.78–1.8 makes P0 a different order of morsel. Doing
@@ -92,7 +98,7 @@ Two coordinated changes:
 
 1. Priority read (B1+B2) — self-contained, safest.
 2. Unfilled-bottom bug (C2) — already diagnosed.
-3. Team ownership (A1+A2) — biggest, highest leverage.
+3. Team ownership — **A1 shipped** (LOD thinning); **A2 deferred** (see §1).
 4. Fish-pile bug (C1) — after diagnosis.
 5. Bead click-through (D2) — after target decision.
 6. Dependency links (D1) — focus-only.
