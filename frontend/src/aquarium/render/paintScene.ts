@@ -18,6 +18,7 @@ import { paintFormations } from './formations';
 import { paintFishLayer } from './fishPainter';
 import { PARALLAX, applyLayer, applyScreenSpace, layerTransform, visibleWorldRect } from './layers';
 import { paintPellets } from './pellets';
+import { paintTethers } from './tethers';
 import {
   CACHE_MARGIN,
   ZOOM_SCALE_CAP_LN,
@@ -67,6 +68,7 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
   blitStatic(ctx, cache, camera, viewport, CACHE_MARGIN);
 
   applyLayer(ctx, actors);
+  paintTethers(ctx, snapshot.pellets, sim, palette, actorView, actors.scale);
   paintPellets(ctx, snapshot.pellets, sim, palette, actorView, actors.scale);
   paintFishLayer(ctx, snapshot.fish, sim, palette, actors, actorView, clockMs);
 
