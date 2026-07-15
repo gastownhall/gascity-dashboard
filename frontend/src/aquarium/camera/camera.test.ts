@@ -145,6 +145,21 @@ describe('clampCamera', () => {
     expect(clamped.y).not.toBeCloseTo(WORLD.height / 2, 0);
   });
 
+  it('has no vertical-clamp jump as a narrow viewport zooms across the fit-height point', () => {
+    // On a portrait viewport the width is the zoom-limiting axis, so an ordinary
+    // zoom gesture crosses the point where the world stops fitting the view
+    // height (~0.73 here). The clamp must be continuous there — the old
+    // branch-on-threshold form popped the camera ~60 wu mid-zoom.
+    const vp = { cssWidth: 1200, cssHeight: 1600, dpr: 1 };
+    let prev = clampCamera({ x: 2000, y: WORLD.height / 2, zoom: 0.65 }, vp).y;
+    for (let z = 0.6525; z <= 0.8; z += 0.0025) {
+      const y = clampCamera({ x: 2000, y: WORLD.height / 2, zoom: z }, vp).y;
+      // each fine zoom step moves y smoothly (a real jump would be tens of wu)
+      expect(Math.abs(y - prev), `zoom ${z.toFixed(4)}`).toBeLessThan(10);
+      prev = y;
+    }
+  });
+
   it('never lets the visible rect cross the world edge at high zoom', () => {
     const cam: Camera = { x: -500, y: -500, zoom: 3 };
     const clamped = clampCamera(cam, VIEWPORT_1440);

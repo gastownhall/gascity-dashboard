@@ -68,14 +68,18 @@ function clampAxis(value: number, halfExtent: number, worldExtent: number): numb
   return clamp(value, halfExtent, worldExtent - halfExtent);
 }
 
-/** Vertical clamp: like clampAxis, but when the world can't fill the view height
- * it anchors the waterline just below the top of the view (excess falls below
- * the seabed, which is painted over with sand) instead of centring the world. */
+/** Vertical clamp. The view top is held at or below a small sliver of open
+ * surface above the waterline (never a slab of empty water), and the view bottom
+ * at or above the world floor (the seabed sand fills any remainder below it).
+ * Both bounds move continuously with zoom; when the world no longer fits under
+ * the surface-sliver cap the lower bound crosses the upper and the surface
+ * anchor wins — and the two agree exactly at that crossing, so a narrow viewport
+ * zooming across the fit-height point sees no jump (the old branch-on-threshold
+ * form popped the camera ~60 wu there). */
 function clampVerticalAxis(value: number, halfHeightWu: number): number {
-  if (halfHeightWu * 2 >= WORLD.height) {
-    return WORLD.waterlineY - OVERTALL_SURFACE_MARGIN_WU + halfHeightWu;
-  }
-  return clamp(value, halfHeightWu, WORLD.height - halfHeightWu);
+  const lo = WORLD.waterlineY - OVERTALL_SURFACE_MARGIN_WU + halfHeightWu;
+  const hi = WORLD.height - halfHeightWu;
+  return lo >= hi ? lo : clamp(value, lo, hi);
 }
 
 function clamp(v: number, lo: number, hi: number): number {
