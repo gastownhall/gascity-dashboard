@@ -7,19 +7,16 @@ Wants=network-online.target
 # Template via systemd's %h (user home) so the unit works on any operator's host
 # when installed under `systemctl --user`. The repo clones to ~/gascity-dashboard
 # (the gastownhall/gascity-dashboard default); if yours lives elsewhere, repoint
-# the paths below. A wrong path no longer fails silently — the ExecStartPre check
-# aborts the start with an actionable message instead of an empty journal.
+# the paths below.
 
 [Service]
 Type=simple
 WorkingDirectory=%h/gascity-dashboard
 Environment=NODE_ENV=production
 Environment=PORT=8082
-# Resolve `node` the same way the operator's shell does when running the
-# documented `npm run build`, so the server runs under the interpreter that
-# built it. ~/.local/bin first (nvm/fnm/asdf shims and per-user installs land
-# there), then the system paths. A systemd user service does not inherit the
-# login shell's PATH, so it has to be stated here.
+# A systemd user service does not inherit the login shell's PATH, so state one.
+# ~/.local/bin leads so a per-user node wins over a system one. If yours is
+# elsewhere (nvm, fnm, and asdf keep theirs under their own roots), add it here.
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=GC_SUPERVISOR_URL=http://127.0.0.1:8372
 Environment=GC_CITY_NAME=gas-city
@@ -30,13 +27,14 @@ Environment=GC_CITY_NAME=gas-city
 Environment=GC_CITY_PATH=%h/gas-city
 Environment=ADMIN_AUDIT_LOG_PATH=%h/.gc/events.jsonl
 Environment=ADMIN_FRONTEND_DIST=%h/gascity-dashboard/frontend/dist
-# Fail loudly if the repo path is wrong or the build output is missing, rather
-# than leaving a permanently inactive unit with an empty journal. This is the
-# guard that turns a silent no-op redeploy into an actionable error.
+# Name the missing build step, which is what a redeploy that skipped `npm run
+# build` actually hits — node would otherwise fail with a MODULE_NOT_FOUND
+# stack trace naming an internal loader path. (A wrong repo path never reaches
+# here: systemd aborts on WorkingDirectory at 200/CHDIR first, saying so.)
 ExecStartPre=/bin/sh -c 'test -f %h/gascity-dashboard/backend/dist/server.js || { echo "gas-city-dashboard: %h/gascity-dashboard/backend/dist/server.js not found — is the repo at ~/gascity-dashboard and built (npm install && npm run build)?" >&2; exit 1; }'
-# Same guard for the interpreter. Without it a missing `node` on the unit PATH
-# aborts with a bare systemd status=203/EXEC and no hint at which binary was
-# missing, which is the same dead-end as the wrong repo path.
+# Same guard for the interpreter. `/usr/bin/env node` already names a missing
+# node and exits 127; this adds the one thing it can't know — which line of
+# this unit to edit.
 ExecStartPre=/bin/sh -c 'command -v node >/dev/null 2>&1 || { echo "gas-city-dashboard: no runnable \"node\" on this unit PATH — install Node.js, or add its directory to the Environment=PATH line in this unit" >&2; exit 1; }'
 # Refuse to start if a stale process holds the port. Bound to 127.0.0.1 only,
 # so the ss check is sufficient — no public-interface race.
@@ -57,27 +55,18 @@ ProtectSystem=strict
 ReadWritePaths=%h/.gc %h/gascity-dashboard %h/gas-city
 ProtectHome=read-only
 PrivateTmp=true
-# NO PrivateDevices / ProtectKernelModules here, deliberately. Both imply a
-# CapabilityBoundingSet drop (CAP_MKNOD, CAP_SYS_MODULE), and shrinking the
-# bounding set needs CAP_SETPCAP *effective* — which no unprivileged
-# `systemctl --user` manager has (this one holds cap_wake_alarm and nothing
-# else). systemd refuses the whole unit at 218/CAPABILITIES before ExecStart,
-# so as `--user` options they are not hardening, they are an unstartable unit.
-# They cost nothing to omit: the caps they drop are ones an unprivileged
-# process never had. Restore them only if this ever becomes a system unit.
+# NO PrivateDevices / ProtectKernelModules: both imply a CapabilityBoundingSet
+# drop, which needs CAP_SETPCAP *effective* — no unprivileged `systemctl --user`
+# manager has it, so systemd rejects the unit at 218/CAPABILITIES before
+# ExecStart. They drop caps an unprivileged process never had. System units only.
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_UNIX AF_INET
 RestrictNamespaces=true
 LockPersonality=true
-# NO MemoryDenyWriteExecute here, deliberately. V8 JITs by mapping pages
-# writable and then mprotect()ing them executable, which is precisely what
-# that switch blocks: node dies at startup with SIGTRAP (systemd reports
-# code=dumped/status=TRAP) before it can run a single line of the server.
-# It is unenforceable for any JIT runtime, and setting it is indistinguishable
-# from the dashboard "just never starting" — the failure this unit's other
-# guards exist to make loud. Re-add it only alongside `node --jitless`, and
-# only if the resulting interpreter-only performance is acceptable.
+# NO MemoryDenyWriteExecute: it blocks the mprotect() V8's JIT needs, so node
+# SIGTRAPs at startup (code=dumped/status=TRAP) before running a line of the
+# server. Re-add only alongside `node --jitless`.
 SystemCallArchitectures=native
 
 [Install]

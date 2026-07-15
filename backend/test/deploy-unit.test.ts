@@ -2,20 +2,21 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-// Regression guard for gascity-dashboard-8wcj: the shipped systemd unit and its
-// runbook must point at the repo's real checkout path. The repo clones to
-// `~/gascity-dashboard` (no hyphen between "gas" and "city"); an earlier copy
-// hard-coded the non-existent `~/gas-city-dashboard`, so the unit silently
+// Regression guard for the shipped systemd unit and its runbook. An earlier copy
+// hard-coded `~/gas-city-dashboard`, which exists on no host — the unit silently
 // never started and every documented redeploy was a no-op.
 //
-// These files are deploy config, not compiled code, so nothing else in the
-// build catches drift back to the broken path — this test is the guard.
+// These files are deploy config, not compiled code, so nothing else in the build
+// catches drift back to a unit that cannot start. This test is the guard.
+// Rationale for each assertion lives next to the directive in the unit itself.
 
 const unit = readFileSync(
   new URL('../../deploy/gas-city-dashboard.service', import.meta.url),
   'utf8',
 );
 const readme = readFileSync(new URL('../../deploy/README.md', import.meta.url), 'utf8');
+
+const EXEC_START_PRE = unit.split('\n').filter((line) => line.startsWith('ExecStartPre='));
 
 // The hyphenated string is legitimate as the product name and the unit's own
 // filename ("gas-city-dashboard.service"), so match only its use as a
@@ -26,6 +27,17 @@ const HYPHENATED_PATH_TOKENS = [
   '~/gas-city-dashboard',
   '/gas-city-dashboard/',
 ];
+
+// Switches that read like free hardening but leave the unit unable to start.
+// Each was bisected through its own probe unit; the value is the failure.
+const UNSTARTABLE_SWITCHES: Record<string, string> = {
+  PrivateDevices:
+    'implies a CapabilityBoundingSet drop needing CAP_SETPCAP, which a --user manager lacks: 218/CAPABILITIES before ExecStart',
+  ProtectKernelModules:
+    'implies a CapabilityBoundingSet drop needing CAP_SETPCAP, which a --user manager lacks: 218/CAPABILITIES before ExecStart',
+  MemoryDenyWriteExecute:
+    "blocks the mprotect() V8's JIT needs; node SIGTRAPs at startup before running a line of the server",
+};
 
 describe('deploy: systemd unit path is the real checkout', () => {
   test('unit contains no reference to the non-existent ~/gas-city-dashboard path', () => {
@@ -41,10 +53,9 @@ describe('deploy: systemd unit path is the real checkout', () => {
   });
 
   test('unit resolves node via PATH rather than a hard-coded interpreter path', () => {
-    // Criterion 1: the unit must start without a hand-edit. `/usr/bin/node` is
-    // the same defect class as the old `%h/gas-city-dashboard` path — an
-    // absolute path that simply does not exist on hosts where Node was
-    // installed per-user (nvm/fnm/asdf, ~/.local/bin), yielding status=203/EXEC.
+    // `/usr/bin/node` is the same defect class as the old `%h/gas-city-dashboard`
+    // path — an absolute path that simply does not exist on hosts where Node was
+    // installed per-user (nvm/fnm/asdf, ~/.local/bin).
     assert.ok(
       !/ExecStart=\/usr\/bin\/node\b/.test(unit),
       'ExecStart hard-codes /usr/bin/node, which is absent on per-user Node installs',
@@ -61,21 +72,18 @@ describe('deploy: systemd unit path is the real checkout', () => {
     );
   });
 
-  test('unit fails loudly (ExecStartPre) when node is not on PATH', () => {
-    // Criterion 2, applied to the interpreter: a bare 203/EXEC names no binary.
-    const execStartPre = unit.split('\n').filter((line) => line.startsWith('ExecStartPre='));
+  test('unit names the unit line to edit when node is not on PATH', () => {
     assert.ok(
-      execStartPre.some((line) => /command -v node/.test(line)),
+      EXEC_START_PRE.some((line) => /command -v node/.test(line)),
       'expected an ExecStartPre asserting node resolves before start',
     );
   });
 
-  test('unit fails loudly (ExecStartPre) when the build output is missing', () => {
-    // Criterion 2: a wrong/missing repo path must fail at start with an
-    // actionable message, not yield a permanently inactive unit + empty journal.
-    const execStartPre = unit.split('\n').filter((line) => line.startsWith('ExecStartPre='));
+  test('unit names the missing build step when the build output is absent', () => {
+    // The redeploy-that-skipped-`npm run build` case. (A wrong repo path never
+    // reaches here — systemd aborts on WorkingDirectory at 200/CHDIR first.)
     assert.ok(
-      execStartPre.some(
+      EXEC_START_PRE.some(
         (line) =>
           line.includes('%h/gascity-dashboard/backend/dist/server.js') &&
           /test\s+-[a-z]*[fe]/.test(line),
@@ -84,34 +92,13 @@ describe('deploy: systemd unit path is the real checkout', () => {
     );
   });
 
-  test('unit sets no hardening switch a --user manager cannot apply', () => {
-    // Criterion 1: these imply a CapabilityBoundingSet drop, which needs
-    // CAP_SETPCAP effective. A `systemctl --user` manager does not have it, so
-    // systemd rejects the unit at 218/CAPABILITIES *before* ExecStart — an
-    // unstartable unit, not hardening. Verified by bisecting each property
-    // through a probe unit on this host (systemd 255).
-    for (const opt of ['PrivateDevices', 'ProtectKernelModules']) {
-      assert.ok(
-        !new RegExp(`^${opt}=(true|yes|1)$`, 'm').test(unit),
-        `${opt} cannot be applied by a --user manager; the unit fails at 218/CAPABILITIES`,
-      );
+  test('unit sets no hardening switch that prevents it from starting', () => {
+    for (const [opt, why] of Object.entries(UNSTARTABLE_SWITCHES)) {
+      assert.ok(!new RegExp(`^${opt}=(true|yes|1)$`, 'm').test(unit), `${opt} ${why}`);
     }
   });
 
-  test('unit sets no hardening switch that stops node from starting', () => {
-    // Criterion 1, again: MemoryDenyWriteExecute=true reads like free
-    // hardening but is fatal to a V8 process — it blocks the mprotect() the
-    // JIT needs, so node SIGTRAPs at startup and the unit never runs. Verified
-    // empirically via `systemd-run --user --property=MemoryDenyWriteExecute=true
-    // node -e ...` => code=dumped/status=TRAP (and status=0 without it).
-    assert.ok(
-      !/^MemoryDenyWriteExecute=(true|yes|1)$/m.test(unit),
-      'MemoryDenyWriteExecute is incompatible with V8 JIT; the unit will core-dump at start',
-    );
-  });
-
-  test('bind and port are unchanged (path fix only)', () => {
-    // Criterion 5: this is a path fix, not a bind/exposure change.
+  test('bind and port are unchanged', () => {
     assert.match(unit, /Environment=PORT=8082/);
     assert.ok(!unit.includes('0.0.0.0'), 'unit must not widen the bind');
     assert.ok(!unit.includes('8081'), 'stale port 8081 must not reappear');
@@ -129,8 +116,8 @@ describe('deploy: README matches the unit', () => {
   });
 
   test('README drops the unenforced "hand-edit the path" instruction', () => {
-    // Criterion 3: the old "edit it yourself if the path differs" note is not
-    // backed by any check and was the trap. It must be gone or replaced.
+    // The old "edit it yourself if the path differs" note was not backed by any
+    // check, and was the trap. It must be gone or replaced.
     assert.ok(
       !/edit the unit's `WorkingDirectory`/.test(readme),
       'README still tells operators to hand-edit the path without enforcement',

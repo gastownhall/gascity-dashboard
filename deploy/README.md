@@ -2,9 +2,9 @@
 
 Single-user, localhost-only systemd user unit. Designed to **outlive gc-supervisor outages** — the dashboard is exactly what you want open when gc is misbehaving, so it must not be `gc-supervisor`-managed.
 
-The unit file ([`gas-city-dashboard.service`](gas-city-dashboard.service)) uses systemd's `%h` substitution so the same file works on any operator's host when installed under `systemctl --user`. It expects the repo at `~/gascity-dashboard` (the `gastownhall/gascity-dashboard` clone default). If yours lives elsewhere, repoint the `WorkingDirectory` / `ExecStart` / `Environment=` / `ReadWritePaths` paths before installing — a wrong path no longer fails silently: the unit's `ExecStartPre` aborts the start with an actionable message instead of a permanently-inactive unit and an empty journal.
+The unit file ([`gas-city-dashboard.service`](gas-city-dashboard.service)) uses systemd's `%h` substitution so the same file works on any operator's host when installed under `systemctl --user`. It expects the repo at `~/gascity-dashboard` (the `gastownhall/gascity-dashboard` clone default). If yours lives elsewhere, repoint the `WorkingDirectory` / `ExecStart` / `Environment=` / `ReadWritePaths` paths before installing; none of these fail silently, so a path you miss shows up as a failed start naming what it could not reach, not a dead dashboard.
 
-The unit runs `node` off its own `Environment=PATH` (`~/.local/bin` first, then the system paths) rather than a hard-coded interpreter location, so a per-user Node install (nvm, fnm, asdf) works without an edit; a systemd user service does not inherit your login shell's `PATH`, which is why the unit states one. If your Node lives outside those directories, add it to that `Environment=PATH` line. As with the repo path, a `node` the unit cannot resolve aborts the start with an actionable message instead of a bare `status=203/EXEC`.
+The unit runs `node` off its own `Environment=PATH` (`~/.local/bin` first, then the system paths) rather than a hard-coded interpreter location, because a systemd user service does not inherit your login shell's `PATH`. If your Node lives outside those directories — nvm, fnm, and asdf all keep theirs under their own roots — add it to that `Environment=PATH` line.
 
 ## One-time install
 
