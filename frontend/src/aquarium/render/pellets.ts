@@ -216,8 +216,10 @@ export function paintPellets(
     for (const pellet of pellets) {
       const kin = sim.pellets[pellet.beadId];
       if (kin === undefined || !rectContains(view, kin.x, kin.y)) continue;
-      if (!pelletVisibleAtLod(pellet, keep)) continue;
+      // hue check first (a cached lookup) so the thinning hash only runs for
+      // the current hue's pellets, not all of them once per present hue.
       if (pelletHueKey(pellet.rigKey) !== key) continue;
+      if (!pelletVisibleAtLod(pellet, keep)) continue;
       if (pellet.state === 'sunken') {
         const h = hashString(pellet.beadId);
         sunkX.push(kin.x);
