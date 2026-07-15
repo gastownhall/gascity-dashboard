@@ -12,6 +12,7 @@ import { buildPellets, type BeadHolder } from './pellets';
 import { diffEatenPellets } from './eating';
 import { reconcileFishTombstones, type FishMemory } from './tombstones';
 import { isDistressPose } from './pose';
+import { buildStrandedByRig } from './stranded';
 
 export interface DeriveInputs {
   sessions: SessionResponse[];
@@ -67,6 +68,22 @@ export function deriveWorldSnapshot(
 
   const needsAttention = fish.filter((f) => !f.tombstoned && isDistressPose(f.pose)).length;
 
+  // Live agents = fish that survived tombstone reconciliation; a stranded bead is
+  // one no live session owns and no crewed rig can pick up.
+  const liveSessionIds = new Set<string>();
+  const liveAgentsByRig = new Map<string, number>();
+  for (const f of fish) {
+    if (f.tombstoned) continue;
+    const sid = sessionIdByFishId.get(f.id);
+    if (sid !== undefined) liveSessionIds.add(sid);
+    liveAgentsByRig.set(f.homeKey, (liveAgentsByRig.get(f.homeKey) ?? 0) + 1);
+  }
+  const strandedByRig = buildStrandedByRig({
+    beadsByRig: inputs.beadsByRig,
+    liveSessionIds,
+    liveAgentsByRig,
+  });
+
   return {
     snapshot: {
       formations,
@@ -74,6 +91,7 @@ export function deriveWorldSnapshot(
       pellets: [...rawPellets, ...eatenPellets],
       needsAttention,
       pelletOverflow,
+      strandedByRig,
     },
     memory: { fish: fishMemory, prevBeadHolders: beadHolders },
   };

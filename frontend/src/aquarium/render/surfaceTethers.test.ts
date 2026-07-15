@@ -61,7 +61,14 @@ const FORMATION: RigFormation = {
   openBeadTotal: 5,
 };
 function snapshot(fishList: FishEntity[], formations: RigFormation[] = [FORMATION]): WorldSnapshot {
-  return { formations, fish: fishList, pellets: [], needsAttention: 0, pelletOverflow: {} };
+  return {
+    formations,
+    fish: fishList,
+    pellets: [],
+    needsAttention: 0,
+    pelletOverflow: {},
+    strandedByRig: {},
+  };
 }
 function simWith(entries: Record<string, { x: number; y: number }>): SimState {
   const f: SimState['fish'] = {};

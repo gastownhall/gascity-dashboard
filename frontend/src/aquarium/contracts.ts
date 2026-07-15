@@ -127,6 +127,9 @@ export interface WorldSnapshot {
   needsAttention: number;
   /** per-rig overflow beyond the rendered pellet cap, for "+N" labels */
   pelletOverflow: Record<string, number>;
+  /** per-rig count of stranded beads (actionable work with no live owner);
+   *  rigs with none are absent. Surfaced as a per-rig shelf marker. */
+  strandedByRig: Record<string, number>;
 }
 
 export const PELLET_RENDER_CAP_PER_RIG = 40;

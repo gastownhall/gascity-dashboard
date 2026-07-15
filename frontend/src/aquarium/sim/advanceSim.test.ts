@@ -61,6 +61,7 @@ function snapshot(overrides: Partial<WorldSnapshot> = {}): WorldSnapshot {
     pellets: [],
     needsAttention: 0,
     pelletOverflow: {},
+    strandedByRig: {},
     ...overrides,
   };
 }

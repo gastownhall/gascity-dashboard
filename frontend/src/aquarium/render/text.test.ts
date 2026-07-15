@@ -61,6 +61,7 @@ const SNAPSHOT: WorldSnapshot = {
   pellets: [],
   needsAttention: 0,
   pelletOverflow: {},
+  strandedByRig: {},
 };
 const EMPTY_SIM: SimState = { fish: {}, pellets: {}, clockMs: 0 };
 
@@ -99,6 +100,7 @@ const HUE_SNAPSHOT: WorldSnapshot = {
   pellets: [],
   needsAttention: 0,
   pelletOverflow: {},
+  strandedByRig: {},
 };
 
 describe('rig label colour carries rig identity in-scene', () => {
@@ -164,6 +166,7 @@ describe('held-bead titles (what is being worked on, and by whom)', () => {
     pellets: [HELD, DRIFT],
     needsAttention: 0,
     pelletOverflow: {},
+    strandedByRig: {},
   };
   const sim: SimState = {
     fish: {},
@@ -201,5 +204,35 @@ describe('held-bead titles (what is being worked on, and by whom)', () => {
   it('draws no bead titles at the overview (below LOD1) so the tank stays clean', () => {
     const drawn = draw(0.5);
     expect(drawn.some((d) => d.text === 'Fix the convoy latch')).toBe(false);
+  });
+});
+
+describe('stranded-work markers (per-rig surface alarm)', () => {
+  const STRANDED: WorldSnapshot = {
+    formations: [
+      { key: 'reef-gamma', anchorX: 1000, anchorY: 1850, radius: 220, seed: 7, openBeadTotal: 46 },
+    ],
+    fish: [],
+    pellets: [],
+    needsAttention: 0,
+    pelletOverflow: {},
+    strandedByRig: { 'reef-gamma': 3 },
+  };
+  // a full-column framing (surface in view) at a zoom where rig labels are on.
+  const camera: Camera = { x: 1000, y: 1010, zoom: 0.4 };
+
+  it('surfaces a per-rig "N stranded" marker at the working overview', () => {
+    const { ctx, drawn } = recordingCtx();
+    paintTextLayers(ctx, STRANDED, EMPTY_SIM, PALETTE, camera, VIEWPORT);
+    const marker = drawn.find((d) => d.text.includes('stranded'));
+    expect(marker?.text).toBe('◆ 3 stranded');
+    // the warn colour (attention), never the ledger's reserved maroon/accent.
+    expect(marker?.fillStyle).toBe(PALETTE.warn);
+  });
+
+  it('is gone at the fully zoomed-out tank (like the rig labels)', () => {
+    const { ctx, drawn } = recordingCtx();
+    paintTextLayers(ctx, STRANDED, EMPTY_SIM, PALETTE, { x: 1000, y: 1010, zoom: 0.34 }, VIEWPORT);
+    expect(drawn.some((d) => d.text.includes('stranded'))).toBe(false);
   });
 });
