@@ -99,19 +99,25 @@ const BY_POSE: Record<AquariumPose, FishAttitude> = {
     maxHeadingTilt: 6 * DEG,
     swayAmp: 2 * DEG,
   },
-  // nose UP 44° (steeper than awaiting), mouth CLOSED, hollow eye, fins folded,
-  // faint quiver — treading, held nose-high with no gape
+  // LEVEL and RIGID: dead-straight body (no swim bow, no tail beat), fins
+  // folded, hollow awake eye, no motion. Reads "hung up, not swimming" — a
+  // stiff level float, deliberately OFF awaiting-input's nose-up axis. The
+  // rigidity (zero restBow) is the greyscale-safe cue that also separates it
+  // from working/idle, which keep a swimming S-curve. The old nose-up "tremor"
+  // pose collapsed onto awaiting-input once colour and motion were stripped
+  // (the quiver is frozen under reduced-motion and invisible in a still frame),
+  // failing the Greyscale Test; posture, not motion, carries the state.
   stalled: {
     ...LEVEL,
-    pitch: 44 * DEG,
-    tailBeat: 0.34,
-    restBow: 0.035,
+    pitch: 0,
+    tailBeat: 0,
+    restBow: 0,
     eye: 'hollow',
     finsFolded: true,
-    finClamp: 0.7,
-    maxHeadingTilt: 5 * DEG,
-    swayAmp: 1.5 * DEG,
-    quiver: 1.6 * DEG,
+    finClamp: 0.55,
+    maxHeadingTilt: 4 * DEG,
+    swayAmp: 0,
+    quiver: 0,
   },
   // hard x-compression 0.62, fins clamped tight, slight nose-down hunch, darker
   // tense body, awake hollow eye — a squeezed, held-back fish, NOT dimmed

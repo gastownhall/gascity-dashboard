@@ -110,11 +110,12 @@ describe('restPosition — surface shelf lanes stay distinct', () => {
     }
   });
 
-  it('the two nose-up poses (awaiting-input, stalled) stay a clear lane apart', () => {
+  it('awaiting-input and stalled hold clearly separate surface-shelf lanes', () => {
     for (const seed of SEEDS) {
       const awaiting = restPosition('awaiting-input', ANCHOR, seed);
       const stalled = restPosition('stalled', ANCHOR, seed);
-      // a full lane between them so open-gape vs tremor never re-muddle.
+      // a full lane between them so the nose-up gape and the rigid level float
+      // never re-muddle on the shelf.
       expect(stalled.y - awaiting.y).toBeGreaterThan(60);
     }
   });

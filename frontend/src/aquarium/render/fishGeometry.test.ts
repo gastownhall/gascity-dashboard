@@ -237,27 +237,53 @@ describe('attitudes', () => {
     expect(attitudeForPose('awaiting-input').mouthOpen).toBe(true);
   });
 
-  it('stalled treads nose-up 38–46° (steeper than awaiting), fins folded', () => {
+  it('stalled reads level and RIGID — off awaiting-input’s nose-up axis, no swim bow', () => {
+    const stalled = attitudeForPose('stalled');
     const angle = bodyAngle(spineFor('stalled', 'role', 0, 0));
-    expect(angle).toBeGreaterThan(38 * DEG);
-    expect(angle).toBeLessThan(46 * DEG);
-    expect(angle).toBeGreaterThan(bodyAngle(spineFor('awaiting-input', 'role', 0, 0)));
-    expect(attitudeForPose('stalled').eye).toBe('hollow');
-    expect(attitudeForPose('stalled').finsFolded).toBe(true);
-    expect(attitudeForPose('stalled').mouthOpen).toBe(false);
+    // level: nowhere near awaiting-input's nose-up gape, so the two distress
+    // poses no longer share a silhouette axis when colour is stripped
+    expect(Math.abs(angle)).toBeLessThan(8 * DEG);
+    // rigid: zero resting bow and zero tail beat → a dead-straight spine, the
+    // greyscale-safe cue that also separates it from working/idle
+    expect(stalled.restBow).toBe(0);
+    expect(stalled.tailBeat).toBe(0);
+    // carries state through posture, not motion: the old quiver is invisible in
+    // a still frame and frozen under reduced-motion, so it must not be relied on
+    expect(stalled.quiver).toBe(0);
+    expect(stalled.eye).toBe('hollow');
+    expect(stalled.finsFolded).toBe(true);
+    expect(stalled.mouthOpen).toBe(false);
   });
 
-  it('nose angles are distinct and ordered idle < working < awaiting < stalled', () => {
+  it('the level poses read apart by spine curvature: stalled is straight, working/idle bow', () => {
+    const L = SPECIES.role.length;
+    const curvature = (pose: AquariumPose): number => {
+      const spine = spineFor(pose, 'role', 0, 0); // frozen frame: phase 0, speed 0
+      const nose = at(spine.points, 0);
+      const tail = at(spine.points, spine.points.length - 1);
+      const dx = tail.x - nose.x;
+      const dy = tail.y - nose.y;
+      const len = Math.hypot(dx, dy) || 1;
+      return Math.max(
+        ...spine.points.map((p) => Math.abs(((p.x - nose.x) * dy - (p.y - nose.y) * dx) / len)),
+      );
+    };
+    // stalled: essentially a straight line
+    expect(curvature('stalled')).toBeLessThan(0.02 * L);
+    // working and idle keep a visible resting S even in a still frame, so a lone
+    // level fish still reads "swimming" vs the rigid stalled float
+    expect(curvature('working')).toBeGreaterThan(curvature('stalled') + 0.04 * L);
+    expect(curvature('idle')).toBeGreaterThan(curvature('stalled') + 0.03 * L);
+  });
+
+  it('the nose-up trio stays ordered idle < working < awaiting-input', () => {
     const idle = bodyAngle(spineFor('idle', 'role', 0, 0));
     const working = bodyAngle(spineFor('working', 'role', 0, 0));
     const awaiting = bodyAngle(spineFor('awaiting-input', 'role', 0, 0));
-    const stalled = bodyAngle(spineFor('stalled', 'role', 0, 0));
     expect(idle).toBeLessThan(working);
     expect(working).toBeLessThan(awaiting);
-    expect(awaiting).toBeLessThan(stalled);
-    // each pair is separated enough to read apart at a glance
+    // awaiting-input is separated enough from the level swimmers to read apart
     expect(awaiting - working).toBeGreaterThan(20 * DEG);
-    expect(stalled - awaiting).toBeGreaterThan(8 * DEG);
   });
 
   it('errored flips belly-up: dorsal fin and eye swap sides, eye is crossed', () => {
@@ -360,16 +386,19 @@ describe('resting spine bow (findings: near-straight calm poses)', () => {
 });
 
 describe('surface cluster separability (awaiting-input / stalled / errored)', () => {
-  it('awaiting-input gapes open; stalled holds a closed mouth, steeper', () => {
+  it('awaiting-input gapes nose-up with spread fins; stalled is a closed-mouth level rigid float', () => {
     const awaiting = attitudeForPose('awaiting-input');
     const stalled = attitudeForPose('stalled');
     expect(awaiting.mouthOpen).toBe(true);
     expect(stalled.mouthOpen).toBe(false);
-    // stalled noses higher than awaiting so the two never overlap at the surface
-    expect(bodyAngle(spineFor('stalled', 'role', 0, 0))).toBeGreaterThan(
-      bodyAngle(spineFor('awaiting-input', 'role', 0, 0)),
-    );
-    // awaiting keeps spread fins (not clamped) so its silhouette stays fish-wide
+    // awaiting-input noses up; stalled sits level — the two occupy different
+    // silhouette axes so they never collapse together at the surface shelf
+    const awaitingAngle = bodyAngle(spineFor('awaiting-input', 'role', 0, 0));
+    const stalledAngle = bodyAngle(spineFor('stalled', 'role', 0, 0));
+    expect(awaitingAngle).toBeGreaterThan(25 * DEG);
+    expect(Math.abs(stalledAngle)).toBeLessThan(8 * DEG);
+    // awaiting keeps spread fins (not clamped) so its silhouette stays fish-wide;
+    // stalled folds its fins against the rigid body
     expect(awaiting.finClamp).toBe(1);
     expect(stalled.finClamp).toBeLessThan(1);
   });
