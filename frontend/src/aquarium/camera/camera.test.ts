@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WORLD, LOD1_ZOOM, LOD2_ZOOM, CAMERA_HASH_PREFIX, type Camera } from '../contracts';
 import {
   fitTankCamera,
+  FIT_MARGIN_WU,
   homeCamera,
   clampCamera,
   zoomAtCursor,
@@ -17,19 +18,40 @@ import {
 const VIEWPORT_1440 = { cssWidth: 1440, cssHeight: 900, dpr: 1 };
 
 describe('fitTankCamera', () => {
-  it('fits the whole tank and centers on the world midpoint at a 1440x900 viewport', () => {
+  it('fits the whole tank plus a frame margin, centered on the world midpoint at 1440x900', () => {
     const cam = fitTankCamera(VIEWPORT_1440);
-    // documented in contracts.ts: LOD1_ZOOM comment says the fit zoom for a
-    // 1440x900 viewport is ~0.36 — pin that exact contract.
-    expect(cam.zoom).toBeCloseTo(1440 / WORLD.width, 5);
-    expect(cam.zoom).toBeCloseTo(0.36, 2);
+    // The floor fits WORLD + a FIT_MARGIN_WU frame on every side, so edge fish
+    // and formation silhouettes never sit AT the screen edge (width binds here).
+    expect(cam.zoom).toBeCloseTo(1440 / (WORLD.width + 2 * FIT_MARGIN_WU), 5);
     expect(cam.x).toBeCloseTo(WORLD.width / 2, 5);
     expect(cam.y).toBeCloseTo(WORLD.height / 2, 5);
   });
 
   it('picks the tighter axis so nothing is cropped, for a portrait viewport', () => {
     const cam = fitTankCamera({ cssWidth: 900, cssHeight: 1440, dpr: 1 });
-    expect(cam.zoom).toBeCloseTo(900 / WORLD.width, 5);
+    expect(cam.zoom).toBeCloseTo(900 / (WORLD.width + 2 * FIT_MARGIN_WU), 5);
+  });
+
+  it('frames the ENTIRE world with a margin at extreme aspect ratios (issue #3)', () => {
+    for (const vp of [
+      { cssWidth: 3440, cssHeight: 900, dpr: 1 }, // ultra-wide
+      { cssWidth: 800, cssHeight: 1600, dpr: 1 }, // tall portrait
+      VIEWPORT_1440,
+    ]) {
+      const cam = fitTankCamera(vp);
+      const tl = worldFromScreen(cam, vp, 0, 0);
+      const br = worldFromScreen(cam, vp, vp.cssWidth, vp.cssHeight);
+      // the whole world box is inside the visible rect...
+      expect(tl.x, `${vp.cssWidth}x${vp.cssHeight} left`).toBeLessThanOrEqual(0);
+      expect(tl.y, `${vp.cssWidth}x${vp.cssHeight} top`).toBeLessThanOrEqual(0);
+      expect(br.x, `${vp.cssWidth}x${vp.cssHeight} right`).toBeGreaterThanOrEqual(WORLD.width);
+      expect(br.y, `${vp.cssWidth}x${vp.cssHeight} bottom`).toBeGreaterThanOrEqual(WORLD.height);
+      // ...with a real frame on the binding axis — nothing sits at the edge.
+      const frame = Math.min(-tl.x, br.x - WORLD.width, -tl.y, br.y - WORLD.height);
+      expect(frame, `${vp.cssWidth}x${vp.cssHeight} frame`).toBeGreaterThanOrEqual(
+        FIT_MARGIN_WU - 1e-6,
+      );
+    }
   });
 });
 

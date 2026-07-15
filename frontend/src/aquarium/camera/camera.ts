@@ -20,10 +20,22 @@ function minZoom(viewport: Viewport): number {
 /** Generous headroom past the LOD2 detail threshold for close-up framing. */
 const MAX_ZOOM = 8;
 
-/** Zoom level (css px / world unit) that fits the entire WORLD into viewport,
- * centered on the tank midpoint. This is also the camera's zoomed-out floor. */
+/** Frame kept on every side at the zoom-out floor, in world units. The exact
+ * WORLD box is not the drawn extent: edge fish, and especially formation
+ * silhouettes (radius up to ~420 wu, placed ~200 wu off the wall), reach past
+ * the box, so an exact-box fit clips them at the screen edge. Sized to clear the
+ * widest edge silhouette so the fully-zoomed-out view shows the ENTIRE tank with
+ * a border at any window size (issue #3). */
+export const FIT_MARGIN_WU = 250;
+
+/** Zoom level (css px / world unit) that fits the entire WORLD — plus a
+ * FIT_MARGIN_WU frame on every side — into the viewport, centered on the tank
+ * midpoint. This is also the camera's zoomed-out floor. */
 export function fitTankCamera(viewport: Viewport): Camera {
-  const zoom = Math.min(viewport.cssWidth / WORLD.width, viewport.cssHeight / WORLD.height);
+  const zoom = Math.min(
+    viewport.cssWidth / (WORLD.width + 2 * FIT_MARGIN_WU),
+    viewport.cssHeight / (WORLD.height + 2 * FIT_MARGIN_WU),
+  );
   return { x: WORLD.width / 2, y: WORLD.height / 2, zoom };
 }
 
