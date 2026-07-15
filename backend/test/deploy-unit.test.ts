@@ -1,6 +1,9 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Regression guard for the shipped systemd unit and its runbook. An earlier copy
 // hard-coded `~/gas-city-dashboard`, which exists on no host — the unit silently
@@ -17,6 +20,35 @@ const unit = readFileSync(
 const readme = readFileSync(new URL('../../deploy/README.md', import.meta.url), 'utf8');
 
 const EXEC_START_PRE = unit.split('\n').filter((line) => line.startsWith('ExecStartPre='));
+
+// The frontend-bundle guard references only ${ADMIN_FRONTEND_DIST} (no systemd
+// %-specifier), so it runs in isolation and we exercise it for real instead of
+// pattern-matching it. A line-wide regex previously matched the echo text and
+// let an operand mutation through (M4); sh expands ${ADMIN_FRONTEND_DIST} the
+// same way systemd would before exec.
+function frontendGuardCommand(): string {
+  const line = EXEC_START_PRE.find((l) => l.includes('ADMIN_FRONTEND_DIST'));
+  assert.ok(line, 'no ExecStartPre references ADMIN_FRONTEND_DIST');
+  const match = /^ExecStartPre=\/bin\/sh -c '(.*)'$/.exec(line);
+  assert.ok(match, `frontend ExecStartPre is not a /bin/sh -c '...' form: ${line}`);
+  const command = match[1];
+  assert.ok(command, 'frontend ExecStartPre command is empty');
+  return command;
+}
+
+function runFrontendGuard(adminFrontendDist: string, cwd?: string): number {
+  try {
+    execFileSync('/bin/sh', ['-c', frontendGuardCommand()], {
+      env: { ...process.env, ADMIN_FRONTEND_DIST: adminFrontendDist },
+      cwd,
+      stdio: 'ignore',
+    });
+    return 0;
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    return typeof status === 'number' ? status : 1;
+  }
+}
 
 // The hyphenated string is legitimate as the product name and the unit's own
 // filename ("gas-city-dashboard.service"), so match only its use as a
@@ -66,9 +98,12 @@ describe('deploy: systemd unit path is the real checkout', () => {
     // the login shell's PATH — so the unit must state one that can find it.
     const unitPath = unit.match(/^Environment=PATH=(.+)$/m)?.[1];
     assert.ok(unitPath, 'unit must set Environment=PATH for /usr/bin/env to resolve node');
-    assert.ok(
-      unitPath.split(':').includes('%h/.local/bin'),
-      `Environment=PATH must include %h/.local/bin; got "${unitPath}"`,
+    // m5: must LEAD, not merely appear — the stated intent (service comment) is
+    // that a per-user node wins over a system one, which only holds if it is first.
+    assert.equal(
+      unitPath.split(':')[0],
+      '%h/.local/bin',
+      `Environment=PATH must lead with %h/.local/bin so a per-user node wins; got "${unitPath}"`,
     );
   });
 
@@ -92,16 +127,26 @@ describe('deploy: systemd unit path is the real checkout', () => {
     );
   });
 
-  test('unit asserts the frontend bundle before start', () => {
-    // A stale or mis-edited ADMIN_FRONTEND_DIST otherwise starts, binds the
-    // port, and reads active/green while GET / returns 404 — the exact silent
-    // dead-dashboard class this bead exists to kill, one path segment over
-    // (backend/src/app.ts mountFrontend: existsSync -> log -> API-only).
+  test('frontend guard tests the configured ADMIN_FRONTEND_DIST operand (M4)', () => {
+    // Assert the real `test -f` OPERAND, not the whole line: the echo message
+    // also contains ${ADMIN_FRONTEND_DIST}, so a line-wide regex passed even
+    // when the operand was swapped for a hardcoded path, defeating "the check
+    // moves with the var". Behavioral proof in the guard-fires suite below.
     assert.ok(
-      EXEC_START_PRE.some(
-        (line) => /ADMIN_FRONTEND_DIST/.test(line) && /test\s+-[a-z]*[fed]/.test(line),
-      ),
-      'expected an ExecStartPre asserting the ADMIN_FRONTEND_DIST bundle exists before start',
+      unit.includes('test -f "${ADMIN_FRONTEND_DIST}/index.html"'),
+      'frontend guard must test -f the configured ${ADMIN_FRONTEND_DIST}/index.html',
+    );
+  });
+
+  test('unit carries no inert GC_CITY_PATH and no false `gc bd` write claim (M2)', () => {
+    // config.cityPath (from GC_CITY_PATH) is read nowhere in backend/src; every
+    // city/beads path comes from supervisor discovery, and the only bd subprocess
+    // is `bd doctor --readonly`. There is no in-app `gc bd` write path, so the
+    // var is inert and the failure mode the old comment described cannot occur.
+    assert.ok(!/GC_CITY_PATH/.test(unit), 'GC_CITY_PATH is inert — do not set it in the unit');
+    assert.ok(
+      !/gc bd/i.test(unit),
+      'unit must not claim an in-app `gc bd` write path (only `bd doctor --readonly` runs)',
     );
   });
 
@@ -115,6 +160,43 @@ describe('deploy: systemd unit path is the real checkout', () => {
     assert.match(unit, /Environment=PORT=8082/);
     assert.ok(!unit.includes('0.0.0.0'), 'unit must not widen the bind');
     assert.ok(!unit.includes('8081'), 'stale port 8081 must not reappear');
+  });
+});
+
+describe('deploy: the frontend-bundle guard actually fires', () => {
+  test('passes for an absolute dir that holds index.html', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fd-present-'));
+    try {
+      writeFileSync(join(dir, 'index.html'), '<!doctype html>');
+      assert.equal(runFrontendGuard(dir), 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fails when the absolute bundle is missing — operand tracks the var (M4)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fd-absent-'));
+    try {
+      // Empty dir, no index.html. A guard with a hardcoded operand would ignore
+      // this var and could pass; the real one must fail.
+      assert.notEqual(runFrontendGuard(dir), 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('rejects a RELATIVE value even when it resolves to a real bundle (M1)', () => {
+    const base = mkdtempSync(join(tmpdir(), 'fd-relative-'));
+    try {
+      mkdirSync(join(base, 'sub'));
+      writeFileSync(join(base, 'sub', 'index.html'), '<!doctype html>');
+      // From cwd=base, "sub/index.html" exists, so a guard without the
+      // absoluteness gate would pass. mountFrontend resolves "sub" from backend/,
+      // not from here, so the gate must reject it up front.
+      assert.notEqual(runFrontendGuard('sub', base), 0);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 });
 
@@ -138,26 +220,39 @@ describe('deploy: README matches the unit', () => {
   });
 
   test('README makes no blanket "nothing fails silently" claim (AC3)', () => {
-    // The rejected copy claimed every repointed path fails loud. Disproven: a
-    // stale ADMIN_FRONTEND_DIST serves a 404 dead dashboard, and GC_CITY_PATH /
-    // ADMIN_AUDIT_LOG_PATH / a missing ReadWritePaths entry each degrade without
-    // stopping the unit.
     assert.ok(
       !/none of these fail silently/i.test(readme),
       'README still makes the disproven blanket "nothing fails silently" claim',
     );
   });
 
-  test('README names which paths are NOT start-checked and how they degrade (AC3)', () => {
+  test('README asserts no source-level failure MECHANISM it cannot back (M2/M3)', () => {
+    // The prior three rejections each narrated HOW a mis-set var degrades, and
+    // each narration was false: there is no in-app `gc bd` write path
+    // (config.cityPath is read nowhere), and a missing undecorated ReadWritePaths
+    // entry fails the START — it is not "silently skipped". Guard both, plus the
+    // now-removed inert GC_CITY_PATH, against reintroduction.
+    assert.ok(!/gc bd/i.test(readme), 'README must not claim an in-app `gc bd` failure mode');
     assert.ok(
-      readme.includes('checked at start'),
-      'README must distinguish the start-checked paths from the unchecked ones',
+      !/silently skip/i.test(readme),
+      'README must not claim ReadWritePaths silently skips',
     );
-    for (const unguarded of ['GC_CITY_PATH', 'ADMIN_AUDIT_LOG_PATH', 'ReadWritePaths']) {
-      assert.ok(
-        readme.includes(unguarded),
-        `README must name the unchecked var ${unguarded} and its degradation`,
-      );
-    }
+    assert.ok(
+      !/GC_CITY_PATH/.test(readme),
+      'GC_CITY_PATH is inert and removed from the unit; README must not document it',
+    );
+  });
+
+  test('README still distinguishes the start-checked paths (AC3)', () => {
+    assert.ok(
+      /asserted at start/i.test(readme),
+      'README must state which paths are asserted at start',
+    );
+  });
+
+  test('README requires ADMIN_FRONTEND_DIST to be absolute (M1)', () => {
+    const para = readme.split('\n').find((line) => line.includes('ADMIN_FRONTEND_DIST'));
+    assert.ok(para, 'README must mention ADMIN_FRONTEND_DIST');
+    assert.ok(/absolute/i.test(para), 'README must state ADMIN_FRONTEND_DIST is an absolute path');
   });
 });

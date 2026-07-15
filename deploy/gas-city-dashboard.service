@@ -20,11 +20,6 @@ Environment=PORT=8082
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=GC_SUPERVISOR_URL=http://127.0.0.1:8372
 Environment=GC_CITY_NAME=gas-city
-# GC_CITY_PATH pins the city root so the `gc bd` CLI write path
-# (claim/close/nudge) doesn't depend on WorkingDirectory, which is the
-# dashboard repo, not a city directory. Without it, writes fail with
-# "not in a city directory". Override to match your actual city location.
-Environment=GC_CITY_PATH=%h/gas-city
 Environment=ADMIN_AUDIT_LOG_PATH=%h/.gc/events.jsonl
 Environment=ADMIN_FRONTEND_DIST=%h/gascity-dashboard/frontend/dist
 # Name the missing build step, which is what a redeploy that skipped `npm run
@@ -34,10 +29,13 @@ Environment=ADMIN_FRONTEND_DIST=%h/gascity-dashboard/frontend/dist
 ExecStartPre=/bin/sh -c 'test -f %h/gascity-dashboard/backend/dist/server.js || { echo "gas-city-dashboard: %h/gascity-dashboard/backend/dist/server.js not found — is the repo at ~/gascity-dashboard and built (npm install && npm run build)?" >&2; exit 1; }'
 # The frontend bundle the UI is served from. A stale or mis-edited
 # ADMIN_FRONTEND_DIST otherwise starts, binds the port, and reads active/green
-# while GET / returns 404 — a dead dashboard (backend/src/app.ts mountFrontend:
-# existsSync -> log -> API-only, no throw). Assert the *configured* path so the
-# check moves with the var; that makes it loud at start, not silent at load.
-ExecStartPre=/bin/sh -c 'test -f "${ADMIN_FRONTEND_DIST}/index.html" || { echo "gas-city-dashboard: frontend bundle missing at ${ADMIN_FRONTEND_DIST} — build the frontend (npm run build), or fix the ADMIN_FRONTEND_DIST line in this unit" >&2; exit 1; }'
+# while GET / returns 404 — a dead dashboard (backend/src/app.ts:134-139
+# mountFrontend: existsSync -> log -> API-only, no throw). Assert the *configured*
+# path so the check moves with the var. It must be ABSOLUTE: mountFrontend
+# resolves a relative value from backend/ (path.resolve(__dirname, '..', value)),
+# a different directory than this check's cwd (WorkingDirectory=repo root), so a
+# relative value would pass here yet 404 there. Reject relative up front.
+ExecStartPre=/bin/sh -c 'case "${ADMIN_FRONTEND_DIST}" in /*) ;; *) echo "gas-city-dashboard: ADMIN_FRONTEND_DIST must be an absolute path, got: ${ADMIN_FRONTEND_DIST}" >&2; exit 1 ;; esac; test -f "${ADMIN_FRONTEND_DIST}/index.html" || { echo "gas-city-dashboard: frontend bundle missing at ${ADMIN_FRONTEND_DIST} — build the frontend (npm run build), or fix the ADMIN_FRONTEND_DIST line in this unit" >&2; exit 1; }'
 # Same guard for the interpreter. `/usr/bin/env node` already names a missing
 # node and exits 127; this adds the one thing it can't know — which line of
 # this unit to edit.
@@ -50,12 +48,9 @@ Restart=on-failure
 RestartSec=3
 StandardOutput=journal
 StandardError=journal
-# Hardening — the dashboard touches gc supervisor over loopback, reads
-# .gc/events.jsonl, and runs the `gc` CLI. The `gc bd` write path mutates
-# the city's embedded-Dolt bead store directly on disk (under
-# %h/gas-city/.beads + %h/gas-city/.gc, taken under a lockfile), so the
-# city root must be in ReadWritePaths or those writes fail with EROFS
-# despite ProtectHome=read-only. Keep this aligned with GC_CITY_PATH above.
+# Hardening. ProtectSystem=strict makes the filesystem read-only except the
+# ReadWritePaths listed below; the service appends its audit log under %h/.gc
+# (ADMIN_AUDIT_LOG_PATH).
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=%h/.gc %h/gascity-dashboard %h/gas-city
