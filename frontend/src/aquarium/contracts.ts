@@ -101,6 +101,9 @@ export interface PelletEntity {
   ageFraction: number;
   /** morsel size multiplier from bead priority (higher priority = bigger). */
   radiusScale: number;
+  /** bead is P0 (priority <= 0): carries a specular glint at LOD1+ as redundant
+   *  P0 emphasis on top of size. Absent/false for every other priority. */
+  isP0?: boolean;
   /** newly-arrived open bead: falls in from the surface (feeding drop-in). */
   arriving?: boolean;
   /** fish holding it (state 'held') or that ate it (state 'eaten') */

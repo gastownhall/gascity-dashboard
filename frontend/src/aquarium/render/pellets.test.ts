@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { ScenePalette, ThemeMood } from '../contracts';
+import type { PelletEntity, ScenePalette, SimState, ThemeMood } from '../contracts';
+import { LOD1_ZOOM } from '../contracts';
+import type { ViewRect } from './layers';
 import { buildScenePalette } from './palette';
-import { pelletColors } from './pellets';
+import { paintPellets, pelletColors } from './pellets';
 import { parseOklch } from './oklch';
 
 const TOKENS: Record<string, string> = {
@@ -58,5 +60,80 @@ describe('pelletColors (rig-hue identity)', () => {
   it('two rigs get two distinct pellet hues', () => {
     const p = palette('dark');
     expect(H(pelletColors(p, 195).tones[0])).not.toBeCloseTo(H(pelletColors(p, 338).tones[0]), 0);
+  });
+});
+
+// Glints are the only paintPellets primitive drawn with ctx.arc (fills use
+// ellipse/rect), so recording arc calls isolates the P0 specular pass.
+interface Arc {
+  x: number;
+  y: number;
+  r: number;
+  fill: string;
+}
+function glintRecordingCtx(): { ctx: CanvasRenderingContext2D; arcs: Arc[] } {
+  const arcs: Arc[] = [];
+  const stub = {
+    beginPath(): void {},
+    moveTo(): void {},
+    lineTo(): void {},
+    stroke(): void {},
+    ellipse(): void {},
+    rect(): void {},
+    fill(): void {},
+    arc(x: number, y: number, r: number): void {
+      arcs.push({ x, y, r, fill: String(stub.fillStyle) });
+    },
+    fillStyle: '' as string,
+    globalAlpha: 1,
+  };
+  return { ctx: stub as unknown as CanvasRenderingContext2D, arcs };
+}
+
+const WIDE: ViewRect = { left: -1e5, top: -1e5, right: 1e5, bottom: 1e5 };
+function glintPellet(over: Partial<PelletEntity> & Pick<PelletEntity, 'beadId'>): PelletEntity {
+  return {
+    label: over.beadId,
+    title: '',
+    rigKey: 'alpha',
+    state: 'drifting',
+    ageFraction: 0,
+    radiusScale: 1,
+    ...over,
+  };
+}
+function simFor(ids: string[]): SimState {
+  const pellets: SimState['pellets'] = {};
+  ids.forEach((id, i) => (pellets[id] = { x: 100 + i * 50, y: 200, phase: 0 }));
+  return { fish: {}, pellets, clockMs: 0 };
+}
+
+describe('paintPellets P0 glint', () => {
+  it('draws exactly one specular disc for a P0 morsel and none for its non-P0 neighbour', () => {
+    const pellets = [
+      glintPellet({ beadId: 'p0', isP0: true, radiusScale: 1.8 }),
+      glintPellet({ beadId: 'plain' }),
+    ];
+    const { ctx, arcs } = glintRecordingCtx();
+    paintPellets(ctx, pellets, simFor(['p0', 'plain']), palette('dark'), WIDE, 2.0);
+    expect(arcs).toHaveLength(1);
+    // white catchlight, up-left of the P0 centre (100, 200)
+    expect(arcs[0]!.fill).toContain('255');
+    expect(arcs[0]!.x).toBeLessThan(100);
+    expect(arcs[0]!.y).toBeLessThan(200);
+  });
+
+  it('holds the glint off below LOD1 (an unlabelled overview stays clean)', () => {
+    const pellets = [glintPellet({ beadId: 'p0', isP0: true, radiusScale: 1.8 })];
+    const { ctx, arcs } = glintRecordingCtx();
+    paintPellets(ctx, pellets, simFor(['p0']), palette('dark'), WIDE, LOD1_ZOOM * 0.9);
+    expect(arcs).toHaveLength(0);
+  });
+
+  it('never glints a closing (eaten) P0', () => {
+    const pellets = [glintPellet({ beadId: 'p0', isP0: true, state: 'eaten', gulpMsLeft: 300 })];
+    const { ctx, arcs } = glintRecordingCtx();
+    paintPellets(ctx, pellets, simFor(['p0']), palette('dark'), WIDE, 2.0);
+    expect(arcs).toHaveLength(0);
   });
 });

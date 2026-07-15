@@ -12,6 +12,7 @@
 // allocation.
 
 import type { PelletEntity, ScenePalette, SimState } from '../contracts';
+import { LOD1_ZOOM } from '../contracts';
 import { hashString } from './hash';
 import type { ViewRect } from './layers';
 import { rectContains } from './layers';
@@ -102,6 +103,10 @@ const sunkTone: number[] = [];
 const eatenX: number[] = [];
 const eatenY: number[] = [];
 const eatenT: number[] = [];
+// P0 specular glints — collected once per frame (hue-independent), painted last.
+const glintX: number[] = [];
+const glintY: number[] = [];
+const glintScale: number[] = [];
 
 function resetBatches(): void {
   for (let b = 0; b < 3; b += 1) {
@@ -128,6 +133,19 @@ function resetBatches(): void {
  * indistinguishable at that size. Round morsels return at any real zoom. */
 const CHEAP_MARK_PX = 2.2;
 
+/** A P0 pellet carries a fixed specular catchlight from LOD1 up (layerScale ===
+ * camera zoom for the actor layer). Below LOD1 the whole reef is an unlabelled
+ * overview and the glint could not occupy a full css px, so it stays off —
+ * honest zoom: the P0 emphasis is true detail that arrives with proximity. */
+const GLINT_MIN_SCALE = LOD1_ZOOM;
+/** glint disc radius as a fraction of the pellet radius, and its up-left offset
+ * from the pellet centre (a single fixed light direction for every P0). */
+const GLINT_RADIUS_FRACTION = 0.32;
+const GLINT_OFFSET_FRACTION = 0.34;
+/** one neutral catchlight colour: a bright specular reflection reads on the
+ * tinted morsel in both the sunlit and the midnight tank. */
+const GLINT_COLOR = 'rgba(255, 255, 255, 0.9)';
+
 /** distinct rig-hue keys present this frame (few; reused, so no per-frame alloc) */
 const presentHues: number[] = [];
 
@@ -144,13 +162,24 @@ export function paintPellets(
   layerScale: number,
 ): void {
   const square = PELLET_RADIUS * layerScale < CHEAP_MARK_PX;
+  const glintOn = layerScale >= GLINT_MIN_SCALE;
   presentHues.length = 0;
+  glintX.length = 0;
+  glintY.length = 0;
+  glintScale.length = 0;
   for (const pellet of pellets) {
     const kin = sim.pellets[pellet.beadId];
     // sim can lag a fresh snapshot by one frame; skip rather than invent
     if (kin === undefined || !rectContains(view, kin.x, kin.y)) continue;
     const key = pelletHueKey(pellet.rigKey);
     if (!presentHues.includes(key)) presentHues.push(key);
+    // a P0 morsel glints (redundant priority emphasis) once it is a real
+    // morsel; the closing gulp (eaten) is not re-marked as it leaves.
+    if (glintOn && pellet.isP0 === true && pellet.state !== 'eaten') {
+      glintX.push(kin.x);
+      glintY.push(kin.y);
+      glintScale.push(pellet.radiusScale);
+    }
   }
   for (let hi = 0; hi < presentHues.length; hi += 1) {
     const key = at(presentHues, hi);
@@ -211,6 +240,27 @@ export function paintPellets(
     paintSunken(ctx, colors, square);
     paintEaten(ctx, colors);
   }
+  // One hue-independent pass over every visible P0 morsel, on top of all fills.
+  paintGlints(ctx);
+}
+
+/** A fixed upper-left specular disc on each collected P0 morsel — one fillStyle,
+ * one path, no gradient, no per-frame allocation. Reserved strictly for P0, so
+ * the catchlight reads as "a choicer morsel" rather than decoration. */
+function paintGlints(ctx: CanvasRenderingContext2D): void {
+  const n = glintX.length;
+  if (n === 0) return;
+  ctx.fillStyle = GLINT_COLOR;
+  ctx.beginPath();
+  for (let i = 0; i < n; i += 1) {
+    const r = PELLET_RADIUS * at(glintScale, i);
+    const gr = r * GLINT_RADIUS_FRACTION;
+    const gx = at(glintX, i) - r * GLINT_OFFSET_FRACTION;
+    const gy = at(glintY, i) - r * GLINT_OFFSET_FRACTION;
+    ctx.moveTo(gx + gr, gy);
+    ctx.arc(gx, gy, gr, 0, TAU);
+  }
+  ctx.fill();
 }
 
 /** settled morsels: a soft contact shadow pass, then two tone passes of

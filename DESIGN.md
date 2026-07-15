@@ -175,11 +175,18 @@ licenses it; outside this route, nothing here applies.
   **age** is its drift height (fresh food floats high, stale food sinks toward
   but stays above the seabed, so the vertical spread reads backlog staleness);
   its **priority** is its morsel size (a higher-priority bead is a bigger,
-  choicer morsel); and a **newly-created** bead falls in from the surface like
-  scattered food (the arrival twin of the closing gulp). Pellet size is bead
-  priority here, distinct from fish size = agent type — the two marks never
-  collide. Each stays truthful: age is `created_at`, size is `priority`, the
-  drop fires only on a real new bead.
+  choicer morsel), spread wide enough that a P0 is a different order of morsel
+  rather than a subtly larger dot, with an unprioritised bead sized neutrally
+  (never smaller than a known low priority — absence of a priority is not
+  evidence of low priority); and a **newly-created** bead falls in from the
+  surface like scattered food (the arrival twin of the closing gulp). Pellet
+  size is bead priority here, distinct from fish size = agent type — the two
+  marks never collide. A **P0** morsel additionally carries a fixed specular
+  glint from LOD1 up (a single up-left catchlight, no gradient, no animation):
+  redundant emphasis on the highest-priority beads, not a fifth channel, so the
+  scarce P0s read at a glance without inventing a new variable. Each stays
+  truthful: age is `created_at`, size and glint are `priority`, the drop fires
+  only on a real new bead.
 - **The One Voice Rule and tabular figures** for all overlay and in-scene
   text. The scene draws creatures; the type stays the system's type.
 - **`prefers-reduced-motion`.** The scene freezes to a truthful still frame:

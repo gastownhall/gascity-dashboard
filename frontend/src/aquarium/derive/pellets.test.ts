@@ -5,6 +5,7 @@ import {
   ageFractionFor,
   buildPellets,
   radiusScaleForPriority,
+  isP0Priority,
   type BuildPelletsInputs,
 } from './pellets';
 
@@ -212,5 +213,44 @@ describe('radiusScaleForPriority', () => {
     expect(radiusScaleForPriority(2)).toBeGreaterThan(radiusScaleForPriority(3));
     expect(radiusScaleForPriority(null)).toBe(1);
     expect(radiusScaleForPriority(undefined)).toBe(1);
+  });
+
+  it('spreads P0 wide enough to be a different order of morsel (survives 2px rasterization)', () => {
+    // P0 vs P1 is a >=1.3x jump, not a fractional nudge that dies at overview.
+    expect(radiusScaleForPriority(0) / radiusScaleForPriority(1)).toBeGreaterThan(1.3);
+    expect(radiusScaleForPriority(0)).toBe(1.8);
+  });
+
+  it('treats null as NEUTRAL, not low: an unprioritised bead is never smaller than a known P2', () => {
+    expect(radiusScaleForPriority(null)).toBe(radiusScaleForPriority(2));
+    expect(radiusScaleForPriority(null)).toBeGreaterThan(radiusScaleForPriority(3));
+  });
+});
+
+describe('isP0Priority', () => {
+  it('is true only for a present priority <= 0', () => {
+    expect(isP0Priority(0)).toBe(true);
+    expect(isP0Priority(-1)).toBe(true);
+    expect(isP0Priority(1)).toBe(false);
+    expect(isP0Priority(2)).toBe(false);
+    expect(isP0Priority(null)).toBe(false);
+    expect(isP0Priority(undefined)).toBe(false);
+  });
+
+  it('is carried onto the pellet only for P0 beads', () => {
+    const p0 = buildPellets({
+      beadsByRig: { alpha: { items: [{ ...bead('a-0', 'open'), priority: 0 }], total: 1 } },
+      sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
+    }).pellets[0];
+    const p2 = buildPellets({
+      beadsByRig: { alpha: { items: [{ ...bead('a-2', 'open'), priority: 2 }], total: 1 } },
+      sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
+    }).pellets[0];
+    expect(p0?.isP0).toBe(true);
+    expect(p2?.isP0).toBeUndefined();
   });
 });

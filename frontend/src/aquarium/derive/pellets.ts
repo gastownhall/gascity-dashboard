@@ -91,13 +91,22 @@ export function ageFractionFor(createdAt: string, nowMs: number): number {
 }
 
 /** Morsel size multiplier from bead priority (bd: lower number = higher
- * priority). A higher-priority bead is a bigger, choicer morsel. */
+ * priority). A higher-priority bead is a bigger, choicer morsel. Spread wide
+ * enough to survive rasterization at overview: a P0 is a different ORDER of
+ * morsel, not a subtly bigger dot. Null is NEUTRAL (1.0), not low — absence of
+ * a priority is not evidence of low priority, so an unprioritised bead never
+ * shrinks below a known P2. */
 export function radiusScaleForPriority(priority: number | null | undefined): number {
   if (priority === null || priority === undefined) return 1;
-  if (priority <= 0) return 1.4;
-  if (priority === 1) return 1.2;
+  if (priority <= 0) return 1.8;
+  if (priority === 1) return 1.35;
   if (priority === 2) return 1;
-  return 0.85;
+  return 0.78;
+}
+
+/** A bead is P0 (highest bd priority) when its priority is present and <= 0. */
+export function isP0Priority(priority: number | null | undefined): boolean {
+  return priority !== null && priority !== undefined && priority <= 0;
 }
 
 function toPellet(
@@ -122,6 +131,7 @@ function toPellet(
       state,
       ageFraction: ageFractionFor(bead.created_at, nowMs),
       radiusScale: radiusScaleForPriority(bead.priority),
+      ...(isP0Priority(bead.priority) ? { isP0: true } : {}),
       ...(arriving ? { arriving } : {}),
       ...(fishId !== undefined ? { fishId } : {}),
     },
