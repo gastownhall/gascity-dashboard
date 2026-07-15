@@ -2,13 +2,13 @@
 
 Single-user, localhost-only systemd user unit. Designed to **outlive gc-supervisor outages** — the dashboard is exactly what you want open when gc is misbehaving, so it must not be `gc-supervisor`-managed.
 
-The unit file ([`gas-city-dashboard.service`](gas-city-dashboard.service)) uses systemd's `%h` substitution so the same file works on any operator's host when installed under `systemctl --user`. The default assumes the repo lives at `~/gas-city-dashboard`; if it's somewhere else, edit the unit's `WorkingDirectory` / `Environment=` block before installing.
+The unit file ([`gas-city-dashboard.service`](gas-city-dashboard.service)) uses systemd's `%h` substitution so the same file works on any operator's host when installed under `systemctl --user`. It expects the repo at `~/gascity-dashboard` (the `gastownhall/gascity-dashboard` clone default). If yours lives elsewhere, repoint the `WorkingDirectory` / `ExecStart` / `Environment=` / `ReadWritePaths` paths before installing — a wrong path no longer fails silently: the unit's `ExecStartPre` aborts the start with an actionable message instead of a permanently-inactive unit and an empty journal.
 
 ## One-time install
 
 ```bash
 # 1. Build everything
-cd ~/gas-city-dashboard
+cd ~/gascity-dashboard
 npm install
 npm run build
 
@@ -26,7 +26,7 @@ Browse to <http://127.0.0.1:8082>.
 ## Updating
 
 ```bash
-cd ~/gas-city-dashboard
+cd ~/gascity-dashboard
 git pull
 npm install
 npm run build

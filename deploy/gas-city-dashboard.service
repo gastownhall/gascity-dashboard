@@ -1,16 +1,18 @@
 [Unit]
 Description=gas-city-dashboard — editorial ambient dashboard for a single gc operator (localhost-only, port 8082)
-Documentation=file://%h/gas-city-dashboard/specs/architecture/overview.md
+Documentation=file://%h/gascity-dashboard/specs/architecture/overview.md
 After=network-online.target
 Wants=network-online.target
 
 # Template via systemd's %h (user home) so the unit works on any operator's host
-# when installed under `systemctl --user`. Override the env block below if your
-# repo lives somewhere other than ~/gas-city-dashboard.
+# when installed under `systemctl --user`. The repo clones to ~/gascity-dashboard
+# (the gastownhall/gascity-dashboard default); if yours lives elsewhere, repoint
+# the paths below. A wrong path no longer fails silently — the ExecStartPre check
+# aborts the start with an actionable message instead of an empty journal.
 
 [Service]
 Type=simple
-WorkingDirectory=%h/gas-city-dashboard
+WorkingDirectory=%h/gascity-dashboard
 Environment=NODE_ENV=production
 Environment=PORT=8082
 Environment=GC_SUPERVISOR_URL=http://127.0.0.1:8372
@@ -21,11 +23,15 @@ Environment=GC_CITY_NAME=gas-city
 # "not in a city directory". Override to match your actual city location.
 Environment=GC_CITY_PATH=%h/gas-city
 Environment=ADMIN_AUDIT_LOG_PATH=%h/.gc/events.jsonl
-Environment=ADMIN_FRONTEND_DIST=%h/gas-city-dashboard/frontend/dist
+Environment=ADMIN_FRONTEND_DIST=%h/gascity-dashboard/frontend/dist
+# Fail loudly if the repo path is wrong or the build output is missing, rather
+# than leaving a permanently inactive unit with an empty journal. This is the
+# guard that turns a silent no-op redeploy into an actionable error.
+ExecStartPre=/bin/sh -c 'test -f %h/gascity-dashboard/backend/dist/server.js || { echo "gas-city-dashboard: %h/gascity-dashboard/backend/dist/server.js not found — is the repo at ~/gascity-dashboard and built (npm install && npm run build)?" >&2; exit 1; }'
 # Refuse to start if a stale process holds the port. Bound to 127.0.0.1 only,
 # so the ss check is sufficient — no public-interface race.
 ExecStartPre=/bin/sh -c '! ss -tln "sport = :8082" | grep -q LISTEN || (echo "port 8082 already bound" >&2; exit 1)'
-ExecStart=/usr/bin/node %h/gas-city-dashboard/backend/dist/server.js
+ExecStart=/usr/bin/node %h/gascity-dashboard/backend/dist/server.js
 Restart=on-failure
 RestartSec=3
 StandardOutput=journal
@@ -38,7 +44,7 @@ StandardError=journal
 # despite ProtectHome=read-only. Keep this aligned with GC_CITY_PATH above.
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=%h/.gc %h/gas-city-dashboard %h/gas-city
+ReadWritePaths=%h/.gc %h/gascity-dashboard %h/gas-city
 ProtectHome=read-only
 PrivateTmp=true
 PrivateDevices=true
