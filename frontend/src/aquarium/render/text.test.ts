@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { Camera, ScenePalette, SimState, Viewport, WorldSnapshot } from '../contracts';
-import { UNRIGGED_KEY } from '../contracts';
+import type {
+  Camera,
+  FishEntity,
+  PelletEntity,
+  ScenePalette,
+  SimState,
+  Viewport,
+  WorldSnapshot,
+} from '../contracts';
+import { LOD1_ZOOM, UNRIGGED_KEY } from '../contracts';
 import { buildScenePalette } from './palette';
 import { paintTextLayers } from './text';
 import { parseOklch } from './oklch';
@@ -112,5 +120,86 @@ describe('rig label colour carries rig identity in-scene', () => {
     const label = drawn.find((d) => d.text.startsWith(UNRIGGED_KEY.toUpperCase()));
     expect(label).toBeDefined();
     expect(label!.fillStyle).toBe(PALETTE.textMuted);
+  });
+});
+
+function fish(over: Partial<FishEntity> & Pick<FishEntity, 'id'>): FishEntity {
+  return {
+    name: over.id,
+    species: 'pool',
+    isMayor: false,
+    pose: 'working',
+    poseWord: 'working',
+    bellyPct: 50,
+    homeKey: 'reef-gamma',
+    linkTo: '',
+    tombstoned: false,
+    ...over,
+  };
+}
+function pellet(over: Partial<PelletEntity> & Pick<PelletEntity, 'beadId'>): PelletEntity {
+  return {
+    label: `${over.beadId!.slice(0, 6)}…`,
+    title: '',
+    linkTo: '',
+    rigKey: 'reef-gamma',
+    state: 'drifting',
+    ageFraction: 0,
+    radiusScale: 1,
+    ...over,
+  };
+}
+
+describe('held-bead titles (what is being worked on, and by whom)', () => {
+  const HELD = pellet({
+    beadId: 'gc-abc123def',
+    title: 'Fix the convoy latch',
+    state: 'held',
+    fishId: 'fish-1',
+  });
+  const DRIFT = pellet({ beadId: 'gc-queued99', title: 'Queued backlog item' });
+  const SNAP: WorldSnapshot = {
+    formations: SNAPSHOT.formations,
+    fish: [fish({ id: 'polecat-7', species: 'role' })],
+    pellets: [HELD, DRIFT],
+    needsAttention: 0,
+    pelletOverflow: {},
+  };
+  const sim: SimState = {
+    fish: {},
+    pellets: {
+      'gc-abc123def': { x: 1000, y: 1850, phase: 0 },
+      'gc-queued99': { x: 1040, y: 1850, phase: 0 },
+    },
+    clockMs: 0,
+  };
+  // fish-1 resolves to the 'polecat-7' fish via id; give the fish that id.
+  SNAP.fish[0]!.id = 'fish-1';
+  SNAP.fish[0]!.name = 'polecat-7';
+
+  function draw(zoom: number): DrawnText[] {
+    const { ctx, drawn } = recordingCtx();
+    paintTextLayers(ctx, SNAP, sim, PALETTE, { x: 1000, y: 1850, zoom }, VIEWPORT);
+    return drawn;
+  }
+
+  it('labels a held bead with its title (not its id) and the holding agent, at LOD1', () => {
+    const drawn = draw(LOD1_ZOOM);
+    expect(drawn.some((d) => d.text === 'Fix the convoy latch')).toBe(true);
+    expect(drawn.some((d) => d.text === 'polecat-7')).toBe(true);
+    // the raw / elided bead id is never drawn as a floating tag
+    expect(drawn.some((d) => d.text.includes('gc-abc123def') || d.text.includes('gc-abc…'))).toBe(
+      false,
+    );
+  });
+
+  it('never labels a drifting (open) bead in-scene — its title is a hover detail', () => {
+    const drawn = draw(LOD1_ZOOM);
+    expect(drawn.some((d) => d.text === 'Queued backlog item')).toBe(false);
+  });
+
+  it('draws no bead titles at the overview (below LOD1) so the tank stays clean', () => {
+    const drawn = draw(0.5);
+    expect(drawn.some((d) => d.text === 'Fix the convoy latch')).toBe(false);
   });
 });

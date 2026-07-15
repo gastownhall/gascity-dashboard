@@ -14,7 +14,7 @@ import { CITY_KEY } from '../contracts';
 import { SPECIES } from './fishGeometry';
 import type { LayerTransform } from './layers';
 import { PARALLAX, applyScreenSpace, layerTransform, worldToScreen } from './layers';
-import { lod2Fade, rigLabelFade } from './lod';
+import { lod1Fade, lod2Fade, rigLabelFade } from './lod';
 import type { Pt } from './mathUtil';
 import { withHueChroma } from './oklch';
 import { RIG_CHROMA, rigHue } from './rigHue';
@@ -30,6 +30,7 @@ export function paintTextLayers(
   applyScreenSpace(ctx, viewport);
   ctx.textBaseline = 'alphabetic';
   const fRig = rigLabelFade(camera.zoom);
+  const f1 = lod1Fade(camera.zoom);
   const f2 = lod2Fade(camera.zoom);
   const mid = layerTransform(camera, viewport, PARALLAX.mid);
   const act = layerTransform(camera, viewport, PARALLAX.actors);
@@ -40,9 +41,13 @@ export function paintTextLayers(
     paintRigLabels(ctx, snapshot, palette, mid, viewport, fRig);
     paintOverflow(ctx, snapshot, palette, mid, viewport, fRig);
   }
+  // in-progress bead titles fade in one zoom step before full captions: the few
+  // held morsels name "what's being worked on" while the backlog stays clean.
+  if (f1 > 0.01) {
+    paintHeldBeadLabels(ctx, snapshot, sim, palette, act, viewport, f1);
+  }
   if (f2 > 0.01) {
     paintCaptions(ctx, snapshot, sim, palette, act, viewport, f2);
-    paintPelletLabels(ctx, snapshot, sim, palette, act, viewport, f2);
   }
   ctx.globalAlpha = 1;
 }
@@ -187,7 +192,21 @@ function paintCaptions(
   ctx.globalAlpha = 1;
 }
 
-function paintPelletLabels(
+/** longest held-bead title drawn in-scene before a middle-ellipsis; a floating
+ * tag is a glance cue, not the full bead — the card carries the untruncated title. */
+const HELD_TITLE_MAX = 30;
+
+function clipTitle(title: string): string {
+  if (title.length <= HELD_TITLE_MAX) return title;
+  return `${title.slice(0, HELD_TITLE_MAX - 1).trimEnd()}…`;
+}
+
+/** Labels each in-progress (held) bead with its short title — the answer to
+ * "what work is being worked on" — paired with the holding agent's name, so a
+ * zoomed operator reads the active work AND who owns it without a hover. Drifting
+ * and blocked beads stay unlabelled in-scene (their title is a hover/click
+ * detail); the raw bead id is never drawn as a floating tag. */
+function paintHeldBeadLabels(
   ctx: CanvasRenderingContext2D,
   snapshot: WorldSnapshot,
   sim: SimState,
@@ -196,17 +215,25 @@ function paintPelletLabels(
   viewport: Viewport,
   alpha: number,
 ): void {
-  ctx.font = `10px ${palette.fontFamily}`;
+  const holderName = new Map<string, string>();
+  for (const fish of snapshot.fish) holderName.set(fish.id, fish.name);
   ctx.textAlign = 'left';
-  ctx.fillStyle = palette.textMuted;
   ctx.globalAlpha = alpha;
   for (const pellet of snapshot.pellets) {
-    if (pellet.state === 'eaten') continue;
+    if (pellet.state !== 'held' || pellet.title.length === 0) continue;
     const kin = sim.pellets[pellet.beadId];
     if (kin === undefined) continue;
     const pos = worldToScreen(act, kin.x, kin.y);
-    if (offscreen(pos, viewport, 40)) continue;
-    ctx.fillText(pellet.label, pos.x + 9, pos.y - 6);
+    if (offscreen(pos, viewport, 60)) continue;
+    ctx.font = `600 10px ${palette.fontFamily}`;
+    ctx.fillStyle = palette.text;
+    ctx.fillText(clipTitle(pellet.title), pos.x + 9, pos.y - 6);
+    const who = pellet.fishId !== undefined ? holderName.get(pellet.fishId) : undefined;
+    if (who !== undefined && who.length > 0) {
+      ctx.font = `10px ${palette.fontFamily}`;
+      ctx.fillStyle = palette.textMuted;
+      ctx.fillText(who, pos.x + 9, pos.y + 6);
+    }
   }
   ctx.globalAlpha = 1;
 }
