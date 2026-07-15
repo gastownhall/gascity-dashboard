@@ -165,13 +165,25 @@ describe('buildFormations', () => {
   };
 
   it('folds a tank-overflowing fleet back into the world, centred (no right-wall pile)', () => {
-    const formations = buildFormations(largeFleetInputs());
+    const formations = [...buildFormations(largeFleetInputs())].sort(
+      (a, b) => a.anchorX - b.anchorX,
+    );
     expect(formations).toHaveLength(26);
     for (const f of formations) {
       // no anchor past the world (the bug shoved them to ~7400); a wall-clamped
       // school is what produced the pile.
       expect(f.anchorX).toBeGreaterThan(0);
       expect(f.anchorX).toBeLessThan(WORLD.width);
+    }
+    // the CORE-gap floor still holds after compression — radii shrink with the
+    // positions, so cores never interpenetrate (this is the invariant a naive
+    // position-only rescale broke: it would merge every rig's shoal home).
+    for (let i = 1; i < formations.length; i += 1) {
+      const prev = formations[i - 1]!;
+      const cur = formations[i]!;
+      expect(cur.anchorX - prev.anchorX).toBeGreaterThanOrEqual(
+        formationCoreRadius(prev.radius) + formationCoreRadius(cur.radius),
+      );
     }
     const centroid = formations.reduce((sum, f) => sum + f.anchorX, 0) / formations.length;
     // centroid lands near the world midpoint the home camera frames on

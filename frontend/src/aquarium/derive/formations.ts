@@ -78,13 +78,17 @@ export function buildFormations(inputs: FormationInputs): RigFormation[] {
   const sorted = [...keys].sort(byHashThenKey);
   const seeds = sorted.map((key) => hashString(key));
   const radii = sorted.map((key, i) => radiusForCrew(crewCountByKey.get(key) ?? 0, seeds[i]!));
-  const anchorXs = placeAlongSeabed(radii, seeds);
+  const { xs: anchorXs, scale } = placeAlongSeabed(radii, seeds);
 
   return sorted.map((key, i) => ({
     key,
     anchorX: anchorXs[i]!,
     anchorY: WORLD.seabedY + depthOffset(seeds[i]!),
-    radius: radii[i]!,
+    // radii shrink by the same factor the positions were compressed, so an
+    // overflowing fleet keeps its CORE-gap floor (cores never interpenetrate) —
+    // it just becomes a reef of smaller, tighter mounds. A fitting fleet's
+    // scale is 1, so its radii are untouched.
+    radius: radii[i]! * scale,
     seed: seeds[i]!,
     openBeadTotal: inputs.beadsByRig[key]?.total ?? 0,
   }));
@@ -141,7 +145,10 @@ function depthOffset(seed: number): number {
  * cores never do, the spacing stays uneven, and adjacent anchors keep the
  * hard per-pair gap floor the blind fixture relies on.
  */
-function placeAlongSeabed(radii: readonly number[], seeds: readonly number[]): number[] {
+function placeAlongSeabed(
+  radii: readonly number[],
+  seeds: readonly number[],
+): { xs: number[]; scale: number } {
   const usableWidth = WORLD.width - 2 * SEABED_MARGIN_X;
   const weights = seeds.map((s) => hashRange(s ^ WEIGHT_SALT, SLOT_WEIGHT_MIN, SLOT_WEIGHT_MAX));
   const totalWeight = weights.reduce((sum, w) => sum + w, 0);
@@ -171,12 +178,18 @@ function placeAlongSeabed(radii: readonly number[], seeds: readonly number[]): n
  * than the tank — 22 large rigs need ~7600 wu of cores+gaps in a 3600-wu band —
  * which shoves the rightmost formations past the wall, where the fish clamp
  * (sim/fishTick clampToWorld) piles their schools on one line (the "stacked pile
- * on the right"). A chain that already fits is returned untouched (small cities
- * and the blind fixture stay byte-identical). A chain that overran is compressed
- * to the usable band and centred, so its centroid lands at the world midpoint
- * the home camera frames on. Deterministic: a pure function of the same chain. */
-function fitChainToBand(xs: readonly number[], usableWidth: number): number[] {
-  if (xs.length === 0) return [];
+ * on the right"). A chain that already fits is returned untouched with scale 1
+ * (small cities and the blind fixture stay byte-identical). A chain that overran
+ * is compressed to the usable band and centred, and the returned `scale` is
+ * applied to the radii too (see buildFormations), so the compressed reef keeps
+ * its CORE-gap floor — every adjacent pair's gap and both cores shrink by the
+ * same factor, so cores never interpenetrate. Deterministic: a pure function of
+ * the same chain. */
+function fitChainToBand(
+  xs: readonly number[],
+  usableWidth: number,
+): { xs: number[]; scale: number } {
+  if (xs.length === 0) return { xs: [], scale: 1 };
   let min = xs[0]!;
   let max = xs[0]!;
   for (const x of xs) {
@@ -184,8 +197,8 @@ function fitChainToBand(xs: readonly number[], usableWidth: number): number[] {
     if (x > max) max = x;
   }
   const span = max - min;
-  if (span <= usableWidth) return [...xs];
+  if (span <= usableWidth) return { xs: [...xs], scale: 1 };
   const scale = usableWidth / span;
   const left = SEABED_MARGIN_X + (usableWidth - span * scale) / 2;
-  return xs.map((x) => left + (x - min) * scale);
+  return { xs: xs.map((x) => left + (x - min) * scale), scale };
 }
