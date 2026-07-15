@@ -9,7 +9,7 @@
 
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import type { RigLegend } from './rigLegend';
+import type { RigLegend, RigLegendEntry } from './rigLegend';
 
 export interface AquariumLegendProps {
   legend: RigLegend;
@@ -39,9 +39,10 @@ const TOGGLE_CLASS =
 
 export function AquariumLegend({ legend }: AquariumLegendProps) {
   const [open, setOpen] = useState(true);
-  if (legend.entries.length === 0) return null;
+  const [quietOpen, setQuietOpen] = useState(false);
+  if (legend.active.length === 0 && legend.quiet.length === 0) return null;
   return (
-    <div className="absolute bottom-4 left-4 z-10 flex max-w-[15rem] flex-col items-start gap-2 border border-rule bg-surface/70 px-3 py-2 text-label backdrop-blur-sm">
+    <div className="absolute bottom-4 left-4 z-10 flex w-[15rem] flex-col items-start gap-2 border border-rule bg-surface/70 px-3 py-2 text-label backdrop-blur-sm">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -54,20 +55,20 @@ export function AquariumLegend({ legend }: AquariumLegendProps) {
         Key
       </button>
       {open && (
-        <div className="flex flex-col gap-2">
+        <div className="flex w-full min-w-0 flex-col gap-2">
           <Section title="Rigs">
-            {legend.entries.map((entry) => (
-              <Row
-                key={entry.key}
-                swatch={rigSwatchColor(entry.hue)}
-                label={entry.key}
-                count={entry.openBeadTotal}
-              />
+            {legend.active.map((entry) => (
+              <RigRow key={entry.key} entry={entry} showAgents />
             ))}
-            {legend.hiddenCount > 0 && (
-              <div className="pl-5 uppercase tracking-wider text-fg-faint">
-                +{legend.hiddenCount} more
-              </div>
+            {legend.active.length === 0 && (
+              <div className="uppercase tracking-wider text-fg-faint">none active</div>
+            )}
+            {legend.quiet.length > 0 && (
+              <QuietRoster
+                quiet={legend.quiet}
+                open={quietOpen}
+                onToggle={() => setQuietOpen((v) => !v)}
+              />
             )}
           </Section>
           <Section title="Beads">
@@ -80,9 +81,42 @@ export function AquariumLegend({ legend }: AquariumLegendProps) {
   );
 }
 
+/** The expandable quiet-rig tail: rigs with no live agent. Collapsed to a single
+ *  "+N quiet" toggle so the roster stays about what's active; expands to a
+ *  scrollable full list so any rig's hue is still lookup-able on demand. */
+function QuietRoster({
+  quiet,
+  open,
+  onToggle,
+}: {
+  quiet: readonly RigLegendEntry[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="focus-mark flex items-center gap-1 pl-5 text-left uppercase tracking-wider text-fg-faint transition-colors duration-150 ease-out-quart hover:text-fg-muted"
+      >
+        <span aria-hidden="true">{open ? '▾' : '▸'}</span>+{quiet.length} quiet
+      </button>
+      {open && (
+        <div className="flex max-h-40 flex-col gap-0.5 overflow-y-auto pl-5">
+          {quiet.map((entry) => (
+            <RigRow key={entry.key} entry={entry} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex w-full min-w-0 flex-col gap-0.5">
       <div className="uppercase tracking-wider text-fg-faint">{title}</div>
       {children}
     </div>
@@ -127,16 +161,36 @@ function PriorityNote() {
   );
 }
 
-function Row({ swatch, label, count }: { swatch: string; label: string; count?: number }) {
+/** How many agent names a rig row names before folding the rest into "+N" — a
+ *  glance cue ("who's on this"), not the full crew (the Agents page has that). */
+const AGENTS_NAMED = 3;
+
+function agentSummary(agents: readonly string[]): string {
+  if (agents.length <= AGENTS_NAMED) return agents.join(' · ');
+  return `${agents.slice(0, AGENTS_NAMED).join(' · ')} +${agents.length - AGENTS_NAMED}`;
+}
+
+/** One rig row: hue swatch + rig name + open-bead count. Active rigs also carry
+ *  their live agents' names on a muted sub-line — the "by whom" for goal #1, so
+ *  the key answers who is on what without touching the tank. Widths are bounded
+ *  (min-w-0 + truncate) so a long name never widens the panel. */
+function RigRow({ entry, showAgents }: { entry: RigLegendEntry; showAgents?: boolean }) {
   return (
-    <div className="flex items-center gap-2 uppercase tracking-wider text-fg-muted">
-      <span
-        aria-hidden="true"
-        className="inline-block h-2.5 w-2.5 shrink-0"
-        style={{ background: swatch }}
-      />
-      <span className="grow truncate">{label}</span>
-      {count !== undefined && <span className="tnum text-fg-faint">{count}</span>}
+    <div className="flex w-full min-w-0 flex-col gap-0.5">
+      <div className="flex min-w-0 items-center gap-2 uppercase tracking-wider text-fg-muted">
+        <span
+          aria-hidden="true"
+          className="inline-block h-2.5 w-2.5 shrink-0"
+          style={{ background: rigSwatchColor(entry.hue) }}
+        />
+        <span className="min-w-0 grow truncate">{entry.key}</span>
+        <span className="tnum shrink-0 text-fg-faint">{entry.openBeadTotal}</span>
+      </div>
+      {showAgents === true && entry.agents.length > 0 && (
+        <div className="w-full truncate pl-[18px] normal-case tracking-normal text-fg-faint">
+          {agentSummary(entry.agents)}
+        </div>
+      )}
     </div>
   );
 }

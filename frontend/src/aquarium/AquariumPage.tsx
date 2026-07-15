@@ -87,7 +87,10 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
   }, [inputs]);
 
   // The reef key: which colour is which rig, and where each bead state lives.
-  const rigLegend = useMemo(() => buildRigLegend(snapshot?.formations ?? []), [snapshot]);
+  const rigLegend = useMemo(
+    () => buildRigLegend(snapshot?.formations ?? [], snapshot?.fish ?? []),
+    [snapshot],
+  );
 
   // requestPaintRef breaks the circular dependency between the camera hook
   // (which needs to trigger a repaint on gesture) and the render-loop hook

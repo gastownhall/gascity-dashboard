@@ -1,26 +1,29 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AquariumLegend } from './AquariumLegend';
-import type { RigLegend } from './rigLegend';
+import type { RigLegend, RigLegendEntry } from './rigLegend';
 
 afterEach(cleanup);
 
+function entry(over: Partial<RigLegendEntry> & Pick<RigLegendEntry, 'key'>): RigLegendEntry {
+  return { hue: 245, openBeadTotal: 0, agents: [], ...over };
+}
 function renderLegend(legend: RigLegend) {
   return render(<AquariumLegend legend={legend} />);
 }
 
 describe('AquariumLegend', () => {
-  it('lists each rig with its open-bead count and a bead-zone key', () => {
+  it('lists active rigs with their count + agents and a bead-zone key', () => {
     renderLegend({
-      entries: [
-        { key: 'geo', hue: 245, openBeadTotal: 26 },
-        { key: 'aoa', hue: 338, openBeadTotal: 8 },
+      active: [
+        entry({ key: 'geo', hue: 245, openBeadTotal: 26, agents: ['polecat-1', 'codex-2'] }),
       ],
-      hiddenCount: 0,
+      quiet: [],
     });
     expect(screen.getByText('geo')).toBeTruthy();
     expect(screen.getByText('26')).toBeTruthy();
-    expect(screen.getByText('aoa')).toBeTruthy();
+    // the "by whom": active agent names ride the rig row
+    expect(screen.getByText('polecat-1 · codex-2')).toBeTruthy();
     // the zone key names each bead state by WHERE its morsel lives (position,
     // not colour — hue is pure rig identity)
     expect(screen.getByText('open')).toBeTruthy();
@@ -30,22 +33,26 @@ describe('AquariumLegend', () => {
     expect(screen.getByText('seabed')).toBeTruthy();
   });
 
-  it('folds the long tail into a "+N more" line', () => {
+  it('folds quiet rigs behind a "+N quiet" toggle that expands the full roster', () => {
     renderLegend({
-      entries: [{ key: 'geo', hue: 245, openBeadTotal: 26 }],
-      hiddenCount: 9,
+      active: [entry({ key: 'geo', openBeadTotal: 26, agents: ['w1'] })],
+      quiet: [entry({ key: 'aoa', openBeadTotal: 8 }), entry({ key: 'zed', openBeadTotal: 3 })],
     });
-    expect(screen.getByText('+9 more')).toBeTruthy();
+    // quiet rigs are hidden until the toggle is opened
+    expect(screen.queryByText('aoa')).toBeNull();
+    const quietToggle = screen.getByRole('button', { name: /quiet/i });
+    expect(quietToggle.textContent).toContain('+2 quiet');
+    fireEvent.click(quietToggle);
+    expect(screen.getByText('aoa')).toBeTruthy();
+    expect(screen.getByText('zed')).toBeTruthy();
   });
 
   it('colours a rig swatch at its identity hue and the unrigged swatch neutral', () => {
     const { container } = renderLegend({
-      entries: [
-        { key: 'geo', hue: 245, openBeadTotal: 26 },
-        { key: 'unrigged', hue: null, openBeadTotal: 0 },
-      ],
-      hiddenCount: 0,
+      active: [entry({ key: 'geo', hue: 245, openBeadTotal: 26, agents: ['w1'] })],
+      quiet: [entry({ key: 'unrigged', hue: null, openBeadTotal: 0 })],
     });
+    fireEvent.click(screen.getByRole('button', { name: /quiet/i }));
     const swatches = Array.from(container.querySelectorAll('span[aria-hidden="true"]'));
     const styles = swatches.map((s) => (s as HTMLElement).style.background);
     // the geo swatch carries its identity hue (245)
@@ -55,10 +62,7 @@ describe('AquariumLegend', () => {
   });
 
   it('collapses to just the toggle and expands again (clears the glass on demand)', () => {
-    renderLegend({
-      entries: [{ key: 'geo', hue: 245, openBeadTotal: 26 }],
-      hiddenCount: 0,
-    });
+    renderLegend({ active: [entry({ key: 'geo', openBeadTotal: 26, agents: ['w1'] })], quiet: [] });
     const toggle = screen.getByRole('button', { name: /key/i });
     expect(screen.queryByText('geo')).toBeTruthy();
     fireEvent.click(toggle);
@@ -69,7 +73,7 @@ describe('AquariumLegend', () => {
   });
 
   it('renders nothing when there are no rigs to key', () => {
-    const { container } = renderLegend({ entries: [], hiddenCount: 0 });
+    const { container } = renderLegend({ active: [], quiet: [] });
     expect(container.firstChild).toBeNull();
   });
 });
