@@ -163,7 +163,13 @@ licenses it; outside this route, nothing here applies.
   non-maroon set (the ledger keeps maroon to itself). The four channels stay
   orthogonal: **hue** = rig, **shade** = bead status, **size and shape** = agent
   type, **pose** = agent state. The mayor's city stratum and unrigged agents
-  carry no project, so they swim neutral against the coloured schools.
+  carry no project, so they swim neutral against the coloured schools. A busy
+  city has more rigs than curated hues, so hue is a _coarse_ group, not a unique
+  per-rig key; the collapsible key (below) and the per-formation coloured label
+  carry the exact rig. Bead status reads as three shades of the rig hue — open
+  (mid), in progress (bright), blocked (dark, settled on the seabed) — and a
+  hairline tethers a working fish to the in-progress bead held at its mouth, so
+  the working pair reads as one unit without a hover.
 - **The One Voice Rule and tabular figures** for all overlay and in-scene
   text. The scene draws creatures; the type stays the system's type.
 - **`prefers-reduced-motion`.** The scene freezes to a truthful still frame:
@@ -193,8 +199,11 @@ licenses it; outside this route, nothing here applies.
 ### Named Rules
 
 **The Pane Rule.** The reef is a window, not a page. Chrome inside the glass
-is limited to the ledger line, the connection state, and the zoom controls;
-everything else the operator learns by looking at the water.
+is limited to the ledger line, the connection state, the zoom controls, and a
+collapsible key (the rig roster mapping colour to rig name + open-bead count,
+and the bead-status shade legend); everything else the operator learns by
+looking at the water. The key is translucent and collapses to a single toggle,
+so the glass clears on demand.
 
 **The Honest Zoom Rule.** Zooming in may only reveal true detail. If a label,
 number, or creature becomes legible at closer zoom, it must be a fact from the
