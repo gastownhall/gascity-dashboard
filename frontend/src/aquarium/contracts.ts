@@ -196,6 +196,9 @@ export interface ScenePalette {
   fishOutline: string;
   fishDim: string; // asleep/tombstone
   pellet: string;
+  /** in-progress (held) bead: brighter/lighter than open, so a fish's active
+   *  bead reads distinct from queued open food. */
+  pelletHeld: string;
   pelletSunken: string;
   text: string;
   textMuted: string;

@@ -38,10 +38,20 @@ describe('pelletColors (rig-hue identity)', () => {
     }
   });
 
+  it('gives in-progress (held) its own brighter shade so status reads by shade: blocked < open < held', () => {
+    for (const mood of ['light', 'dark'] as const) {
+      const c = pelletColors(palette(mood), 300);
+      expect(L(c.sunken[0]), `${mood} blocked<open`).toBeLessThan(L(c.tones[0]));
+      expect(L(c.tones[0]), `${mood} open<held`).toBeLessThan(L(c.held[0]));
+      expect(H(c.held[0]), `${mood} held hue`).toBeCloseTo(300, 5);
+    }
+  });
+
   it('leaves the unrigged / city pellet the neutral gold (hue = null)', () => {
     const p = palette('light');
     const neutral = pelletColors(p, null);
     expect(neutral.tones[0]).toBe(p.pellet);
+    expect(neutral.held[0]).toBe(p.pelletHeld);
     expect(neutral.sunken[0]).toBe(p.pelletSunken);
   });
 

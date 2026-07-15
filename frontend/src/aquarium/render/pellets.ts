@@ -1,6 +1,8 @@
 // Bead pellets: small rounded morsels batched by fill style (one fillStyle,
-// many arcs). Tone variation is a deterministic 3-bucket hash of the bead id;
-// sunken pellets settle darker and squashed; eaten pellets shrink+fade over
+// many arcs). Tone variation is a deterministic 3-bucket hash of the bead id.
+// Shade carries bead status (DESIGN §7's shade channel): open drifts at the
+// base tone, in-progress (held) is brighter + more saturated so an active bead
+// pops, blocked (sunken) settles darker and squashed, eaten shrinks+fades over
 // the gulp window. Positions (drift bob, mouth-hold) are sim facts.
 //
 // Hot path (≤1000 pellets/frame): a single pass sorts pellets into reused
@@ -22,7 +24,10 @@ const PELLET_RADIUS = 5; // world units
 const GULP_WINDOW_MS = 600;
 
 export interface PelletColors {
+  /** open (drifting) beads — the base tone */
   tones: readonly [string, string, string];
+  /** in-progress (held) beads — brighter + more saturated so an active bead pops */
+  held: readonly [string, string, string];
   /** two settled-morsel tones for blocked/sunken beads */
   sunken: readonly [string, string];
   /** soft contact shadow under a settled morsel */
@@ -33,14 +38,17 @@ export interface PelletColors {
  * read as one project. A touch below the fish flank so 1000 tiny morsels don't
  * scream. */
 const PELLET_RIG_CHROMA = 0.12;
+/** in-progress (held) beads carry a little more chroma than open/blocked, so an
+ * active bead reads as the vivid one of its rig even at a small size. */
+const PELLET_HELD_CHROMA = 0.16;
 /** neutral (no-rig) cache key; real rig hues are their degree value */
 const NEUTRAL_HUE_KEY = -1;
 
 /** Retint a base pellet pigment to a rig's identity hue (keeping its lightness,
  * which is what carries bead status), or leave it the neutral gold for the
  * unrigged / city strata. */
-function tintPellet(base: string, hue: number | null): string {
-  return hue === null ? base : withHueChroma(base, hue, PELLET_RIG_CHROMA);
+function tintPellet(base: string, hue: number | null, chroma: number): string {
+  return hue === null ? base : withHueChroma(base, hue, chroma);
 }
 
 // Cached per palette, then per rig hue: status shade survives the tint because
@@ -56,10 +64,12 @@ export function pelletColors(palette: ScenePalette, hue: number | null): PelletC
   const k = hue ?? NEUTRAL_HUE_KEY;
   const hit = byHue.get(k);
   if (hit !== undefined) return hit;
-  const drift = tintPellet(palette.pellet, hue);
-  const settled = tintPellet(palette.pelletSunken, hue);
+  const drift = tintPellet(palette.pellet, hue, PELLET_RIG_CHROMA);
+  const held = tintPellet(palette.pelletHeld, hue, PELLET_HELD_CHROMA);
+  const settled = tintPellet(palette.pelletSunken, hue, PELLET_RIG_CHROMA);
   const built: PelletColors = {
     tones: [drift, adjustL(drift, 6), adjustL(drift, -6)],
+    held: [held, adjustL(held, 5), adjustL(held, -5)],
     sunken: [settled, adjustL(settled, -7)],
     sunkenShadow: withAlpha(adjustL(settled, -20), 0.34),
   };
@@ -80,6 +90,8 @@ function pelletHueKey(rigKey: string): number {
 // Reused batch arrays — a single synchronous caller per frame, no reentrancy.
 const driftX: [number[], number[], number[]] = [[], [], []];
 const driftY: [number[], number[], number[]] = [[], [], []];
+const heldX: [number[], number[], number[]] = [[], [], []];
+const heldY: [number[], number[], number[]] = [[], [], []];
 const sunkX: number[] = [];
 const sunkY: number[] = [];
 const sunkScale: number[] = [];
@@ -93,6 +105,8 @@ function resetBatches(): void {
   for (let b = 0; b < 3; b += 1) {
     at(driftX, b).length = 0;
     at(driftY, b).length = 0;
+    at(heldX, b).length = 0;
+    at(heldY, b).length = 0;
   }
   sunkX.length = 0;
   sunkY.length = 0;
@@ -153,6 +167,10 @@ export function paintPellets(
         eatenX.push(kin.x);
         eatenY.push(kin.y);
         eatenT.push(clamp01((pellet.gulpMsLeft ?? 0) / GULP_WINDOW_MS));
+      } else if (pellet.state === 'held') {
+        const b = hashString(pellet.beadId) % 3;
+        at(heldX, b).push(kin.x);
+        at(heldY, b).push(kin.y);
       } else {
         const b = hashString(pellet.beadId) % 3;
         at(driftX, b).push(kin.x);
@@ -165,6 +183,18 @@ export function paintPellets(
         at(driftX, tone),
         at(driftY, tone),
         at(colors.tones, tone),
+        PELLET_RADIUS,
+        0.82,
+        square,
+      );
+    }
+    // in-progress beads: same morsel shape, brighter/more-saturated shade.
+    for (let tone = 0; tone < 3; tone += 1) {
+      fillDots(
+        ctx,
+        at(heldX, tone),
+        at(heldY, tone),
+        at(colors.held, tone),
         PELLET_RADIUS,
         0.82,
         square,

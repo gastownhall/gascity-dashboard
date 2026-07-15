@@ -32,6 +32,10 @@ const LIGHT: AquaticPalette = {
   fishOutline: 'oklch(23% 0.035 245)',
   fishDim: 'oklch(62% 0.03 225)',
   pellet: 'oklch(74% 0.095 80)',
+  // in-progress: brighter + a touch more chroma than open, so a fish's active
+  // bead reads as the vivid one on the light water (only lightness survives the
+  // rig tint, so open→held is primarily a lift in L).
+  pelletHeld: 'oklch(85% 0.14 85)',
   pelletSunken: 'oklch(50% 0.035 75)',
 };
 
@@ -49,6 +53,7 @@ const DARK: AquaticPalette = {
   fishOutline: 'oklch(92% 0.05 190)',
   fishDim: 'oklch(45% 0.03 230)',
   pellet: 'oklch(78% 0.08 95)',
+  pelletHeld: 'oklch(89% 0.13 100)',
   pelletSunken: 'oklch(35% 0.02 250)',
 };
 
