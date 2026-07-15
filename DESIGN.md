@@ -170,6 +170,16 @@ licenses it; outside this route, nothing here applies.
   (mid), in progress (bright), blocked (dark, settled on the seabed) — and a
   hairline tethers a working fish to the in-progress bead held at its mouth, so
   the working pair reads as one unit without a hover.
+- **Pellets carry bead metadata as food behaviour, not a chart.** Beyond hue
+  (rig) and shade (status), an open bead's other facts read diegetically: its
+  **age** is its drift height (fresh food floats high, stale food sinks toward
+  but stays above the seabed, so the vertical spread reads backlog staleness);
+  its **priority** is its morsel size (a higher-priority bead is a bigger,
+  choicer morsel); and a **newly-created** bead falls in from the surface like
+  scattered food (the arrival twin of the closing gulp). Pellet size is bead
+  priority here, distinct from fish size = agent type — the two marks never
+  collide. Each stays truthful: age is `created_at`, size is `priority`, the
+  drop fires only on a real new bead.
 - **The One Voice Rule and tabular figures** for all overlay and in-scene
   text. The scene draws creatures; the type stays the system's type.
 - **`prefers-reduced-motion`.** The scene freezes to a truthful still frame:
