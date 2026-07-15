@@ -4,6 +4,7 @@ import {
   BAND_AWAITING_Y,
   BAND_ERRORED_Y,
   BAND_IDLE_Y,
+  BAND_RATE_LIMITED_Y,
   BAND_STALLED_Y,
   BAND_WORKING_Y,
   IDLE_BAND_HALF_HEIGHT_WU,
@@ -27,17 +28,17 @@ describe('restPosition — determinism', () => {
 });
 
 describe('restPosition — vertical bands (the shared pose table)', () => {
-  it('gives every pose a distinct water-column band, ordered surface → seabed', () => {
+  it('stacks the four distress poses at the surface shelf, then working/idle/asleep below', () => {
     for (const seed of [1, 42, 99, 12345, 777]) {
       const y = (pose: AquariumPose) => restPosition(pose, ANCHOR, seed).y;
-      // awaiting-input / errored (surface) < stalled (upper-mid) < working
-      // (mid) < idle (mid-low) < rate-limited < asleep (seabed).
+      // surface shelf lanes (top→down): awaiting < errored < stalled <
+      // rate-limited, then the working shoal < idle < asleep (seabed).
       expect(y('awaiting-input')).toBeLessThan(y('errored'));
       expect(y('errored')).toBeLessThan(y('stalled'));
-      expect(y('stalled')).toBeLessThan(y('working'));
+      expect(y('stalled')).toBeLessThan(y('rate-limited'));
+      expect(y('rate-limited')).toBeLessThan(y('working'));
       expect(y('working')).toBeLessThan(y('idle'));
-      expect(y('idle')).toBeLessThan(y('rate-limited'));
-      expect(y('rate-limited')).toBeLessThan(y('asleep'));
+      expect(y('idle')).toBeLessThan(y('asleep'));
     }
   });
 
@@ -57,10 +58,11 @@ describe('restPosition — vertical bands (the shared pose table)', () => {
     expect(idle.y).toBeLessThan(ANCHOR.y - 100);
   });
 
-  it('stalled treads upper-mid, strictly between the surface band and the working shoal', () => {
+  it('stalled takes a surface-shelf lane between errored and rate-limited, above the working shoal', () => {
     const stalled = restPosition('stalled', ANCHOR, 7);
-    expect(Math.abs(stalled.y - BAND_STALLED_Y)).toBeLessThanOrEqual(55);
-    expect(stalled.y).toBeGreaterThan(BAND_ERRORED_Y + 100);
+    expect(Math.abs(stalled.y - BAND_STALLED_Y)).toBeLessThanOrEqual(15);
+    expect(stalled.y).toBeGreaterThan(BAND_ERRORED_Y);
+    expect(stalled.y).toBeLessThan(BAND_RATE_LIMITED_Y);
     expect(stalled.y).toBeLessThan(BAND_WORKING_Y - 100);
   });
 
@@ -86,49 +88,50 @@ describe('restPosition — vertical bands (the shared pose table)', () => {
     expect(errored.y).toBeGreaterThan(awaiting.y);
   });
 
-  it('rate-limited tucks against the formation near the seabed, offset above asleep', () => {
+  it('rate-limited holds the lowest surface-shelf lane, below stalled and above the working shoal', () => {
     const rl = restPosition('rate-limited', ANCHOR, 5);
-    const asleep = restPosition('asleep', ANCHOR, 5);
-    expect(rl.y).toBeLessThan(ANCHOR.y);
-    expect(rl.y).toBeGreaterThan(BAND_IDLE_Y);
-    expect(rl.y).toBeLessThan(asleep.y);
-    // FIX 3: jammed deep inside the footprint (in the rock's shadow).
-    expect(Math.abs(rl.x - ANCHOR.x)).toBeLessThan(ANCHOR.radius * 0.4);
+    expect(Math.abs(rl.y - BAND_RATE_LIMITED_Y)).toBeLessThanOrEqual(15);
+    expect(rl.y).toBeGreaterThan(BAND_STALLED_Y);
+    expect(rl.y).toBeLessThan(BAND_WORKING_Y - 100);
+    // near the home x it rose from, so the shelf reads which rig needs you.
+    expect(Math.abs(rl.x - ANCHOR.x)).toBeLessThan(100);
   });
 });
 
-describe('restPosition — FIX 3 legibility separation', () => {
+describe('restPosition — surface shelf lanes stay distinct', () => {
   const SEEDS = [1, 42, 99, 12345, 777];
+  const DISTRESS = ['awaiting-input', 'errored', 'stalled', 'rate-limited'] as const;
 
-  it('asleep sits on the open sand, rate-limited jams under the rock — max horizontal separation', () => {
+  it('all four distress poses sit in the surface shelf, above the working shoal', () => {
     for (const seed of SEEDS) {
-      const asleep = restPosition('asleep', ANCHOR, seed);
-      const rl = restPosition('rate-limited', ANCHOR, seed);
-      const asleepOffset = Math.abs(asleep.x - ANCHOR.x);
-      const rlOffset = Math.abs(rl.x - ANCHOR.x);
-      // asleep clear of the silhouette, rate-limited deep in the footprint,
-      // and asleep is unambiguously the farther of the two from the rock core.
-      expect(asleepOffset).toBeGreaterThan(ANCHOR.radius);
-      expect(rlOffset).toBeLessThanOrEqual(ANCHOR.radius * 0.4);
-      expect(asleepOffset).toBeGreaterThan(rlOffset);
+      for (const pose of DISTRESS) {
+        expect(restPosition(pose, ANCHOR, seed).y).toBeLessThan(BAND_WORKING_Y - 100);
+      }
     }
   });
 
-  it('rate-limited rides up under the overhang; asleep rests on the floor below the base', () => {
-    for (const seed of SEEDS) {
-      const asleep = restPosition('asleep', ANCHOR, seed);
-      const rl = restPosition('rate-limited', ANCHOR, seed);
-      expect(rl.y).toBeLessThan(ANCHOR.y);
-      expect(asleep.y).toBeGreaterThanOrEqual(ANCHOR.y);
-    }
-  });
-
-  it('awaiting-input touches the waterline; stalled treads far below (height alone separates them)', () => {
+  it('the two nose-up poses (awaiting-input, stalled) stay a clear lane apart', () => {
     for (const seed of SEEDS) {
       const awaiting = restPosition('awaiting-input', ANCHOR, seed);
       const stalled = restPosition('stalled', ANCHOR, seed);
-      expect(awaiting.y).toBeLessThan(WORLD.waterlineY + 60);
-      expect(stalled.y - awaiting.y).toBeGreaterThan(300);
+      // a full lane between them so open-gape vs tremor never re-muddle.
+      expect(stalled.y - awaiting.y).toBeGreaterThan(60);
+    }
+  });
+
+  it('every surfaced fish stays near its home x, so the shelf reads which rig needs you', () => {
+    for (const seed of SEEDS) {
+      for (const pose of DISTRESS) {
+        expect(Math.abs(restPosition(pose, ANCHOR, seed).x - ANCHOR.x)).toBeLessThan(100);
+      }
+    }
+  });
+
+  it('asleep still rests on the open sand at the seabed, clear of the shelf', () => {
+    for (const seed of SEEDS) {
+      const asleep = restPosition('asleep', ANCHOR, seed);
+      expect(asleep.y).toBeGreaterThanOrEqual(ANCHOR.y);
+      expect(Math.abs(asleep.x - ANCHOR.x)).toBeGreaterThan(ANCHOR.radius);
     }
   });
 });
@@ -161,23 +164,24 @@ describe('restPosition — FIX 1 working band is a guarded mid-water VOLUME', ()
     expect(thickness).toBeGreaterThan(2 * WORKING_BAND_HALF_HEIGHT_WU - 40);
   });
 
-  it('the working band stays DISJOINT from stalled above and idle below with the guard margin', () => {
+  it('the working shoal stays a guarded gap above idle, with the surface shelf far above it', () => {
     const minWork = Math.min(...bandYs('working'));
     const maxWork = Math.max(...bandYs('working'));
-    const maxStall = Math.max(...bandYs('stalled'));
     const minIdle = Math.min(...bandYs('idle'));
-    // No working fish reaches up into the stalled stratum...
-    expect(minWork - maxStall).toBeGreaterThanOrEqual(WORKING_BAND_GUARD_WU);
-    // ...nor down into the idle stratum; both gaps clear the guard margin.
+    // lowest surface-shelf lane; every working fish sits well below the shelf.
+    const maxShelf = Math.max(...bandYs('rate-limited'));
+    // No working fish reaches down into the idle stratum (the guard margin)...
     expect(minIdle - maxWork).toBeGreaterThanOrEqual(WORKING_BAND_GUARD_WU);
+    // ...nor up into the surface shelf; the shelf is a distinct top zone.
+    expect(minWork - maxShelf).toBeGreaterThan(WORKING_BAND_GUARD_WU);
   });
 
   it('idle fish also get vertical variation but stay clear of working and asleep', () => {
     const idleY = bandYs('idle');
     const idleRange = Math.max(...idleY) - Math.min(...idleY);
     expect(idleRange).toBeGreaterThan(2 * IDLE_BAND_HALF_HEIGHT_WU - 40);
-    // Below every working fish, and never down onto the seabed rest poses.
+    // Below every working fish, and never down onto the seabed rest pose.
     expect(Math.min(...idleY)).toBeGreaterThan(Math.max(...bandYs('working')));
-    expect(Math.max(...idleY)).toBeLessThan(Math.min(...bandYs('rate-limited')));
+    expect(Math.max(...idleY)).toBeLessThan(Math.min(...bandYs('asleep')));
   });
 });

@@ -57,26 +57,30 @@ export const BOB_AMPLITUDE_WU = 8;
 export const BOB_PERIOD_MS = 2200;
 
 // ---------------------------------------------------------------------------
-// Water-column bands (absolute world y; y grows downward). Each calm/hold
-// pose owns a distinct vertical stratum so posture AND height together make
-// the pose unmistakable — the round-1 failure was every pose piling near the
-// seabed and blurring together. Ordering top→bottom:
-//   awaiting-input / errored  (surface band, touching the waterline)
-//   stalled                   (upper-mid, clearly below the surface)
+// Water-column bands (absolute world y; y grows downward). Each calm pose owns a
+// distinct vertical stratum so posture AND height together make it unmistakable.
+// The four "needs a human" poses instead congregate in a SURFACE SHELF — a stack
+// of micro-lanes just under the waterline — so one glance at the top strip reads
+// "what needs me" instead of scanning the whole column for scattered distress.
+// Ordering top→bottom:
+//   awaiting-input / errored / stalled / rate-limited  (surface shelf lanes)
 //   working shoal             (mid, the pellet band above every formation crest)
 //   idle                      (mid-low, lower & looser than the working shoal)
-//   rate-limited / asleep     (seabed: tucked under the overhang / on the base)
+//   asleep                    (seabed: resting on the base)
 const COLUMN_SPAN = WORLD.seabedY - WORLD.waterlineY;
 
-// FIX 3 (round 3) — awaiting-input ↔ stalled were muddled (both nose-up).
-// Separate them by HEIGHT alone: awaiting-input rises to TOUCH the waterline
-// band; stalled treads far below with a large open gap between them.
-/** awaiting-input hugs the waterline (touching the band). */
+// The surface shelf: all four distress poses stack as distinct micro-lanes just
+// under the waterline. awaiting-input ↔ stalled are both nose-up, so they stay a
+// full lane apart and lean on their silhouettes (open gape vs tremor) to read
+// distinctly — the shelf is a scan line, not a pile.
+/** awaiting-input hugs the waterline (the topmost shelf lane). */
 export const BAND_AWAITING_Y = WORLD.waterlineY + 28;
-/** errored holds just under awaiting-input so the two never coincide. */
+/** errored holds just under awaiting-input. */
 export const BAND_ERRORED_Y = WORLD.waterlineY + 90;
-/** stalled treads upper-mid — a big vertical gap below the surface band. */
-export const BAND_STALLED_Y = WORLD.waterlineY + Math.round(COLUMN_SPAN * 0.3);
+/** stalled takes the third shelf lane, a clear gap under errored. */
+export const BAND_STALLED_Y = WORLD.waterlineY + 155;
+/** rate-limited holds the lowest shelf lane, still well above the working shoal. */
+export const BAND_RATE_LIMITED_Y = WORLD.waterlineY + 220;
 /** working shoals here — mid-water, above the tallest formation crest. */
 export const BAND_WORKING_Y = WORLD.waterlineY + Math.round(COLUMN_SPAN * 0.45);
 /** idle wanders here — below the working shoal, above the seabed. */
@@ -88,8 +92,10 @@ export const BAND_IDLE_Y = WORLD.waterlineY + Math.round(COLUMN_SPAN * 0.62);
 // is widened the most (its shoal is the mid-water's mass) but stays BOUNDED so
 // it never crosses into the stalled stratum above or the idle stratum below —
 // the blind-legibility 7/7 win depends on those strata staying disjoint.
-/** stalled tread scatter (unchanged read — a tight upper-mid band). */
-export const STALLED_BAND_HALF_HEIGHT_WU = 45;
+/** shelf micro-lane vertical scatter: a hair of jitter so a lane of surfaced
+ * fish doesn't pin to one exact height, but tight enough that the lanes (and the
+ * poses they carry) stay distinct. */
+export const SHELF_LANE_HALF_HEIGHT_WU = 12;
 /** working shoal scatter — wide, so the pellet band is a thick occupied volume.
  * Also each working fish homes to its own y within ±this (fishTick shoalHomeY),
  * so the thickness persists in live motion, not only at spawn. */
@@ -97,15 +103,14 @@ export const WORKING_BAND_HALF_HEIGHT_WU = 120;
 /** idle wander scatter — mid-low, looser than the working shoal. */
 export const IDLE_BAND_HALF_HEIGHT_WU = 80;
 
-/** Guaranteed clear vertical gap between the working band's nearest extreme and
- * the adjacent pose band (stalled above, idle below). Derived from the band
- * centres and half-extents so it can never silently go negative: a future band
- * edit that squeezes the strata makes this drop and its guard test fail loudly,
- * catching any regression of the pose separation before it reaches a judge. */
-export const WORKING_BAND_GUARD_WU = Math.min(
-  BAND_WORKING_Y - WORKING_BAND_HALF_HEIGHT_WU - (BAND_STALLED_Y + STALLED_BAND_HALF_HEIGHT_WU),
-  BAND_IDLE_Y - IDLE_BAND_HALF_HEIGHT_WU - (BAND_WORKING_Y + WORKING_BAND_HALF_HEIGHT_WU),
-);
+/** Guaranteed clear vertical gap between the working shoal's lower extreme and
+ * the idle stratum below it (the shelf poses now sit far above, so idle is the
+ * only adjacent band). Derived from the band centres and half-extents so it can
+ * never silently go negative: a future band edit that squeezes the strata makes
+ * this drop and its guard test fail loudly, catching a pose-separation
+ * regression before it reaches a judge. */
+export const WORKING_BAND_GUARD_WU =
+  BAND_IDLE_Y - IDLE_BAND_HALF_HEIGHT_WU - (BAND_WORKING_Y + WORKING_BAND_HALF_HEIGHT_WU);
 
 /** Soft-repel margin: a fish this close to the world edge is nudged back in,
  * on top of the hard clamp. */
