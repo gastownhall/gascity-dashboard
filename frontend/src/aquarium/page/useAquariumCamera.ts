@@ -50,6 +50,9 @@ export interface AquariumCameraApi {
   zoomIn: () => void;
   zoomOut: () => void;
   resetCamera: () => void;
+  /** Center a ledger-selected entity and reveal at least the requested detail
+   * tier so an off-screen selection always produces visible tank feedback. */
+  focusWorldPoint: (x: number, y: number, minZoom: number) => void;
   /** css-px client coords (e.g. a click's clientX/clientY minus the
    *  canvas's bounding-rect origin) -> world coords, at the CURRENT camera. */
   worldFromClientOffset: (cssX: number, cssY: number) => { x: number; y: number };
@@ -208,6 +211,14 @@ export function useAquariumCamera(viewport: Viewport, onChange?: () => void): Aq
     writeHashThrottled();
   }, [commit, writeHashThrottled]);
 
+  const focusWorldPoint = useCallback(
+    (x: number, y: number, minZoom: number) => {
+      commit({ x, y, zoom: Math.max(cameraRef.current.zoom, minZoom) });
+      writeHashThrottled();
+    },
+    [commit, writeHashThrottled],
+  );
+
   const panByKey = useCallback(
     (dxCss: number, dyCss: number) => {
       commit(panCamera(cameraRef.current, dxCss, dyCss));
@@ -260,6 +271,7 @@ export function useAquariumCamera(viewport: Viewport, onChange?: () => void): Aq
     zoomIn,
     zoomOut,
     resetCamera,
+    focusWorldPoint,
     worldFromClientOffset,
   };
 }

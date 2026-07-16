@@ -231,7 +231,21 @@ licenses it; outside this route, nothing here applies.
   snapshot age under reduced motion. Rig ownership comes from the per-rig bead
   feed, never from bead-id text. A failed rig read is excluded from flow totals
   and retains its prior transition state so absence cannot become a false
-  completion.
+  completion. The backlogged-rig, waiting-P0, and needs-attention facts are
+  quiet, keyboard-operable drill-downs when their count is nonzero. They expand
+  in place, never into a modal. Selecting a P0 bead draws a dashed focus mark
+  around its morsel; selecting a rig marks its formation and currently rendered
+  beads; selecting an attention row marks its fish. Dashed focus marks must
+  remain visually distinct from solid flow receipts. The expanded flow copy says
+  plainly that one solid ring is a pickup and two solid rings are a completion.
+  Partial coverage is also drillable: when the denominator is known it names
+  the rig reads that failed and states that counts exclude them; when an
+  upstream list is incomplete it says the denominator is unknown.
+- **Provider telemetry is never guessed.** `activity: in-turn` is the only fact
+  that may be called working. A live session whose provider omits turn activity
+  is labelled "active, turn activity unavailable," never idle or working. Its
+  calm visual pose reflects the absence of turn evidence, not a claim that the
+  agent has stopped.
 - **Dependencies reveal on focus, never globally.** Selecting a bead pellet
   draws a faint dashed link to each bead it depends on whose pellet is on screen
   (dashed so it never reads as the solid fish-to-bead tether). A busy city has
@@ -268,9 +282,10 @@ licenses it; outside this route, nothing here applies.
 ### Named Rules
 
 **The Pane Rule.** The reef is a window, not a page. Chrome inside the glass
-is limited to the tide report, its conditional attention mark, the connection
-state, the zoom controls, the drillable "N stranded" pill (present only when
-work is orphaned), and a
+is limited to the tide report and its in-place drill-down, its conditional
+attention mark and drill-down, partial-coverage detail, the connection state,
+the zoom controls, the drillable "N stranded" pill (present only when work is
+orphaned), and a
 collapsible key (the rig roster mapping colour to rig name + open-bead count,
 and the bead **zone** key naming where each state's morsel lives); everything
 else the operator learns by looking at the water. The key is translucent and collapses to a single toggle,

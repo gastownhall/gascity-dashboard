@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { FlowObservation, RigFormation, ScenePalette } from '../contracts';
+import {
+  FLOW_RECEIPT_LIFETIME_MS,
+  type FlowObservation,
+  type FlowReceipt,
+  type RigFormation,
+  type ScenePalette,
+} from '../contracts';
 import type { ViewRect } from './layers';
 import { buildScenePalette } from './palette';
 import { paintFlowReceipts } from './flowReceipts';
@@ -97,4 +103,71 @@ describe('paintFlowReceipts', () => {
     paintFlowReceipts(overview.ctx, flow('pickup'), [FORMATION], PALETTE, VIEW, 0.36, 6_000, true);
     expect((overview.arcs[0]?.radius ?? 0) * 0.36).toBeGreaterThanOrEqual(10);
   });
+
+  it('skips missing, expired, future, and off-screen receipts', () => {
+    const recorded = recordingContext();
+    const receipts: FlowReceipt[] = [
+      receipt('missing', 1_000),
+      receipt('expired', FLOW_RECEIPT_LIFETIME_MS),
+      receipt('future', -1),
+      receipt('left', 1_000),
+      receipt('right', 1_000),
+      receipt('top', 1_000),
+      receipt('bottom', 1_000),
+    ];
+    const formations: RigFormation[] = [
+      formation('expired', 900, 1_900),
+      formation('future', 900, 1_900),
+      formation('left', -100, 1_900),
+      formation('right', 4_100, 1_900),
+      formation('top', 900, -100),
+      formation('bottom', 900, 3_000),
+    ];
+    paintFlowReceipts(
+      recorded.ctx,
+      { ...flow('pickup'), receipts },
+      formations,
+      PALETTE,
+      VIEW,
+      1,
+      6_000,
+      true,
+    );
+    expect(recorded.arcs).toHaveLength(0);
+  });
+
+  it('uses the neutral fallback and minimum opacity for an old city receipt', () => {
+    const recorded = recordingContext();
+    paintFlowReceipts(
+      recorded.ctx,
+      {
+        ...flow('pickup'),
+        receipts: [receipt('city', FLOW_RECEIPT_LIFETIME_MS - 1)],
+      },
+      [formation('city', 900, 1_900)],
+      PALETTE,
+      VIEW,
+      10,
+      6_000,
+      true,
+    );
+    expect(recorded.arcs).toHaveLength(1);
+    expect(recorded.ctx.strokeStyle).toBe(PALETTE.pellet);
+    expect(recorded.ctx.globalAlpha).toBe(1);
+  });
 });
+
+function receipt(rigKey: string, ageMsAtSnapshot: number): FlowReceipt {
+  return {
+    id: `${rigKey}-receipt`,
+    beadId: `${rigKey}-bead`,
+    rigKey,
+    kind: 'pickup',
+    observedAtOffsetMs: 5_000,
+    ageMsAtSnapshot,
+  };
+}
+
+function formation(key: string, anchorX: number, anchorY: number): RigFormation {
+  return { ...FORMATION, key, anchorX, anchorY };
+}

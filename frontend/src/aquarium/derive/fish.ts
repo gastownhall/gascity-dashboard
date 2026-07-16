@@ -14,7 +14,7 @@ import {
 import { formatAgentName } from '../../lib/agentName';
 import { resolveRigName, type RigNameSource } from '../../lib/rigNames';
 import { CITY_KEY, UNRIGGED_KEY, type FishEntity } from '../contracts';
-import { derivePose, poseWord } from './pose';
+import { derivePose, poseWord, poseWordForSession } from './pose';
 import { deriveSpecies } from './species';
 
 /** A rig identity with an OPTIONAL path — the DeriveInputs-level shape.
@@ -139,7 +139,7 @@ function fishFromSession(
     species,
     isMayor,
     pose,
-    poseWord: poseWord(pose),
+    poseWord: poseWordForSession(pose, session),
     bellyPct: effectiveContextPct(session),
     homeKey: homeKeyFor(isMayor, session.rig, rigs),
     ...(taskBeadId !== undefined ? { taskBeadId } : {}),

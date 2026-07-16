@@ -36,6 +36,7 @@ import {
 } from './sceneCache';
 import { paintTextLayers } from './text';
 import { paintFlowReceipts } from './flowReceipts';
+import { paintActorFocus, paintRigFocus } from './focusHighlights';
 import {
   paintDeepDrift,
   paintDepthVignette,
@@ -83,6 +84,7 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
     clockMs,
     opts.reducedMotion,
   );
+  paintRigFocus(ctx, opts.focus, snapshot.formations, palette, midView, mid.scale);
 
   applyLayer(ctx, actors);
   paintDepLinks(ctx, opts.selectedBeadId, snapshot.pellets, sim, palette, actorView, actors.scale);
@@ -90,6 +92,16 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
   paintTethers(ctx, snapshot.pellets, sim, palette, actorView, actors.scale);
   paintPellets(ctx, snapshot.pellets, sim, palette, actorView, actors.scale);
   paintFishLayer(ctx, snapshot.fish, sim, palette, actors, actorView, clockMs);
+  paintActorFocus(
+    ctx,
+    opts.focus,
+    snapshot.pellets,
+    snapshot.fish,
+    sim,
+    palette,
+    actorView,
+    actors.scale,
+  );
 
   applyLayer(ctx, near);
   paintParticulate(ctx, palette, nearView, clockMs);

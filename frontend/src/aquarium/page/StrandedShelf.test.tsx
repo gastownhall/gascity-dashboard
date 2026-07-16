@@ -63,4 +63,16 @@ describe('StrandedShelf', () => {
     fireEvent.click(screen.getByRole('button', { name: /stranded/i }));
     expect(screen.getByText(/geo/i)).toBeTruthy();
   });
+
+  it('orders beads with the same rig by title', () => {
+    renderShelf([
+      item({ beadId: 'b2', title: 'Zulu', rigKey: 'geo' }),
+      item({ beadId: 'b1', title: 'Alpha', rigKey: 'geo' }),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: /stranded/i }));
+    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
+      expect.stringContaining('Alpha'),
+      expect.stringContaining('Zulu'),
+    ]);
+  });
 });

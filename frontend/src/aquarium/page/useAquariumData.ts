@@ -50,6 +50,11 @@ const EMPTY_AGENTS: SupervisorAgentList = { items: [], total: 0 };
 const EMPTY_SESSIONS: SupervisorSessionList = { items: [], total: 0 };
 const EMPTY_RIGS: SupervisorRigList = { items: [], total: 0 };
 
+interface PendingReadResult {
+  sourceKey: string;
+  signals: AgentPendingSignal[];
+}
+
 /**
  * `fixtureKind === null` is live mode: real supervisor reads, polled +
  * SSE-refreshed. A non-null kind is fixture mode: zero supervisor calls —
@@ -82,14 +87,17 @@ export function useAquariumData(fixtureKind: FixtureKind | null): AquariumDataRe
     .sort()
     .join(',')}`;
   const pendingCache = useCachedData(pendingKey, async () => {
-    if (isFixture) return EMPTY_PENDING;
+    if (isFixture) return { sourceKey: pendingKey, signals: EMPTY_PENDING };
     const interactions = await listAgentPendingInteractions(agentItems, sessionItems);
-    return interactions.map(
-      (interaction): AgentPendingSignal =>
-        interaction.pending.prompt !== undefined
-          ? { agentName: interaction.agentName, prompt: interaction.pending.prompt }
-          : { agentName: interaction.agentName },
-    );
+    return {
+      sourceKey: pendingKey,
+      signals: interactions.map(
+        (interaction): AgentPendingSignal =>
+          interaction.pending.prompt !== undefined
+            ? { agentName: interaction.agentName, prompt: interaction.pending.prompt }
+            : { agentName: interaction.agentName },
+      ),
+    } satisfies PendingReadResult;
   });
 
   const rigNames = useMemo(() => rigNameOptions(rigItems), [rigItems]);
@@ -120,23 +128,29 @@ export function useAquariumData(fixtureKind: FixtureKind | null): AquariumDataRe
     [fixtureKind],
   );
 
+  // useCachedData intentionally keeps the previous key's value until its
+  // key-change effect runs. Never report that stale pending result as current:
+  // agent/session reads can change the query key during the same render.
+  const pendingReadCurrent = pendingCache.data?.sourceKey === pendingKey;
+  const pendingSignals = pendingReadCurrent ? pendingCache.data?.signals : EMPTY_PENDING;
+
   const liveInputs = useMemo<DeriveInputs>(
     () => ({
       sessions: sessionItems,
       agents: agentItems,
       rigs: rigItems,
-      pendingSignals: pendingCache.data ?? EMPTY_PENDING,
+      pendingSignals: pendingSignals ?? EMPTY_PENDING,
       beadsByRig: beadsCache.data?.beadsByRig ?? EMPTY_BEADS_BY_RIG,
       unavailableBeadRigKeys: beadsCache.data?.unavailableRigKeys ?? [],
     }),
-    [sessionItems, agentItems, rigItems, pendingCache.data, beadsCache.data],
+    [sessionItems, agentItems, rigItems, pendingSignals, beadsCache.data],
   );
 
   const liveReads = [agentsCache, sessionsCache, rigsCache, pendingCache, beadsCache];
   const liveReadUnavailable = liveReads.some(
     (read) => read.data === undefined && read.error !== null,
   );
-  const liveReadLoading = liveReads.some((read) => read.data === undefined);
+  const liveReadLoading = liveReads.some((read) => read.data === undefined) || !pendingReadCurrent;
   const liveReadStale = liveReads.some((read) => read.data !== undefined && read.error !== null);
   const upstreamListPartial = [agentsCache.data, sessionsCache.data, rigsCache.data].some(
     supervisorListIsIncomplete,
@@ -152,7 +166,11 @@ export function useAquariumData(fixtureKind: FixtureKind | null): AquariumDataRe
           : (beadsCache.data?.unavailableRigKeys.length ?? 0) > 0
             ? 'partial'
             : 'complete';
-  const coverageKnown = isFixture || (!liveReadStale && !upstreamListPartial);
+  const rigCoverageStale =
+    (rigsCache.data !== undefined && rigsCache.error !== null) ||
+    (beadsCache.data !== undefined && beadsCache.error !== null);
+  const coverageKnown =
+    isFixture || (!rigCoverageStale && !supervisorListIsIncomplete(rigsCache.data));
 
   return {
     inputs: fixtureScene?.inputs ?? liveInputs,

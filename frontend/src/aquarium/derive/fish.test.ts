@@ -89,6 +89,20 @@ describe('buildFish — session-backed fish', () => {
     expect(fish[0]?.pose).toBe('idle');
   });
 
+  it('labels a live Codex-style session as active with unavailable turn telemetry, not idle', () => {
+    const s = session({
+      id: 'gc-2568',
+      session_name: 'mayor',
+      alias: 'mayor',
+      provider: 'codex-mayor',
+      state: 'active',
+      running: true,
+    });
+    const { fish } = buildFish(inputs({ sessions: [s] }));
+    expect(fish[0]?.pose).toBe('idle');
+    expect(fish[0]?.poseWord).toBe('active, turn activity unavailable');
+  });
+
   it('is working when activity is in-turn', () => {
     const s = session({ session_name: 'sess-1', id: 'gc-1', activity: 'in-turn' });
     const { fish } = buildFish(inputs({ sessions: [s] }));
@@ -114,6 +128,12 @@ describe('buildFish — session-backed fish', () => {
     const byId = new Map(fish.map((f) => [f.id, f]));
     expect(byId.get('sess-1')?.homeKey).toBe('alpha-rig');
     expect(byId.get('sess-2')?.homeKey).toBe(UNRIGGED_KEY);
+  });
+
+  it('accepts a supervisor rig that does not publish a host path', () => {
+    const s = session({ session_name: 'sess-1', id: 'gc-1', rig: 'alpha-rig' });
+    const { fish } = buildFish(inputs({ sessions: [s], rigs: [{ name: 'alpha-rig' }] }));
+    expect(fish[0]?.homeKey).toBe('alpha-rig');
   });
 
   it('sends the mayor home to CITY_KEY even when rig is set', () => {

@@ -189,6 +189,13 @@ export interface WorldSnapshot {
   flow: FlowObservation;
 }
 
+/** A ledger-driven selection painted back into the tank. The discriminator is
+ * also the greyscale-safe meaning of the dashed focus mark. */
+export type ReefFocus =
+  | { kind: 'bead'; beadId: string }
+  | { kind: 'rig'; rigKey: string }
+  | { kind: 'fish'; fishId: string };
+
 /** One orphaned bead for the stranded shelf drill-in. */
 export interface StrandedWorkItem {
   beadId: string;
@@ -199,6 +206,8 @@ export interface StrandedWorkItem {
   linkTo: string;
 }
 
+/** Ordinary drifting backlog budget per rig. Held, blocked, and P0 pellets are
+ * always retained even when those high-signal entities exceed this budget. */
 export const PELLET_RENDER_CAP_PER_RIG = 40;
 
 // ---------------------------------------------------------------------------
@@ -304,7 +313,11 @@ export type PaintScene = (
   camera: Camera,
   viewport: Viewport,
   palette: ScenePalette,
-  opts: { reducedMotion: boolean; selectedBeadId?: string | null },
+  opts: {
+    reducedMotion: boolean;
+    selectedBeadId?: string | null;
+    focus?: ReefFocus | null;
+  },
 ) => void;
 
 // ---------------------------------------------------------------------------

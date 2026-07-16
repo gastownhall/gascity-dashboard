@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentNeedsYou } from 'gas-city-dashboard-shared';
-import { ASLEEP_THRESHOLD_MS, derivePose, isDistressPose, poseWord } from './pose';
+import {
+  ASLEEP_THRESHOLD_MS,
+  derivePose,
+  isDistressPose,
+  poseWord,
+  poseWordForSession,
+} from './pose';
 
 const NOW = Date.parse('2026-07-13T12:00:00.000Z');
 
@@ -78,5 +84,31 @@ describe('poseWord', () => {
     expect(poseWord('stalled')).toBe('stalled');
     expect(poseWord('rate-limited')).toBe('rate limited');
     expect(poseWord('errored')).toBe('errored');
+  });
+
+  it('does not call an active session idle when its provider omits turn activity', () => {
+    expect(
+      poseWordForSession('idle', {
+        state: 'active',
+      }),
+    ).toBe('active, turn activity unavailable');
+  });
+
+  it('does not call a running session idle when its provider omits turn activity', () => {
+    expect(
+      poseWordForSession('idle', {
+        state: 'running',
+        running: true,
+      }),
+    ).toBe('active, turn activity unavailable');
+  });
+
+  it('keeps an explicit provider idle signal authoritative', () => {
+    expect(
+      poseWordForSession('idle', {
+        activity: 'idle',
+        state: 'active',
+      }),
+    ).toBe('idle');
   });
 });

@@ -74,4 +74,10 @@ describe('reconcileFishTombstones', () => {
     expect(out).toHaveLength(1);
     expect(out.every((f) => !f.tombstoned)).toBe(true);
   });
+
+  it('drops an inconsistent last-seen row with no last-known fish', () => {
+    const prevMemory: FishMemory = { lastSeenMs: { missing: T0 }, lastKnown: {} };
+    const { fish: out } = reconcileFishTombstones([], prevMemory, T0 + 1);
+    expect(out).toEqual([]);
+  });
 });

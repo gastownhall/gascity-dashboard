@@ -189,7 +189,8 @@ export function beadLinkTo(beadId: string): string {
 }
 
 /** Rendered-pellet priority: held (visible work) > sunken (blocked, needs
- * eyes) > drifting (queue depth, least urgent to see individually). */
+ * eyes) > P0 waiting > ordinary drifting backlog. High-signal pellets are
+ * never evicted by the ordinary render budget. */
 const STATE_PRIORITY: Readonly<Record<PelletState, number>> = {
   held: 0,
   sunken: 1,
@@ -204,11 +205,26 @@ function capPerRig(rigPellets: readonly PelletEntity[]): {
   if (rigPellets.length <= PELLET_RENDER_CAP_PER_RIG) {
     return { rendered: [...rigPellets], overflow: 0 };
   }
-  const ordered = [...rigPellets].sort((a, b) => STATE_PRIORITY[a.state] - STATE_PRIORITY[b.state]);
+  const ordered = [...rigPellets].sort(
+    (a, b) =>
+      signalPriority(a) - signalPriority(b) ||
+      STATE_PRIORITY[a.state] - STATE_PRIORITY[b.state] ||
+      a.beadId.localeCompare(b.beadId),
+  );
+  const required = ordered.filter((pellet) => signalPriority(pellet) < 2);
+  const ordinary = ordered.filter((pellet) => signalPriority(pellet) === 2);
+  const ordinaryBudget = Math.max(0, PELLET_RENDER_CAP_PER_RIG - required.length);
+  const rendered = [...required, ...ordinary.slice(0, ordinaryBudget)];
   return {
-    rendered: ordered.slice(0, PELLET_RENDER_CAP_PER_RIG),
-    overflow: rigPellets.length - PELLET_RENDER_CAP_PER_RIG,
+    rendered,
+    overflow: rigPellets.length - rendered.length,
   };
+}
+
+function signalPriority(pellet: PelletEntity): number {
+  if (pellet.state === 'held' || pellet.state === 'sunken') return 0;
+  if (pellet.isP0 === true) return 1;
+  return 2;
 }
 
 function invert(map: ReadonlyMap<string, string>): Map<string, string> {

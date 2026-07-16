@@ -15,8 +15,11 @@ import { useTheme } from '../contexts/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import {
   EMPTY_FLOW_OBSERVATION,
+  LOD1_ZOOM,
   type FixtureKind,
+  type ReefFocus,
   type ScenePalette,
+  type SimState,
   type Viewport,
   type WorldSnapshot,
 } from './contracts';
@@ -35,6 +38,7 @@ import { StrandedShelf } from './page/StrandedShelf';
 import { useAquariumCamera } from './page/useAquariumCamera';
 import { useAquariumData } from './page/useAquariumData';
 import { useAquariumRenderLoop } from './page/useAquariumRenderLoop';
+import { reefFocusIsEligible } from './page/ledgerEligibility';
 
 export interface AquariumPageProps {
   /** Overrides the URL's `?fixture=` param — the route tests' entry point
@@ -123,9 +127,19 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
   // at the latest callback" idiom useCachedData.ts uses for its fetcher.
   const [hover, setHover] = useState<SelectedHit | null>(null);
   const [selected, setSelected] = useState<SelectedHit | null>(null);
+  const [focus, setFocus] = useState<ReefFocus | null>(null);
+  useEffect(() => {
+    if (focus === null || snapshot === null) return;
+    if (!reefFocusIsEligible(snapshot, focus, inputs.unavailableBeadRigKeys)) setFocus(null);
+  }, [focus, inputs.unavailableBeadRigKeys, snapshot]);
   const lastHoverAtRef = useRef(0);
   // Only a selected PELLET drives dependency links; a selected fish draws none.
-  const selectedBeadId = selected?.hit.kind === 'pellet' ? selected.hit.entity.beadId : null;
+  const selectedBeadId =
+    focus?.kind === 'bead'
+      ? focus.beadId
+      : selected?.hit.kind === 'pellet'
+        ? selected.hit.entity.beadId
+        : null;
 
   const requestPaintRef = useRef<() => void>(() => {});
   const camera = useAquariumCamera(viewport, () => requestPaintRef.current());
@@ -138,6 +152,7 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
     reducedMotion,
     isFixture: fixtureKind !== null,
     selectedBeadId,
+    focus,
   });
   requestPaintRef.current = renderLoop.requestPaint;
 
@@ -163,6 +178,7 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
   const onCanvasClick = useCallback(
     (e: MouseEvent<HTMLCanvasElement>) => {
       const rect = e.currentTarget.getBoundingClientRect();
+      setFocus(null);
       setSelected(resolveHit(e.clientX - rect.left, e.clientY - rect.top));
     },
     [resolveHit],
@@ -178,6 +194,18 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
       setHover(resolveHit(e.clientX - rect.left, e.clientY - rect.top));
     },
     [camera, resolveHit],
+  );
+
+  const onFocusChange = useCallback(
+    (nextFocus: ReefFocus | null) => {
+      setSelected(null);
+      setHover(null);
+      setFocus(nextFocus);
+      if (nextFocus === null || snapshot === null) return;
+      const point = focusWorldPoint(nextFocus, snapshot, renderLoop.simRef.current);
+      if (point !== null) camera.focusWorldPoint(point.x, point.y, LOD1_ZOOM);
+    },
+    [camera, renderLoop.simRef, snapshot],
   );
 
   const ariaLabel = `${snapshot?.fish.length ?? 0} fish; ${snapshot?.needsAttention ?? 0} need attention; connection ${connState}; inventory ${dataState}`;
@@ -205,6 +233,12 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
         connState={connState}
         dataState={dataState}
         coverageKnown={coverageKnown}
+        formations={snapshot?.formations ?? []}
+        fish={snapshot?.fish ?? []}
+        pellets={snapshot?.pellets ?? []}
+        unavailableRigKeys={inputs.unavailableBeadRigKeys}
+        focus={focus}
+        onFocusChange={onFocusChange}
         onZoomIn={camera.zoomIn}
         onZoomOut={camera.zoomOut}
         onReset={camera.resetCamera}
@@ -250,4 +284,21 @@ function measureViewport(): Viewport {
     cssHeight: Math.max(0, window.innerHeight - headerHeight),
     dpr: window.devicePixelRatio || 1,
   };
+}
+
+function focusWorldPoint(
+  focus: ReefFocus,
+  snapshot: WorldSnapshot,
+  sim: SimState,
+): { x: number; y: number } | null {
+  switch (focus.kind) {
+    case 'rig': {
+      const formation = snapshot.formations.find((candidate) => candidate.key === focus.rigKey);
+      return formation === undefined ? null : { x: formation.anchorX, y: formation.anchorY };
+    }
+    case 'bead':
+      return sim.pellets[focus.beadId] ?? null;
+    case 'fish':
+      return sim.fish[focus.fishId] ?? null;
+  }
 }

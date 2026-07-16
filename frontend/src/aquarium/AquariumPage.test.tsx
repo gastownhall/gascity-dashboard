@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../contexts/ThemeContext';
@@ -155,5 +155,23 @@ describe('AquariumPage (fixture mode)', () => {
         expect.objectContaining({ beadId: 'flow-beta-completed', kind: 'completion' }),
       ]);
     });
+  });
+
+  it('connects the backlogged-rig drill-down selection to the page focus state', () => {
+    renderAquarium('aquarium');
+    fireEvent.click(screen.getByRole('button', { name: /backlogged rigs$/i }));
+    const row = screen.getAllByRole('button', { name: /^Highlight rig / })[0];
+    expect(row).toBeTruthy();
+    fireEvent.click(row!);
+    expect(row?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('connects the needs-attention drill-down selection to the page focus state', () => {
+    renderAquarium('aquarium');
+    fireEvent.click(screen.getByRole('button', { name: /need attention$/i }));
+    const row = screen.getAllByRole('button', { name: /^Highlight agent / })[0];
+    expect(row).toBeTruthy();
+    fireEvent.click(row!);
+    expect(row?.getAttribute('aria-pressed')).toBe('true');
   });
 });

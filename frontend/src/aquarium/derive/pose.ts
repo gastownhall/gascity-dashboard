@@ -25,6 +25,25 @@ export function poseWord(pose: AquariumPose): string {
   return POSE_WORD[pose];
 }
 
+/**
+ * User-facing calm-state label. Some providers, currently Codex and Gemini,
+ * cannot expose authoritative turn activity through the supervisor's bounded
+ * session list. An active process with no activity field is not evidence of
+ * either an idle or an in-turn agent, so say exactly what is known.
+ */
+export function poseWordForSession(pose: AquariumPose, session: PoseSessionFacts): string {
+  const activity = session.activity?.trim().toLowerCase();
+  const state = session.state?.trim().toLowerCase();
+  if (
+    pose === 'idle' &&
+    (activity === undefined || activity.length === 0) &&
+    (session.running === true || state === 'active' || state === 'running')
+  ) {
+    return 'active, turn activity unavailable';
+  }
+  return poseWord(pose);
+}
+
 const CALM_POSES: ReadonlySet<AquariumPose> = new Set(['working', 'idle', 'asleep']);
 
 /** True for the four SSOT distress poses (the "needs attention" count). */
@@ -37,6 +56,7 @@ export function isDistressPose(pose: AquariumPose): boolean {
 export interface PoseSessionFacts {
   activity?: string;
   state?: string;
+  running?: boolean;
   last_active?: string;
 }
 

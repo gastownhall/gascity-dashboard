@@ -1,7 +1,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AquariumOverlay } from './AquariumOverlay';
-import type { FlowObservation } from '../contracts';
+import type {
+  FishEntity,
+  FlowObservation,
+  PelletEntity,
+  ReefFocus,
+  RigFormation,
+} from '../contracts';
 
 afterEach(cleanup);
 
@@ -9,20 +16,29 @@ function renderOverlay(overrides: Partial<Parameters<typeof AquariumOverlay>[0]>
   const onZoomIn = vi.fn();
   const onZoomOut = vi.fn();
   const onReset = vi.fn();
+  const onFocusChange = vi.fn<(focus: ReefFocus | null) => void>();
   render(
-    <AquariumOverlay
-      needsAttention={0}
-      flow={FLOW}
-      connState="open"
-      dataState="complete"
-      coverageKnown
-      onZoomIn={onZoomIn}
-      onZoomOut={onZoomOut}
-      onReset={onReset}
-      {...overrides}
-    />,
+    <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+      <AquariumOverlay
+        needsAttention={0}
+        flow={FLOW}
+        connState="open"
+        dataState="complete"
+        coverageKnown
+        formations={FORMATIONS}
+        fish={ATTENTION_FISH}
+        pellets={P0_PELLETS}
+        unavailableRigKeys={[]}
+        focus={null}
+        onFocusChange={onFocusChange}
+        onZoomIn={onZoomIn}
+        onZoomOut={onZoomOut}
+        onReset={onReset}
+        {...overrides}
+      />
+    </MemoryRouter>,
   );
-  return { onZoomIn, onZoomOut, onReset };
+  return { onZoomIn, onZoomOut, onReset, onFocusChange };
 }
 
 const FLOW: FlowObservation = {
@@ -37,11 +53,46 @@ const FLOW: FlowObservation = {
   receipts: [],
 };
 
+const FORMATIONS: RigFormation[] = [
+  { key: 'alpha', anchorX: 900, anchorY: 1_900, radius: 200, seed: 1, openBeadTotal: 9 },
+  { key: 'beta', anchorX: 2_000, anchorY: 1_900, radius: 180, seed: 2, openBeadTotal: 4 },
+];
+
+const P0_PELLETS: PelletEntity[] = [
+  {
+    beadId: 'p0-1',
+    label: 'p0-1',
+    title: 'Repair the supervisor feed',
+    linkTo: '/beads?bead=p0-1',
+    rigKey: 'alpha',
+    state: 'drifting',
+    ageFraction: 0.5,
+    radiusScale: 1.8,
+    isP0: true,
+  },
+];
+
+const ATTENTION_FISH: FishEntity[] = [
+  {
+    id: 'tinker-session',
+    name: 'tinker',
+    species: 'role',
+    isMayor: false,
+    pose: 'awaiting-input',
+    poseWord: 'awaiting input',
+    bellyPct: 50,
+    homeKey: 'alpha',
+    linkTo: '/agents/tinker',
+    tombstoned: false,
+  },
+];
+
 describe('AquariumOverlay', () => {
   it('shows the observation-window tide report instead of claiming all work is calm', () => {
     renderOverlay({ needsAttention: 0 });
     expect(screen.queryByText('all calm')).toBeNull();
-    const ledger = screen.getByText('observing flow · 2 backlogged rigs · 3 P0 waiting');
+    const ledger = screen.getByTestId('aquarium-tide-line');
+    expect(ledger.textContent).toBe('observing flow · 2 backlogged rigs · 3 P0 waiting');
     expect(ledger.className).not.toContain('text-accent');
   });
 
@@ -65,19 +116,136 @@ describe('AquariumOverlay', () => {
 
   it('is the only element carrying the accent tone (One Mark Rule)', () => {
     const { container } = render(
-      <AquariumOverlay
-        needsAttention={2}
-        flow={FLOW}
-        connState="degraded"
-        dataState="complete"
-        coverageKnown
-        onZoomIn={vi.fn()}
-        onZoomOut={vi.fn()}
-        onReset={vi.fn()}
-      />,
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <AquariumOverlay
+          needsAttention={2}
+          flow={FLOW}
+          connState="degraded"
+          dataState="complete"
+          coverageKnown
+          formations={FORMATIONS}
+          fish={ATTENTION_FISH}
+          pellets={P0_PELLETS}
+          unavailableRigKeys={[]}
+          focus={null}
+          onFocusChange={vi.fn()}
+          onZoomIn={vi.fn()}
+          onZoomOut={vi.fn()}
+          onReset={vi.fn()}
+        />
+      </MemoryRouter>,
     );
     const accented = container.querySelectorAll('.text-accent');
     expect(accented.length).toBe(1);
+  });
+
+  it('expands P0 work and highlights the selected bead', () => {
+    const { onFocusChange } = renderOverlay();
+    fireEvent.click(screen.getByRole('button', { name: '3 P0 waiting' }));
+    expect(screen.getByRole('region', { name: 'P0 waiting details' })).toBeTruthy();
+    expect(screen.getByText('Repair the supervisor feed')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Highlight bead p0-1' }));
+    expect(onFocusChange).toHaveBeenCalledWith({ kind: 'bead', beadId: 'p0-1' });
+  });
+
+  it('does not expose an empty drill-down button when no P0 work is waiting', () => {
+    renderOverlay({ flow: { ...FLOW, p0Waiting: 0 }, pellets: [] });
+    expect(screen.getByText('0 P0 waiting')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '0 P0 waiting' })).toBeNull();
+  });
+
+  it('expands backlogged rigs, explains receipt rings, and highlights a selected rig', () => {
+    const { onFocusChange } = renderOverlay();
+    fireEvent.click(screen.getByRole('button', { name: '2 backlogged rigs' }));
+    expect(screen.getByRole('region', { name: 'Backlogged rig details' })).toBeTruthy();
+    expect(screen.getByText(/one ring marks a pickup; two rings mark a completion/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Highlight rig alpha' }));
+    expect(onFocusChange).toHaveBeenCalledWith({ kind: 'rig', rigKey: 'alpha' });
+  });
+
+  it('excludes unavailable rigs from backlog and P0 drill-down rows', () => {
+    renderOverlay({
+      unavailableRigKeys: ['beta'],
+      flow: { ...FLOW, backloggedRigCount: 1, p0Waiting: 1 },
+      pellets: [P0_PELLETS[0]!, { ...P0_PELLETS[0]!, beadId: 'p0-2', rigKey: 'beta' }],
+    });
+    fireEvent.click(screen.getByRole('button', { name: '1 backlogged rig' }));
+    expect(screen.getByRole('button', { name: 'Highlight rig alpha' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Highlight rig beta' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '1 P0 waiting' }));
+    expect(screen.getByRole('button', { name: 'Highlight bead p0-1' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Highlight bead p0-2' })).toBeNull();
+  });
+
+  it('closes an expanded metric when a live update reduces its count to zero', () => {
+    const onFocusChange = vi.fn<(focus: ReefFocus | null) => void>();
+    const view = render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <AquariumOverlay
+          needsAttention={0}
+          flow={FLOW}
+          connState="open"
+          dataState="complete"
+          coverageKnown
+          formations={FORMATIONS}
+          fish={ATTENTION_FISH}
+          pellets={P0_PELLETS}
+          unavailableRigKeys={[]}
+          focus={null}
+          onFocusChange={onFocusChange}
+          onZoomIn={vi.fn()}
+          onZoomOut={vi.fn()}
+          onReset={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '2 backlogged rigs' }));
+    expect(screen.getByRole('region', { name: 'Backlogged rig details' })).toBeTruthy();
+
+    view.rerender(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <AquariumOverlay
+          needsAttention={0}
+          flow={{ ...FLOW, backloggedRigCount: 0 }}
+          connState="open"
+          dataState="complete"
+          coverageKnown
+          formations={[]}
+          fish={ATTENTION_FISH}
+          pellets={P0_PELLETS}
+          unavailableRigKeys={[]}
+          focus={{ kind: 'rig', rigKey: 'alpha' }}
+          onFocusChange={onFocusChange}
+          onZoomIn={vi.fn()}
+          onZoomOut={vi.fn()}
+          onReset={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('region', { name: 'Backlogged rig details' })).toBeNull();
+    expect(onFocusChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('expands needs-attention agents and highlights the selected fish', () => {
+    const { onFocusChange } = renderOverlay({ needsAttention: 1 });
+    fireEvent.click(screen.getByRole('button', { name: '1 need attention' }));
+    expect(screen.getByRole('region', { name: 'Needs attention details' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Highlight agent tinker' }));
+    expect(onFocusChange).toHaveBeenCalledWith({ kind: 'fish', fishId: 'tinker-session' });
+  });
+
+  it('explains exact partial coverage and names the missing rig reads', () => {
+    renderOverlay({
+      dataState: 'partial',
+      unavailableRigKeys: ['gamma', 'delta'],
+      flow: { ...FLOW, observedRigCount: 19, totalRigCount: 21 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Explain partial bead coverage' }));
+    expect(screen.getByRole('region', { name: 'Partial coverage details' }).textContent).toContain(
+      '19 of 21 rig bead reads completed',
+    );
+    expect(screen.getByText('GAMMA')).toBeTruthy();
+    expect(screen.getByText('DELTA')).toBeTruthy();
   });
 
   it.each([
@@ -118,18 +286,39 @@ describe('AquariumOverlay', () => {
     expect(screen.getByRole('note', { name: 'Bead coverage' }).textContent).not.toContain('2/2');
   });
 
+  it('does not misdescribe unrelated stale data as partial rig coverage', () => {
+    renderOverlay({
+      dataState: 'partial',
+      coverageKnown: true,
+      unavailableRigKeys: [],
+      flow: { ...FLOW, observedRigCount: 2, totalRigCount: 2 },
+    });
+    expect(screen.getByRole('note', { name: 'Partial inventory' }).textContent).toContain(
+      'partial inventory',
+    );
+    expect(screen.queryByRole('button', { name: 'Explain partial bead coverage' })).toBeNull();
+  });
+
   it('keeps the status ledger clear of mobile zoom controls', () => {
     const { container } = render(
-      <AquariumOverlay
-        needsAttention={0}
-        flow={FLOW}
-        connState="open"
-        dataState="complete"
-        coverageKnown
-        onZoomIn={vi.fn()}
-        onZoomOut={vi.fn()}
-        onReset={vi.fn()}
-      />,
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <AquariumOverlay
+          needsAttention={0}
+          flow={FLOW}
+          connState="open"
+          dataState="complete"
+          coverageKnown
+          formations={FORMATIONS}
+          fish={ATTENTION_FISH}
+          pellets={P0_PELLETS}
+          unavailableRigKeys={[]}
+          focus={null}
+          onFocusChange={vi.fn()}
+          onZoomIn={vi.fn()}
+          onZoomOut={vi.fn()}
+          onReset={vi.fn()}
+        />
+      </MemoryRouter>,
     );
     const zoomControls = container.querySelector('[data-aquarium-zoom]');
     expect(zoomControls?.className).toContain('bottom-4');

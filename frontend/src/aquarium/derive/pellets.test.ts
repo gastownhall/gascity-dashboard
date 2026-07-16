@@ -99,6 +99,22 @@ describe('buildPellets', () => {
     expect(pelletOverflow.alpha).toBe(items.length - PELLET_RENDER_CAP_PER_RIG);
   });
 
+  it('never evicts waiting P0 pellets behind ordinary backlog at the render cap', () => {
+    const ordinary = Array.from({ length: PELLET_RENDER_CAP_PER_RIG + 10 }, (_, i) =>
+      bead(`ordinary-${i}`, 'open'),
+    );
+    const p0 = { ...bead('p0-critical', 'open'), priority: 0 };
+    const inputs: BuildPelletsInputs = {
+      beadsByRig: { alpha: { items: [...ordinary, p0], total: ordinary.length + 1 } },
+      sessionIdsByFishId: new Map(),
+      nowMs: NOW,
+      prevBeadIds: new Set(),
+    };
+
+    const { pellets } = buildPellets(inputs);
+    expect(pellets.some((pellet) => pellet.beadId === p0.id)).toBe(true);
+  });
+
   it('does not report overflow for a rig at or under the cap', () => {
     const inputs: BuildPelletsInputs = {
       beadsByRig: { alpha: { items: [bead('a-1', 'open')], total: 1 } },

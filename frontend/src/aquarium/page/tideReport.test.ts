@@ -57,4 +57,18 @@ describe('formatTideReport', () => {
       ),
     ).toBe('observing flow · 2 observed backlogged rigs · 3 P0 waiting');
   });
+
+  it('keeps mature movement claims scoped to observed rigs under partial coverage', () => {
+    expect(
+      formatTideReport(
+        flow({
+          observedForMs: 6 * 60 * 1_000,
+          observedRigCount: 1,
+          totalRigCount: 2,
+          backloggedRigCount: 1,
+          movingRigCount: 1,
+        }),
+      ),
+    ).toBe('work moved in 1 of 1 observed backlogged rig over 6m · 3 P0 waiting');
+  });
 });

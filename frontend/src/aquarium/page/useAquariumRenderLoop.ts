@@ -13,7 +13,14 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { MutableRefObject, RefObject } from 'react';
 import { advanceSim } from '../sim/advanceSim';
 import { paintScene } from '../render/paintScene';
-import type { Camera, ScenePalette, SimState, Viewport, WorldSnapshot } from '../contracts';
+import type {
+  Camera,
+  ReefFocus,
+  ScenePalette,
+  SimState,
+  Viewport,
+  WorldSnapshot,
+} from '../contracts';
 
 /** window.__aquariumFrameTimesMs is capped so a long-running fixture-mode
  *  perf sweep can't grow the array unbounded. */
@@ -40,6 +47,7 @@ export interface UseAquariumRenderLoopArgs {
   isFixture: boolean;
   /** bead id of the selected pellet, if any — draws its dependency links. */
   selectedBeadId: string | null;
+  focus: ReefFocus | null;
 }
 
 export interface AquariumRenderLoopApi {
@@ -61,6 +69,7 @@ export function useAquariumRenderLoop({
   reducedMotion,
   isFixture,
   selectedBeadId,
+  focus,
 }: UseAquariumRenderLoopArgs): AquariumRenderLoopApi {
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
@@ -74,6 +83,8 @@ export function useAquariumRenderLoop({
   isFixtureRef.current = isFixture;
   const selectedBeadIdRef = useRef(selectedBeadId);
   selectedBeadIdRef.current = selectedBeadId;
+  const focusRef = useRef(focus);
+  focusRef.current = focus;
   const simRef = useRef<SimState>(INITIAL_SIM_STATE);
 
   useCanvasDprSizing(canvasRef, viewport);
@@ -96,7 +107,11 @@ export function useAquariumRenderLoop({
         cameraRef.current,
         viewportRef.current,
         paletteRef.current,
-        { reducedMotion: reducedMotionRef.current, selectedBeadId: selectedBeadIdRef.current },
+        {
+          reducedMotion: reducedMotionRef.current,
+          selectedBeadId: selectedBeadIdRef.current,
+          focus: focusRef.current,
+        },
       );
     },
     [canvasRef, cameraRef],
@@ -128,7 +143,7 @@ export function useAquariumRenderLoop({
   useEffect(() => {
     if (!reducedMotion) return;
     paintOnce(0);
-  }, [reducedMotion, snapshot, viewport, palette, selectedBeadId, paintOnce]);
+  }, [reducedMotion, snapshot, viewport, palette, selectedBeadId, focus, paintOnce]);
 
   const requestPaint = useCallback(() => {
     if (reducedMotionRef.current) paintOnce(0);
