@@ -8,7 +8,7 @@ import type {
   Viewport,
   WorldSnapshot,
 } from '../contracts';
-import { LOD1_ZOOM, UNRIGGED_KEY } from '../contracts';
+import { EMPTY_FLOW_OBSERVATION, LOD1_ZOOM, UNRIGGED_KEY } from '../contracts';
 import { buildScenePalette } from './palette';
 import { paintTextLayers } from './text';
 import { parseOklch } from './oklch';
@@ -62,6 +62,7 @@ const SNAPSHOT: WorldSnapshot = {
   needsAttention: 0,
   pelletOverflow: {},
   strandedWork: [],
+  flow: EMPTY_FLOW_OBSERVATION,
 };
 const EMPTY_SIM: SimState = { fish: {}, pellets: {}, clockMs: 0 };
 
@@ -102,6 +103,7 @@ describe('rig label with no open work drops the "· 0" count noise', () => {
     needsAttention: 0,
     pelletOverflow: {},
     strandedWork: [],
+    flow: EMPTY_FLOW_OBSERVATION,
   };
 
   it('names a zero-work rig without a "· 0" suffix', () => {
@@ -130,6 +132,7 @@ const HUE_SNAPSHOT: WorldSnapshot = {
   needsAttention: 0,
   pelletOverflow: {},
   strandedWork: [],
+  flow: EMPTY_FLOW_OBSERVATION,
 };
 
 describe('rig label colour carries rig identity in-scene', () => {
@@ -196,6 +199,7 @@ describe('held-bead titles (what is being worked on, and by whom)', () => {
     needsAttention: 0,
     pelletOverflow: {},
     strandedWork: [],
+    flow: EMPTY_FLOW_OBSERVATION,
   };
   const sim: SimState = {
     fish: {},
@@ -250,6 +254,7 @@ describe('epic grouping labels (focus-only, LOD1+; overview stays age-drift)', (
     needsAttention: 0,
     pelletOverflow: {},
     strandedWork: [],
+    flow: EMPTY_FLOW_OBSERVATION,
   };
   const sim: SimState = {
     fish: {},

@@ -599,6 +599,7 @@ export function buildAquariumFixture(): { inputs: DeriveInputs; manifest: Fixtur
     ],
     pendingSignals,
     beadsByRig,
+    unavailableBeadRigKeys: [],
   };
 
   const manifest: FixtureManifest = {

@@ -38,6 +38,7 @@ export interface AquariumDataResult {
 
 const RIG_BEAD_LIMIT = 250;
 const EMPTY_BEADS_BY_RIG: DeriveInputs['beadsByRig'] = {};
+const EMPTY_BEAD_READ: BeadReadResult = { beadsByRig: EMPTY_BEADS_BY_RIG, unavailableRigKeys: [] };
 const EMPTY_PENDING: AgentPendingSignal[] = [];
 const EMPTY_AGENTS: SupervisorAgentList = { items: [], total: 0 };
 const EMPTY_SESSIONS: SupervisorSessionList = { items: [], total: 0 };
@@ -88,7 +89,7 @@ export function useAquariumData(fixtureKind: FixtureKind | null): AquariumDataRe
   const rigNames = useMemo(() => rigNameOptions(rigItems), [rigItems]);
   const beadsKey = `aquarium:beads:${rigNames.join(',')}`;
   const beadsCache = useCachedData(beadsKey, () =>
-    isFixture ? Promise.resolve(EMPTY_BEADS_BY_RIG) : fetchBeadsByRig(rigNames),
+    isFixture ? Promise.resolve(EMPTY_BEAD_READ) : fetchBeadsByRig(rigNames),
   );
 
   const refresh = useCallback(async () => {
@@ -119,14 +120,19 @@ export function useAquariumData(fixtureKind: FixtureKind | null): AquariumDataRe
       agents: agentItems,
       rigs: rigItems,
       pendingSignals: pendingCache.data ?? EMPTY_PENDING,
-      beadsByRig: beadsCache.data ?? EMPTY_BEADS_BY_RIG,
+      beadsByRig: beadsCache.data?.beadsByRig ?? EMPTY_BEADS_BY_RIG,
+      unavailableBeadRigKeys: beadsCache.data?.unavailableRigKeys ?? [],
     }),
     [sessionItems, agentItems, rigItems, pendingCache.data, beadsCache.data],
   );
 
   return {
     inputs: fixtureScene?.inputs ?? liveInputs,
-    connState: isFixture ? 'fixture' : sseState,
+    connState: isFixture
+      ? 'fixture'
+      : (beadsCache.data?.unavailableRigKeys.length ?? 0) > 0
+        ? 'degraded'
+        : sseState,
     manifest: fixtureScene?.manifest ?? null,
     refresh,
   };
@@ -134,28 +140,35 @@ export function useAquariumData(fixtureKind: FixtureKind | null): AquariumDataRe
 
 /**
  * Fan out one bounded bead read per rig (Promise.allSettled — one rejected
- * rig must not blank the others). A rejected leg degrades to an empty,
- * truthful `{items: [], total: 0}` rather than dropping the rig from the
- * map entirely, so a transient per-rig failure still renders that rig's
- * formation with an honest empty queue instead of vanishing it.
+ * rig must not blank the others). A rejected leg stays in the map as an empty
+ * placeholder and is named in `unavailableRigKeys`; derive uses that marker to
+ * preserve prior transition state and exclude the rig from flow claims.
  */
-async function fetchBeadsByRig(rigNames: readonly string[]): Promise<DeriveInputs['beadsByRig']> {
+interface BeadReadResult {
+  beadsByRig: DeriveInputs['beadsByRig'];
+  unavailableRigKeys: string[];
+}
+
+async function fetchBeadsByRig(rigNames: readonly string[]): Promise<BeadReadResult> {
   const results = await Promise.allSettled(
     rigNames.map((rigFilter) => listSupervisorBeads({ rigFilter, limit: RIG_BEAD_LIMIT })),
   );
   const beadsByRig: Record<string, { items: Bead[]; total: number }> = {};
+  const unavailableRigKeys: string[] = [];
   results.forEach((result, i) => {
     const rigName = rigNames[i];
     if (rigName === undefined) return;
     if (result.status === 'fulfilled') {
       beadsByRig[rigName] = { items: result.value.items, total: result.value.total };
+      if (result.value.partial) unavailableRigKeys.push(rigName);
     } else {
       logError(
         LOG_COMPONENT.aquarium,
         `bead read failed for rig "${rigName}": ${errorMessage(result.reason)}`,
       );
       beadsByRig[rigName] = { items: [], total: 0 };
+      unavailableRigKeys.push(rigName);
     }
   });
-  return beadsByRig;
+  return { beadsByRig, unavailableRigKeys };
 }

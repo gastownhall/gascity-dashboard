@@ -236,7 +236,14 @@ export function buildBlindFixture(): { inputs: DeriveInputs; manifest: FixtureMa
   const { agents, sessions, pendingSignals, rigs, beadsByRig } = buildRawScene(plan);
   const { fish, blindCams } = buildFishAndCams(plan, beadsByRig);
 
-  const inputs: DeriveInputs = { sessions, agents, rigs, pendingSignals, beadsByRig };
+  const inputs: DeriveInputs = {
+    sessions,
+    agents,
+    rigs,
+    pendingSignals,
+    beadsByRig,
+    unavailableBeadRigKeys: [],
+  };
 
   const manifest: FixtureManifest = {
     kind: 'blind',

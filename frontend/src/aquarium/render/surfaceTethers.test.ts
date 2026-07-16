@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { FishEntity, RigFormation, ScenePalette, SimState, WorldSnapshot } from '../contracts';
+import {
+  EMPTY_FLOW_OBSERVATION,
+  type FishEntity,
+  type RigFormation,
+  type ScenePalette,
+  type SimState,
+  type WorldSnapshot,
+} from '../contracts';
 import type { ViewRect } from './layers';
 import { buildScenePalette } from './palette';
 import { paintSurfaceTethers } from './surfaceTethers';
@@ -68,6 +75,7 @@ function snapshot(fishList: FishEntity[], formations: RigFormation[] = [FORMATIO
     needsAttention: 0,
     pelletOverflow: {},
     strandedWork: [],
+    flow: EMPTY_FLOW_OBSERVATION,
   };
 }
 function simWith(entries: Record<string, { x: number; y: number }>): SimState {

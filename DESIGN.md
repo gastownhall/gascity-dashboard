@@ -150,9 +150,10 @@ licenses it; outside this route, nothing here applies.
   identifiable with color stripped: pose, position in the water column, eye,
   and fin attitude carry the state. Color carries emphasis and rig identity
   (below), never state.
-- **The One Mark Rule, adapted.** The single maroon per viewport is the
-  overlay's "N need attention" ledger line. No fish, pellet, or formation is
-  ever maroon.
+- **The One Mark Rule, adapted.** When attention is needed, the single maroon
+  per viewport is the overlay's "N need attention" mark beside the neutral tide
+  report. When no agent needs attention, the viewport has no maroon. No fish,
+  pellet, formation, flow receipt, or tide-report fact is ever maroon.
 - **Colour as fleet identity (the licensed exception).** On /reef only, hue is
   an identity channel, not merely emphasis: every session of a rig and its beads
   carry the rig's hue, so project ownership reads at a glance. This is the one
@@ -218,6 +219,19 @@ licenses it; outside this route, nothing here applies.
   visible pellets never means fewer beads — the same truthful contract as the
   per-rig render cap. This keeps the operator's subject, the fleet, from
   drowning in a cloud of near-identical food.
+- **Flow is observed, never reconstructed.** The neutral tide report states
+  exactly how long this browser session has observed the reef, how many
+  backlogged rigs produced a pickup or completion in the rolling one-hour
+  window, up to two available backlogged rigs that stayed still after five
+  minutes, and the current count of waiting P0 beads. Before five minutes it
+  says "observing flow" and makes no stillness claim. A real pickup releases one
+  expanding ring above its owning formation; a real completion releases two
+  concentric rings. Rings keep the rig hue, while ring count carries event kind
+  in greyscale. They decay after fifteen minutes and freeze at their truthful
+  snapshot age under reduced motion. Rig ownership comes from the per-rig bead
+  feed, never from bead-id text. A failed rig read is excluded from flow totals
+  and retains its prior transition state so absence cannot become a false
+  completion.
 - **Dependencies reveal on focus, never globally.** Selecting a bead pellet
   draws a faint dashed link to each bead it depends on whose pellet is on screen
   (dashed so it never reads as the solid fish-to-bead tether). A busy city has
@@ -254,8 +268,9 @@ licenses it; outside this route, nothing here applies.
 ### Named Rules
 
 **The Pane Rule.** The reef is a window, not a page. Chrome inside the glass
-is limited to the ledger line, the connection state, the zoom controls, the
-drillable "N stranded" pill (present only when work is orphaned), and a
+is limited to the tide report, its conditional attention mark, the connection
+state, the zoom controls, the drillable "N stranded" pill (present only when
+work is orphaned), and a
 collapsible key (the rig roster mapping colour to rig name + open-bead count,
 and the bead **zone** key naming where each state's morsel lives); everything
 else the operator learns by looking at the water. The key is translucent and collapses to a single toggle,

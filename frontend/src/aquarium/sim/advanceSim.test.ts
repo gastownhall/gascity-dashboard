@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CITY_KEY,
+  EMPTY_FLOW_OBSERVATION,
   UNRIGGED_KEY,
   WORLD,
   type FishEntity,
@@ -62,6 +63,7 @@ function snapshot(overrides: Partial<WorldSnapshot> = {}): WorldSnapshot {
     needsAttention: 0,
     pelletOverflow: {},
     strandedWork: [],
+    flow: EMPTY_FLOW_OBSERVATION,
     ...overrides,
   };
 }

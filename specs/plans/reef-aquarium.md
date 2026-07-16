@@ -29,7 +29,7 @@ The previous strata scene answered "what states exist"; this scene must answer
 | Zoom model                | 3-tier semantic zoom — LOD0 TANK (default, fits all), LOD1 REEF (~1 rig), LOD2 FISH (close-up); continuous wheel/pinch zoom, drag pan; detail fades in by threshold                                                                                                                                                                                                                                |
 | Pellets                   | Every pellet IS a real bead (per-rig open list). open→drifting above formation; in_progress→held at assignee's mouth; blocked→dark, sunk to seabed; closed (snapshot diff)→gulp animation then gone. ≤40 rendered per rig + typeset "+N" overflow                                                                                                                                                  |
 | Grouping/behavior         | Rig-home + state shoals. working=shoals pellet field oriented to own task pellet; idle=lazy wander; asleep=settled in crevice, dimmed; awaiting-input=risen to waterline, gaping; stalled=nose-down upright list, sinking head-low, fins folded (a frozen posture, not a tremor); rate-limited=tucked under overhang, fins folded; errored=belly-up slow rise; mayor=grouper patrolling whole tank |
-| Route/chrome              | `/reef`, full-bleed canvas under slim header; overlay = "N need attention" ledger line, tank-light conn state, zoom controls                                                                                                                                                                                                                                                                       |
+| Route/chrome              | `/reef`, full-bleed canvas under slim header; overlay = observed-window tide report, conditional "N need attention" mark, tank-light conn state, zoom controls                                                                                                                                                                                                                                     |
 | Reduced motion            | Frozen truthful frame: zero autonomous animation, instant state swaps, user pan/zoom still works with instant (non-eased) jumps                                                                                                                                                                                                                                                                    |
 | Theme                     | Theme-keyed water moods — light: sunlit shallows; dark: midnight deep. Same geometry, two procedural palettes                                                                                                                                                                                                                                                                                      |
 | Loop exit                 | The 7 acceptance criteria below, all passing in a single round; cap 8 rounds then halt + scorecard report                                                                                                                                                                                                                                                                                          |
@@ -57,6 +57,14 @@ is ever decorative).
   density.
 - **Eating = diff-observed fact**: a bead that left the open set between
   snapshots triggers one gulp on its assignee; never invented from timers.
+- **Flow = session-observed transitions**: a pickup is a bead changing from
+  waiting to held; a completion is a bead leaving the open feed. One ring marks
+  pickup and two mark completion above the exact owning rig formation. The tide
+  report uses a rolling one-hour window, labels its first five minutes as
+  observation, names at most two available backlogged rigs with no observed
+  transition, and counts current waiting P0s. A failed per-rig read is excluded
+  and cannot produce a completion. Historical rig identity is never inferred
+  from a bead-id prefix.
 - **Tank light = SSE connection state** (connecting / clear / degraded /
   drained) — the pane itself tells you when it's stale.
 - **Tombstones**: a fish missing one read ghosts (dimmed, drifting) for the
@@ -108,6 +116,12 @@ All seven must pass in the same round.
    attention SSOT selectors and the pellet set ≡ fixture bead set (id-level).
 7. **MECHANICAL** — root typecheck (source + test), lint, prettier check,
    backend/frontend/shared tests, frontend build: all green from the worktree.
+
+Direction-1 flow addendum (2026-07-15): at LOD0, the tide report and receipt
+rings must make movement, stillness, and P0 pressure readable without hover.
+Unit and browser coverage must prove first-load honesty, exact rig attribution,
+single-emission transitions, unavailable-rig suppression, greyscale event-kind
+redundancy, reduced-motion freezing, and overview copy legibility.
 
 ## Loop protocol (rounds 1–8)
 
@@ -211,7 +225,7 @@ hidden list. Hit-testing drives hover cards and click → detail card overlay
 This route needs its own carve-out (companion commit in this branch): the
 aquarium is a licensed full-bleed diorama. Still binding everywhere: Greyscale
 Test for state legibility (pose carries state, color is emphasis), One Mark
-Rule adapted (the single maroon is the overlay ledger line), tabular figures
+Rule adapted (the conditional attention mark is the only maroon), tabular figures
 in overlay text, `prefers-reduced-motion` (frozen truthful frame), no
 external assets. Suspended on this route: Flat Page (the scene has depth by
 definition), type-only imagery, the 150 ms fade rule for continuous motion.

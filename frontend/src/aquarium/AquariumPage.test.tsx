@@ -125,7 +125,7 @@ describe('AquariumPage (fixture mode)', () => {
     expect(screen.getByRole('button', { name: 'Reset camera' })).toBeTruthy();
   });
 
-  it('renders an "all calm" ledger for the blind fixture (its distress count still counts)', () => {
+  it('keeps the blind fixture attention count in the canvas summary', () => {
     const { manifest } = buildFixtureInputs('blind');
     renderAquarium('blind');
     const canvas = screen.getByRole('img');

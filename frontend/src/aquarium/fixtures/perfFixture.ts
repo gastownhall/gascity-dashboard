@@ -124,6 +124,7 @@ export function buildPerfFixture(): { inputs: DeriveInputs; manifest: FixtureMan
     rigs: RIG_NAMES.map((name) => ({ name, path: `/rigs/${name}` })),
     pendingSignals,
     beadsByRig,
+    unavailableBeadRigKeys: [],
   };
 
   const manifest: FixtureManifest = {

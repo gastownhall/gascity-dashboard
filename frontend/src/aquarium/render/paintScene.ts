@@ -35,6 +35,7 @@ import {
   type StaticLayerCache,
 } from './sceneCache';
 import { paintTextLayers } from './text';
+import { paintFlowReceipts } from './flowReceipts';
 import {
   paintDeepDrift,
   paintDepthVignette,
@@ -51,9 +52,11 @@ const CULL_MARGIN = 250;
 export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, palette, opts) => {
   const clockMs = opts.reducedMotion ? 0 : sim.clockMs;
   const far = layerTransform(camera, viewport, PARALLAX.far);
+  const mid = layerTransform(camera, viewport, PARALLAX.mid);
   const actors = layerTransform(camera, viewport, PARALLAX.actors);
   const near = layerTransform(camera, viewport, PARALLAX.near);
   const actorView = visibleWorldRect(actors, viewport, CULL_MARGIN);
+  const midView = visibleWorldRect(mid, viewport, CULL_MARGIN);
   const nearView = visibleWorldRect(near, viewport, CULL_MARGIN);
 
   applyScreenSpace(ctx, viewport);
@@ -68,6 +71,18 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
   }
   applyScreenSpace(ctx, viewport);
   blitStatic(ctx, cache, camera, viewport, CACHE_MARGIN);
+
+  applyLayer(ctx, mid);
+  paintFlowReceipts(
+    ctx,
+    snapshot.flow,
+    snapshot.formations,
+    palette,
+    midView,
+    mid.scale,
+    clockMs,
+    opts.reducedMotion,
+  );
 
   applyLayer(ctx, actors);
   paintDepLinks(ctx, opts.selectedBeadId, snapshot.pellets, sim, palette, actorView, actors.scale);

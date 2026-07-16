@@ -13,6 +13,7 @@ import { diffEatenPellets } from './eating';
 import { reconcileFishTombstones, type FishMemory } from './tombstones';
 import { isDistressPose } from './pose';
 import { buildStrandedWork } from './stranded';
+import { observeFlow, type FlowMemory } from './flow';
 
 export interface DeriveInputs {
   sessions: SessionResponse[];
@@ -20,6 +21,9 @@ export interface DeriveInputs {
   rigs: Array<RigLike>;
   pendingSignals: AgentPendingSignal[];
   beadsByRig: Record<string, { items: Bead[]; total: number }>;
+  /** Rigs whose bead read failed in this snapshot. Their prior transition
+   * state is retained so absence cannot be reported as completion. */
+  unavailableBeadRigKeys: string[];
 }
 
 export interface DeriveMemory {
@@ -27,6 +31,7 @@ export interface DeriveMemory {
   /** the full (uncapped) bead-holder map from the previous call — the
    * diff-eater's basis for detecting a bead that left the feed. */
   prevBeadHolders: Record<string, BeadHolder>;
+  flow: FlowMemory;
 }
 
 export function deriveWorldSnapshot(
@@ -59,7 +64,25 @@ export function deriveWorldSnapshot(
     nowMs,
     prevBeadIds: new Set(Object.keys(prevBeadHolders)),
   });
-  const eatenPellets = diffEatenPellets(new Map(Object.entries(beadHolders)), prevBeadHolders);
+  const reconciledBeadHolders = retainUnavailableRigHolders(
+    beadHolders,
+    prevBeadHolders,
+    inputs.unavailableBeadRigKeys,
+  );
+  const eatenPellets = diffEatenPellets(
+    new Map(Object.entries(reconciledBeadHolders)),
+    prevBeadHolders,
+  );
+  const { flow, memory: flowMemory } = observeFlow({
+    current: reconciledBeadHolders,
+    previous: prevBeadHolders,
+    memory: memory?.flow ?? null,
+    nowMs,
+    unavailableRigKeys: inputs.unavailableBeadRigKeys,
+    openTotalsByRig: Object.fromEntries(
+      Object.entries(inputs.beadsByRig).map(([rigKey, entry]) => [rigKey, entry.total]),
+    ),
+  });
 
   const formations = buildFormations({
     beadsByRig: inputs.beadsByRig,
@@ -89,7 +112,23 @@ export function deriveWorldSnapshot(
       needsAttention,
       pelletOverflow,
       strandedWork,
+      flow,
     },
-    memory: { fish: fishMemory, prevBeadHolders: beadHolders },
+    memory: { fish: fishMemory, prevBeadHolders: reconciledBeadHolders, flow: flowMemory },
   };
+}
+
+function retainUnavailableRigHolders(
+  current: Readonly<Record<string, BeadHolder>>,
+  previous: Readonly<Record<string, BeadHolder>>,
+  unavailableRigKeys: readonly string[],
+): Record<string, BeadHolder> {
+  const unavailable = new Set(unavailableRigKeys);
+  const retained = { ...current };
+  for (const [beadId, holder] of Object.entries(previous)) {
+    if (unavailable.has(holder.rigKey) && retained[beadId] === undefined) {
+      retained[beadId] = holder;
+    }
+  }
+  return retained;
 }

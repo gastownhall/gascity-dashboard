@@ -124,6 +124,45 @@ export interface PelletEntity {
   gulpMsLeft?: number;
 }
 
+export type FlowReceiptKind = 'pickup' | 'completion';
+
+/** One transition observed during this browser session. A pickup is one ring;
+ * a completion is two, so the signal survives greyscale and color-vision loss. */
+export interface FlowReceipt {
+  id: string;
+  beadId: string;
+  rigKey: string;
+  kind: FlowReceiptKind;
+  /** Event time relative to the start of this observation window. */
+  observedAtOffsetMs: number;
+  /** Age when the latest data snapshot was derived; freezes reduced motion. */
+  ageMsAtSnapshot: number;
+}
+
+export interface FlowObservation {
+  observedForMs: number;
+  windowMs: number;
+  backloggedRigCount: number;
+  movingRigCount: number;
+  /** At most two available, backlogged rigs with no observed transition. */
+  stillRigKeys: readonly string[];
+  p0Waiting: number;
+  receipts: readonly FlowReceipt[];
+}
+
+export const FLOW_OBSERVATION_WINDOW_MS = 60 * 60 * 1_000;
+export const FLOW_STILL_MIN_OBSERVATION_MS = 5 * 60 * 1_000;
+export const FLOW_RECEIPT_LIFETIME_MS = 15 * 60 * 1_000;
+export const EMPTY_FLOW_OBSERVATION: FlowObservation = Object.freeze({
+  observedForMs: 0,
+  windowMs: FLOW_OBSERVATION_WINDOW_MS,
+  backloggedRigCount: 0,
+  movingRigCount: 0,
+  stillRigKeys: Object.freeze([]),
+  p0Waiting: 0,
+  receipts: Object.freeze([]),
+});
+
 /** Snapshot truth: everything derive/ knows, before sim adds motion. */
 export interface WorldSnapshot {
   formations: RigFormation[];
@@ -140,6 +179,8 @@ export interface WorldSnapshot {
    *  drillable "N stranded" shelf pill (grouped by rig, each linking to the
    *  bead). Empty when nothing is orphaned. */
   strandedWork: StrandedWorkItem[];
+  /** Session-local flow evidence. This never claims history from a snapshot. */
+  flow: FlowObservation;
 }
 
 /** One orphaned bead for the stranded shelf drill-in. */

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AquariumOverlay } from './AquariumOverlay';
+import type { FlowObservation } from '../contracts';
 
 afterEach(cleanup);
 
@@ -11,6 +12,7 @@ function renderOverlay(overrides: Partial<Parameters<typeof AquariumOverlay>[0]>
   render(
     <AquariumOverlay
       needsAttention={0}
+      flow={FLOW}
       connState="open"
       onZoomIn={onZoomIn}
       onZoomOut={onZoomOut}
@@ -21,10 +23,21 @@ function renderOverlay(overrides: Partial<Parameters<typeof AquariumOverlay>[0]>
   return { onZoomIn, onZoomOut, onReset };
 }
 
+const FLOW: FlowObservation = {
+  observedForMs: 0,
+  windowMs: 60 * 60 * 1_000,
+  backloggedRigCount: 2,
+  movingRigCount: 0,
+  stillRigKeys: [],
+  p0Waiting: 3,
+  receipts: [],
+};
+
 describe('AquariumOverlay', () => {
-  it('reads "all calm" in neutral tone when nothing needs attention', () => {
+  it('shows the observation-window tide report instead of claiming all work is calm', () => {
     renderOverlay({ needsAttention: 0 });
-    const ledger = screen.getByText('all calm');
+    expect(screen.queryByText('all calm')).toBeNull();
+    const ledger = screen.getByText('observing flow · 2 backlogged rigs · 3 P0 waiting');
     expect(ledger.className).not.toContain('text-accent');
   });
 
@@ -38,6 +51,7 @@ describe('AquariumOverlay', () => {
     const { container } = render(
       <AquariumOverlay
         needsAttention={2}
+        flow={FLOW}
         connState="degraded"
         onZoomIn={vi.fn()}
         onZoomOut={vi.fn()}

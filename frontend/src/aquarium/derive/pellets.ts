@@ -30,6 +30,8 @@ export interface BeadHolder {
   rigKey: string;
   fishId: string | undefined;
   title: string;
+  state: Exclude<PelletState, 'eaten'>;
+  isP0: boolean;
 }
 
 export interface BuildPelletsResult {
@@ -79,7 +81,13 @@ export function buildPellets(inputs: BuildPelletsInputs): BuildPelletsResult {
       ),
     );
     for (const p of rigPellets)
-      beadHolders[p.beadId] = { rigKey: p.rigKey, fishId: p.fishId, title: p.title };
+      beadHolders[p.beadId] = {
+        rigKey: p.rigKey,
+        fishId: p.fishId,
+        title: p.title,
+        state: p.state as Exclude<PelletState, 'eaten'>,
+        isP0: p.isP0 === true,
+      };
     const { rendered, overflow } = capPerRig(rigPellets);
     pellets.push(...rendered);
     if (overflow > 0) pelletOverflow[rigKey] = overflow;

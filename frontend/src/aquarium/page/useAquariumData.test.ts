@@ -127,11 +127,12 @@ describe('useAquariumData (live mode)', () => {
     expect(result.current.inputs.beadsByRig['reef-beta']?.items.map((b) => b.id)).toEqual([
       'td-b1',
     ]);
+    expect(result.current.inputs.unavailableBeadRigKeys).toEqual([]);
     expect(listBeads).toHaveBeenCalledWith('test-city', { rig: 'reef-alpha', limit: 250 });
     expect(listBeads).toHaveBeenCalledWith('test-city', { rig: 'reef-beta', limit: 250 });
   });
 
-  it('degrades one rejected rig read to an empty, truthful entry without dropping the others', async () => {
+  it('marks one rejected rig read unavailable without dropping the others', async () => {
     vi.stubGlobal('EventSource', undefined);
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -159,6 +160,33 @@ describe('useAquariumData (live mode)', () => {
     });
 
     expect(result.current.inputs.beadsByRig['reef-alpha']).toEqual({ items: [], total: 0 });
+    expect(result.current.inputs.unavailableBeadRigKeys).toEqual(['reef-alpha']);
+    expect(result.current.connState).toBe('degraded');
+  });
+
+  it('marks a bounded, truncated rig response as unavailable for transition claims', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    const listBeads = vi.fn(async (_city: string, query?: { rig?: string }) => ({
+      items: [
+        {
+          id: `${query?.rig}-visible`,
+          title: 'visible bead',
+          status: 'open',
+          issue_type: 'task',
+          created_at: '2026-01-01T00:00:00Z',
+        },
+      ],
+      total: query?.rig === 'reef-alpha' ? 2 : 1,
+    }));
+    setSupervisorApiForTests({ ...baseApi, listBeads });
+
+    const { result } = renderHook(() => useAquariumData(null));
+    await waitFor(() => {
+      expect(result.current.inputs.beadsByRig['reef-alpha']?.items).toHaveLength(1);
+    });
+
+    expect(result.current.inputs.unavailableBeadRigKeys).toEqual(['reef-alpha']);
+    expect(result.current.connState).toBe('degraded');
   });
 });
 
@@ -181,6 +209,7 @@ describe('useAquariumData (fixture mode)', () => {
     expect(listSessions).not.toHaveBeenCalled();
     expect(listRigs).not.toHaveBeenCalled();
     expect(result.current.inputs.agents.length).toBeGreaterThan(0);
+    expect(result.current.inputs.unavailableBeadRigKeys).toEqual([]);
     expect(result.current.manifest?.kind).toBe('aquarium');
   });
 

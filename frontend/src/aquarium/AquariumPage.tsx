@@ -13,7 +13,13 @@ import type { MouseEvent, PointerEvent } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
-import type { FixtureKind, ScenePalette, Viewport, WorldSnapshot } from './contracts';
+import {
+  EMPTY_FLOW_OBSERVATION,
+  type FixtureKind,
+  type ScenePalette,
+  type Viewport,
+  type WorldSnapshot,
+} from './contracts';
 import { deriveWorldSnapshot, type DeriveMemory } from './derive/deriveWorld';
 import { buildScenePalette } from './render/palette';
 import { AquariumLegend } from './page/AquariumLegend';
@@ -177,6 +183,7 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
       />
       <AquariumOverlay
         needsAttention={snapshot?.needsAttention ?? 0}
+        flow={snapshot?.flow ?? EMPTY_FLOW_OBSERVATION}
         connState={connState}
         onZoomIn={camera.zoomIn}
         onZoomOut={camera.zoomOut}

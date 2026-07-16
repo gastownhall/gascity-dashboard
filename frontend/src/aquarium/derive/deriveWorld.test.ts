@@ -39,7 +39,15 @@ function bead(id: string, status: string, assignee?: string): Bead {
 }
 
 function baseInputs(overrides: Partial<DeriveInputs> = {}): DeriveInputs {
-  return { sessions: [], agents: [], rigs: RIGS, pendingSignals: [], beadsByRig: {}, ...overrides };
+  return {
+    sessions: [],
+    agents: [],
+    rigs: RIGS,
+    pendingSignals: [],
+    beadsByRig: {},
+    unavailableBeadRigKeys: [],
+    ...overrides,
+  };
 }
 
 describe('deriveWorldSnapshot — pose SSOT parity', () => {
@@ -138,6 +146,22 @@ describe('deriveWorldSnapshot — diff-eater', () => {
       NOW + 1000,
     );
     expect(round2.pellets.filter((p) => p.state === 'eaten')).toEqual([]);
+  });
+
+  it('does not invent an eaten pellet or completion receipt when a rig read fails', () => {
+    const beadsByRig = { 'alpha-rig': { items: [bead('b-1', 'in_progress')], total: 1 } };
+    const { memory } = deriveWorldSnapshot(baseInputs({ beadsByRig }), null, NOW);
+    const { snapshot } = deriveWorldSnapshot(
+      baseInputs({
+        beadsByRig: { 'alpha-rig': { items: [], total: 0 } },
+        unavailableBeadRigKeys: ['alpha-rig'],
+      }),
+      memory,
+      NOW + 1_000,
+    );
+
+    expect(snapshot.pellets.filter((p) => p.state === 'eaten')).toEqual([]);
+    expect(snapshot.flow.receipts).toEqual([]);
   });
 });
 

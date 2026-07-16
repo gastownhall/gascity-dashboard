@@ -4,9 +4,12 @@
 // operator learns by looking at the water.
 
 import type { AquariumConnState } from './useAquariumData';
+import type { FlowObservation } from '../contracts';
+import { formatTideReport } from './tideReport';
 
 export interface AquariumOverlayProps {
   needsAttention: number;
+  flow: FlowObservation;
   connState: AquariumConnState;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -35,6 +38,7 @@ const TANK_LIGHT: Record<AquariumConnState, TankLightSpec> = {
 
 export function AquariumOverlay({
   needsAttention,
+  flow,
   connState,
   onZoomIn,
   onZoomOut,
@@ -42,8 +46,9 @@ export function AquariumOverlay({
 }: AquariumOverlayProps) {
   return (
     <>
-      <div className="pointer-events-none absolute left-4 top-4 z-10 flex items-baseline gap-3">
-        <LedgerLine needsAttention={needsAttention} />
+      <div className="pointer-events-none absolute left-4 top-4 z-10 flex max-w-[min(70vw,64rem)] items-baseline gap-3">
+        <TideLine flow={flow} />
+        {needsAttention > 0 && <AttentionMark needsAttention={needsAttention} />}
         <span aria-hidden="true" className="text-fg-muted">
           ·
         </span>
@@ -76,15 +81,18 @@ export function AquariumOverlay({
 
 // The single maroon mark in the whole /reef viewport (DESIGN.md's One Mark
 // Rule, adapted). text-accent appears nowhere else on this route.
-function LedgerLine({ needsAttention }: { needsAttention: number }) {
-  if (needsAttention > 0) {
-    return (
-      <span className="tnum text-title font-semibold text-accent">
-        {needsAttention} need attention
-      </span>
-    );
-  }
-  return <span className="text-title font-semibold text-fg-muted">all calm</span>;
+function TideLine({ flow }: { flow: FlowObservation }) {
+  return (
+    <span className="tnum text-title font-semibold text-fg-muted">{formatTideReport(flow)}</span>
+  );
+}
+
+function AttentionMark({ needsAttention }: { needsAttention: number }) {
+  return (
+    <span className="tnum text-title font-semibold text-accent">
+      {needsAttention} need attention
+    </span>
+  );
 }
 
 function TankLight({ connState }: { connState: AquariumConnState }) {
