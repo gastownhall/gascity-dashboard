@@ -22,7 +22,7 @@ describe('AquariumLegend', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /key/i }));
     expect(screen.getByText('geo')).toBeTruthy();
-    expect(screen.getByText('26')).toBeTruthy();
+    expect(screen.getByText('26 open')).toBeTruthy();
     // the "by whom": active agent names ride the rig row
     expect(screen.getByText('polecat-1 · codex-2')).toBeTruthy();
     // the zone key names each bead state by WHERE its morsel lives (position,
@@ -78,13 +78,13 @@ describe('AquariumLegend', () => {
     expect(screen.queryByText('geo')).toBeTruthy();
   });
 
-  it('explains the single pickup ring and double completion ring', () => {
+  it('explains the current three-bubble recent-movement cue', () => {
     renderLegend({ active: [entry({ key: 'geo', openBeadTotal: 26, agents: ['w1'] })], quiet: [] });
     fireEvent.click(screen.getByRole('button', { name: /key/i }));
-    expect(screen.getByText('pickup')).toBeTruthy();
-    expect(screen.getByText('completion')).toBeTruthy();
-    expect(screen.getByLabelText('one ring')).toBeTruthy();
-    expect(screen.getByLabelText('two rings')).toBeTruthy();
+    expect(screen.getByText('work moved in last 15m')).toBeTruthy();
+    expect(screen.getByLabelText('three bubble trail')).toBeTruthy();
+    expect(screen.queryByText('pickup')).toBeNull();
+    expect(screen.queryByText('completion')).toBeNull();
   });
 
   it('renders nothing when there are no rigs to key', () => {

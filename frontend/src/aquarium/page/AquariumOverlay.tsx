@@ -12,6 +12,7 @@ import type {
   PelletEntity,
   ReefFocus,
   RigFormation,
+  StrandedWorkItem,
 } from '../contracts';
 import { FLOW_STILL_MIN_OBSERVATION_MS, PELLET_STATE_WORD } from '../contracts';
 import { isAttentionFish, isBackloggedRig, isWaitingP0 } from './ledgerEligibility';
@@ -25,6 +26,7 @@ export interface AquariumOverlayProps {
   formations: readonly RigFormation[];
   fish: readonly FishEntity[];
   pellets: readonly PelletEntity[];
+  strandedWork: readonly StrandedWorkItem[];
   unavailableRigKeys: readonly string[];
   focus: ReefFocus | null;
   onFocusChange: (focus: ReefFocus | null) => void;
@@ -42,7 +44,7 @@ const ROW_BUTTON_CLASS =
 const ACTION_LINK_CLASS =
   'shrink-0 rounded-sm text-label uppercase tracking-wider text-fg-muted underline decoration-dotted underline-offset-2 hover:text-fg focus-mark';
 
-type LedgerPanel = 'backlog' | 'p0' | 'attention' | 'coverage';
+type LedgerPanel = 'backlog' | 'p0' | 'attention' | 'stranded' | 'coverage';
 
 interface TankLightSpec {
   word: string;
@@ -70,6 +72,7 @@ export function AquariumOverlay({
   formations,
   fish,
   pellets,
+  strandedWork,
   unavailableRigKeys,
   focus,
   onFocusChange,
@@ -106,6 +109,7 @@ export function AquariumOverlay({
     backloggedRigs.length,
     p0Waiting.length,
     attentionFish.length,
+    strandedWork.length,
     dataState,
     rigCoveragePartial,
   );
@@ -118,8 +122,11 @@ export function AquariumOverlay({
 
   return (
     <>
-      <div className="pointer-events-none absolute left-4 right-4 top-4 z-10 sm:right-auto sm:max-w-[min(78vw,64rem)]">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <div
+        data-aquarium-ledger
+        className="pointer-events-none absolute left-4 right-4 top-4 z-10 sm:right-auto sm:max-w-[min(78vw,64rem)]"
+      >
+        <div data-aquarium-ledger-facts className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <TideLine
             flow={flow}
             dataState={dataState}
@@ -131,6 +138,13 @@ export function AquariumOverlay({
               needsAttention={needsAttention}
               expanded={visiblePanel === 'attention'}
               onToggle={() => togglePanel('attention')}
+            />
+          )}
+          {strandedWork.length > 0 && (
+            <StrandedMark
+              count={strandedWork.length}
+              expanded={visiblePanel === 'stranded'}
+              onToggle={() => togglePanel('stranded')}
             />
           )}
           <span aria-hidden="true" className="text-fg-muted">
@@ -156,6 +170,7 @@ export function AquariumOverlay({
             backloggedRigs={backloggedRigs}
             p0Waiting={p0Waiting}
             attentionFish={attentionFish}
+            strandedWork={strandedWork}
             focus={focus}
             onFocusChange={onFocusChange}
             onClose={() => {
@@ -356,6 +371,27 @@ function AttentionMark({
   );
 }
 
+function StrandedMark({
+  count,
+  expanded,
+  onToggle,
+}: {
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className="pointer-events-auto rounded-sm text-label uppercase tracking-wider text-warn underline decoration-dotted underline-offset-2 transition-colors duration-150 ease-out-quart hover:text-fg focus-mark"
+    >
+      ◆ {count} stranded
+    </button>
+  );
+}
+
 function TankLight({ connState }: { connState: AquariumConnState }) {
   const spec = TANK_LIGHT[connState];
   return (
@@ -373,6 +409,7 @@ interface LedgerDetailsProps {
   backloggedRigs: readonly RigFormation[];
   p0Waiting: readonly PelletEntity[];
   attentionFish: readonly FishEntity[];
+  strandedWork: readonly StrandedWorkItem[];
   focus: ReefFocus | null;
   onFocusChange: (focus: ReefFocus | null) => void;
   onClose: () => void;
@@ -400,6 +437,7 @@ function LedgerDetails(props: LedgerDetailsProps) {
       {props.panel === 'backlog' && <BacklogDetails {...props} />}
       {props.panel === 'p0' && <P0Details {...props} />}
       {props.panel === 'attention' && <AttentionDetails {...props} />}
+      {props.panel === 'stranded' && <StrandedDetails {...props} />}
       {props.panel === 'coverage' && <PartialDetails {...props} />}
     </section>
   );
@@ -522,6 +560,34 @@ function AttentionDetails({ attentionFish, focus, onFocusChange }: LedgerDetails
   );
 }
 
+function StrandedDetails({ strandedWork }: LedgerDetailsProps) {
+  const ordered = [...strandedWork].sort(
+    (a, b) => a.rigKey.localeCompare(b.rigKey) || a.title.localeCompare(b.title),
+  );
+  return (
+    <>
+      <p className="mt-1 text-label text-fg-muted">
+        Orphaned work whose assigned agent session ended mid-flight.
+      </p>
+      <ul className="mt-2 space-y-2">
+        {ordered.map((work) => (
+          <li key={work.beadId} className="flex min-w-0 items-baseline gap-3">
+            <div className="min-w-0 flex-1">
+              <span className="block truncate text-body text-fg-muted">{work.title}</span>
+              <span className="block text-label uppercase tracking-wider text-fg-muted">
+                {displayRigKey(work.rigKey)} · {work.beadId}
+              </span>
+            </div>
+            <Link to={work.linkTo} aria-label={`Open ${work.title}`} className={ACTION_LINK_CLASS}>
+              open
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 function PartialDetails({ flow, coverageKnown, unavailableRigKeys }: LedgerDetailsProps) {
   if (!coverageKnown) {
     return (
@@ -556,6 +622,8 @@ function panelTitle(panel: LedgerPanel): string {
       return 'P0 waiting';
     case 'attention':
       return 'Needs attention';
+    case 'stranded':
+      return 'Stranded work';
     case 'coverage':
       return 'Partial coverage';
   }
@@ -574,6 +642,7 @@ function ledgerPanelAvailable(
   backlogCount: number,
   p0Count: number,
   attentionCount: number,
+  strandedCount: number,
   dataState: AquariumDataState,
   coverageDrillable: boolean,
 ): boolean {
@@ -585,6 +654,8 @@ function ledgerPanelAvailable(
       return p0Count > 0;
     case 'attention':
       return attentionCount > 0;
+    case 'stranded':
+      return strandedCount > 0;
     case 'coverage':
       return dataState === 'partial' && coverageDrillable;
   }

@@ -8,6 +8,7 @@ import type {
   PelletEntity,
   ReefFocus,
   RigFormation,
+  StrandedWorkItem,
 } from '../contracts';
 
 afterEach(cleanup);
@@ -17,7 +18,7 @@ function renderOverlay(overrides: Partial<Parameters<typeof AquariumOverlay>[0]>
   const onZoomOut = vi.fn();
   const onReset = vi.fn();
   const onFocusChange = vi.fn<(focus: ReefFocus | null) => void>();
-  render(
+  const view = render(
     <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
       <AquariumOverlay
         needsAttention={0}
@@ -28,6 +29,7 @@ function renderOverlay(overrides: Partial<Parameters<typeof AquariumOverlay>[0]>
         formations={FORMATIONS}
         fish={ATTENTION_FISH}
         pellets={P0_PELLETS}
+        strandedWork={[]}
         unavailableRigKeys={[]}
         focus={null}
         onFocusChange={onFocusChange}
@@ -38,7 +40,7 @@ function renderOverlay(overrides: Partial<Parameters<typeof AquariumOverlay>[0]>
       />
     </MemoryRouter>,
   );
-  return { onZoomIn, onZoomOut, onReset, onFocusChange };
+  return { ...view, onZoomIn, onZoomOut, onReset, onFocusChange };
 }
 
 const FLOW: FlowObservation = {
@@ -87,6 +89,15 @@ const ATTENTION_FISH: FishEntity[] = [
   },
 ];
 
+const STRANDED_WORK: StrandedWorkItem[] = [
+  {
+    beadId: 'orphan-1',
+    title: 'Recover the abandoned run',
+    rigKey: 'alpha',
+    linkTo: '/beads?bead=orphan-1',
+  },
+];
+
 describe('AquariumOverlay', () => {
   it('shows the observation-window tide report instead of claiming all work is calm', () => {
     renderOverlay({ needsAttention: 0 });
@@ -126,6 +137,7 @@ describe('AquariumOverlay', () => {
           formations={FORMATIONS}
           fish={ATTENTION_FISH}
           pellets={P0_PELLETS}
+          strandedWork={[]}
           unavailableRigKeys={[]}
           focus={null}
           onFocusChange={vi.fn()}
@@ -158,7 +170,9 @@ describe('AquariumOverlay', () => {
     const { onFocusChange } = renderOverlay();
     fireEvent.click(screen.getByRole('button', { name: '2 backlogged rigs' }));
     expect(screen.getByRole('region', { name: 'Backlogged rig details' })).toBeTruthy();
-    expect(screen.getByText(/a morsel held at a fish's mouth is that agent's current bead/i)).toBeTruthy();
+    expect(
+      screen.getByText(/a morsel held at a fish's mouth is that agent's current bead/i),
+    ).toBeTruthy();
     expect(screen.getByText(/bubble trail means work moved in the last 15 minutes/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Highlight rig alpha' }).textContent).toContain(
       'moved recently',
@@ -197,6 +211,7 @@ describe('AquariumOverlay', () => {
           formations={FORMATIONS}
           fish={ATTENTION_FISH}
           pellets={P0_PELLETS}
+          strandedWork={[]}
           unavailableRigKeys={[]}
           focus={null}
           onFocusChange={onFocusChange}
@@ -220,6 +235,7 @@ describe('AquariumOverlay', () => {
           formations={[]}
           fish={ATTENTION_FISH}
           pellets={P0_PELLETS}
+          strandedWork={[]}
           unavailableRigKeys={[]}
           focus={{ kind: 'rig', rigKey: 'alpha' }}
           onFocusChange={onFocusChange}
@@ -239,6 +255,29 @@ describe('AquariumOverlay', () => {
     expect(screen.getByRole('region', { name: 'Needs attention details' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Highlight agent tinker' }));
     expect(onFocusChange).toHaveBeenCalledWith({ kind: 'fish', fishId: 'tinker-session' });
+  });
+
+  it('lays out attention and stranded work in one responsive ledger system', () => {
+    const { container } = renderOverlay({ needsAttention: 1, strandedWork: STRANDED_WORK });
+    const facts = container.querySelector('[data-aquarium-ledger-facts]');
+    expect(facts).toBeTruthy();
+    expect(
+      screen
+        .getByRole('button', { name: '1 need attention' })
+        .closest('[data-aquarium-ledger-facts]'),
+    ).toBe(facts);
+    expect(
+      screen.getByRole('button', { name: /1 stranded/i }).closest('[data-aquarium-ledger-facts]'),
+    ).toBe(facts);
+  });
+
+  it('expands stranded work through the shared ledger drill-down', () => {
+    renderOverlay({ strandedWork: STRANDED_WORK });
+    fireEvent.click(screen.getByRole('button', { name: /1 stranded/i }));
+    expect(screen.getByRole('region', { name: 'Stranded work details' })).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: /Recover the abandoned run/i }).getAttribute('href'),
+    ).toBe('/beads?bead=orphan-1');
   });
 
   it('explains exact partial coverage and names the missing rig reads', () => {
@@ -318,6 +357,7 @@ describe('AquariumOverlay', () => {
           formations={FORMATIONS}
           fish={ATTENTION_FISH}
           pellets={P0_PELLETS}
+          strandedWork={[]}
           unavailableRigKeys={[]}
           focus={null}
           onFocusChange={vi.fn()}

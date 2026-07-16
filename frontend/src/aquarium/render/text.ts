@@ -67,11 +67,9 @@ function setLetterSpacing(ctx: CanvasRenderingContext2D, value: string): void {
   if (typeof c.letterSpacing === 'string') c.letterSpacing = value;
 }
 
-/** Per-rig stranded-work marker at the surface above the rig: a diamond glyph +
- *  count, in the warn colour (attention, but never the ledger's reserved maroon).
- *  Stranded WORK has no agent to be a fish, so it surfaces as this marker while
- *  its pellet stays sunk. Present at the working overview (rigLabelFade) so the
- *  alarm reads at a glance, gone only at the fully zoomed-out tank. */
+/** Formation label with the exact open-bead total. The renderer may sample
+ * drifting pellets by LOD, so the explicit OPEN qualifier keeps the total from
+ * reading as a count of visible marks. */
 function paintRigLabels(
   ctx: CanvasRenderingContext2D,
   snapshot: WorldSnapshot,
@@ -92,7 +90,7 @@ function paintRigLabels(
     // A rig with no open work reads as just its name; "· 0" is noise (and read
     // as odd on the neutral UNRIGGED stratum). The name still maps colour→rig.
     const name = formation.key.toUpperCase();
-    const label = formation.openBeadTotal > 0 ? `${name} · ${formation.openBeadTotal}` : name;
+    const label = formation.openBeadTotal > 0 ? `${name} · ${formation.openBeadTotal} OPEN` : name;
     ctx.fillText(label, pos.x, pos.y + 26);
   }
   setLetterSpacing(ctx, '0px');

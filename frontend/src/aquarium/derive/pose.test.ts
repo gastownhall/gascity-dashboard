@@ -39,11 +39,30 @@ describe('derivePose', () => {
     expect(derivePose(undefined, { activity: 'in-turn', state: 'asleep' }, NOW)).toBe('working');
   });
 
+  it('keeps a live running session active when its provider omits activity despite stale last_active', () => {
+    expect(
+      derivePose(
+        undefined,
+        {
+          state: 'active',
+          running: true,
+          last_active: '2026-07-12T09:35:49.000Z',
+        },
+        NOW,
+      ),
+    ).toBe('idle');
+    expect(
+      poseWordForSession('idle', {
+        state: 'active',
+        running: true,
+        last_active: '2026-07-12T09:35:49.000Z',
+      }),
+    ).toBe('active');
+  });
+
   it('is "asleep" once last_active is at or past the 1h threshold', () => {
     const exactlyAtThreshold = new Date(NOW - ASLEEP_THRESHOLD_MS).toISOString();
-    expect(derivePose(undefined, { state: 'active', last_active: exactlyAtThreshold }, NOW)).toBe(
-      'asleep',
-    );
+    expect(derivePose(undefined, { last_active: exactlyAtThreshold }, NOW)).toBe('asleep');
   });
 
   it('is "idle" just under the 1h threshold with no in-turn activity', () => {
@@ -91,7 +110,7 @@ describe('poseWord', () => {
       poseWordForSession('idle', {
         state: 'active',
       }),
-    ).toBe('active, turn activity unavailable');
+    ).toBe('active');
   });
 
   it('does not call a running session idle when its provider omits turn activity', () => {
@@ -100,7 +119,7 @@ describe('poseWord', () => {
         state: 'running',
         running: true,
       }),
-    ).toBe('active, turn activity unavailable');
+    ).toBe('active');
   });
 
   it('keeps an explicit provider idle signal authoritative', () => {

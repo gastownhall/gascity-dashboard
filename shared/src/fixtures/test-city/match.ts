@@ -12,6 +12,7 @@ import type {
   ListBodyAgentResponse,
   ListBodyBead,
   ListBodySessionResponse,
+  ListBodyRigResponse,
   ListBodyWireEvent,
   MailListBody,
   FormulaFeedBody,
@@ -113,6 +114,11 @@ export function matchTestCitySupervisorRequest(
   if (pathname.endsWith('/sessions')) {
     const items = applyLimit(data.sessions, search);
     const body: ListBodySessionResponse = { items, total: items.length };
+    return json(body);
+  }
+  if (pathname.endsWith('/rigs')) {
+    const items = applyLimit(data.rigs, search);
+    const body: ListBodyRigResponse = { items, total: items.length };
     return json(body);
   }
   if (pathname.endsWith('/formulas/feed')) {

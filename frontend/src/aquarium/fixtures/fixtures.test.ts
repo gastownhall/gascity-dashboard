@@ -11,6 +11,7 @@ import {
   buildBlindFixture,
   buildFixtureInputs,
   buildFlowFixture,
+  buildLayoutFixture,
   buildPerfFixture,
 } from './index';
 import { RICH_FISH_BUDGET } from '../render/fishPainter';
@@ -238,6 +239,22 @@ describe('buildFixtureInputs dispatcher', () => {
     expect(buildFixtureInputs('perf').manifest.kind).toBe('perf');
     expect(buildFixtureInputs('blind').manifest.kind).toBe('blind');
     expect(buildFixtureInputs('flow').manifest.kind).toBe('flow');
+    expect(buildFixtureInputs('layout').manifest.kind).toBe('layout');
+  });
+});
+
+describe("'layout' fixture", () => {
+  const scene = buildLayoutFixture();
+
+  it('combines attention, stranded work, long counts, and a failed rig read', () => {
+    expect(scene.manifest.needsAttention).toBeGreaterThan(0);
+    expect(scene.manifest.rigs.some((rig) => rig.openBeadTotal > 40)).toBe(true);
+    expect(scene.inputs.unavailableBeadRigKeys.length).toBeGreaterThan(0);
+    expect(
+      Object.values(scene.inputs.beadsByRig).some((store) =>
+        store.items.some((bead) => bead.id === 'layout-orphaned-work'),
+      ),
+    ).toBe(true);
   });
 });
 

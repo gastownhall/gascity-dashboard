@@ -64,6 +64,8 @@ export interface FishEntity {
   pose: AquariumPose;
   /** caption state word, e.g. "working", "awaiting input" */
   poseWord: string;
+  /** detail-only provider caveat; ambient status remains the concise "active" */
+  turnActivityUnavailable?: true;
   /** effectiveContextPct: integer 0..100, undefined = indeterminate slim body */
   bellyPct: number | undefined;
   /** RigFormation.key | UNRIGGED_KEY | CITY_KEY */
@@ -167,9 +169,9 @@ export interface WorldSnapshot {
    *  marker (the formation label already carries the full openBeadTotal); kept
    *  for the cap-correctness tests and a future "N more" drill-in. */
   pelletOverflow: Record<string, number>;
-  /** orphaned work whose assigned owner's session died — surfaced as the
-   *  drillable "N stranded" shelf pill (grouped by rig, each linking to the
-   *  bead). Empty when nothing is orphaned. */
+  /** orphaned work whose assigned owner's session died — surfaced in the
+   *  shared status ledger (grouped by rig, each linking to the bead). Empty
+   *  when nothing is orphaned. */
   strandedWork: StrandedWorkItem[];
   /** Session-local flow evidence. This never claims history from a snapshot. */
   flow: FlowObservation;
@@ -182,7 +184,7 @@ export type ReefFocus =
   | { kind: 'rig'; rigKey: string }
   | { kind: 'fish'; fishId: string };
 
-/** One orphaned bead for the stranded shelf drill-in. */
+/** One orphaned bead for the shared status-ledger drill-down. */
 export interface StrandedWorkItem {
   beadId: string;
   title: string;
@@ -309,7 +311,7 @@ export type PaintScene = (
 // ---------------------------------------------------------------------------
 // Fixtures & harness contract
 
-export type FixtureKind = 'aquarium' | 'perf' | 'blind' | 'flow';
+export type FixtureKind = 'aquarium' | 'perf' | 'blind' | 'flow' | 'layout';
 
 /** URL contract (dev-only): /reef?fixture=<kind>#cam=<x>,<y>,<zoom> */
 export const FIXTURE_QUERY_PARAM = 'fixture';

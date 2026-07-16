@@ -38,6 +38,7 @@ const FLOW: FlowObservation = {
 function recordingContext() {
   const arcs: Array<{ x: number; y: number; radius: number }> = [];
   let fillCount = 0;
+  let strokeCount = 0;
   const stub = {
     beginPath(): void {},
     arc(x: number, y: number, radius: number): void {
@@ -47,13 +48,19 @@ function recordingContext() {
     fill(): void {
       fillCount += 1;
     },
+    stroke(): void {
+      strokeCount += 1;
+    },
     fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 0,
     globalAlpha: 1,
   };
   return {
     ctx: stub as unknown as CanvasRenderingContext2D,
     arcs,
     fillCount: () => fillCount,
+    strokeCount: () => strokeCount,
   };
 }
 
@@ -63,7 +70,8 @@ describe('paintRecentRigMovement', () => {
     paintRecentRigMovement(recorded.ctx, FLOW, [FORMATION], PALETTE, VIEW, 1);
 
     expect(recorded.arcs).toHaveLength(3);
-    expect(recorded.fillCount()).toBe(1);
+    expect(recorded.fillCount()).toBe(0);
+    expect(recorded.strokeCount()).toBe(1);
     expect(recorded.arcs.every((arc) => arc.y < FORMATION.anchorY)).toBe(true);
   });
 
@@ -100,7 +108,7 @@ describe('paintRecentRigMovement', () => {
       1,
     );
 
-    expect(recorded.ctx.fillStyle).toBe(PALETTE.pellet);
+    expect(recorded.ctx.strokeStyle).toBe(PALETTE.textMuted);
     expect(recorded.ctx.globalAlpha).toBe(1);
   });
 });

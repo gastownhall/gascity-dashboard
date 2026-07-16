@@ -34,7 +34,6 @@ import { hitTestScene, type HitResult } from './page/hitTest';
 import { HoverTooltip } from './page/HoverTooltip';
 import { readBodyFontFamily, readThemeTokens } from './page/paletteTokens';
 import { SrFishList } from './page/SrFishList';
-import { StrandedShelf } from './page/StrandedShelf';
 import { useAquariumCamera } from './page/useAquariumCamera';
 import { useAquariumData } from './page/useAquariumData';
 import { useAquariumRenderLoop } from './page/useAquariumRenderLoop';
@@ -160,7 +159,6 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
     (cssX: number, cssY: number): SelectedHit | null => {
       if (snapshot === null) return null;
       const world = camera.worldFromClientOffset(cssX, cssY);
-      const pelletsEligible = camera.lodTierRef.current === 2;
       const hit = hitTestScene(
         world.x,
         world.y,
@@ -168,7 +166,7 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
         renderLoop.simRef.current.fish,
         snapshot.pellets,
         renderLoop.simRef.current.pellets,
-        pelletsEligible,
+        camera.cameraRef.current.zoom,
       );
       return hit === null ? null : { hit, screenX: cssX, screenY: cssY };
     },
@@ -236,6 +234,7 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
         formations={snapshot?.formations ?? []}
         fish={snapshot?.fish ?? []}
         pellets={snapshot?.pellets ?? []}
+        strandedWork={snapshot?.strandedWork ?? []}
         unavailableRigKeys={inputs.unavailableBeadRigKeys}
         focus={focus}
         onFocusChange={onFocusChange}
@@ -244,7 +243,6 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
         onReset={camera.resetCamera}
       />
       <AquariumLegend legend={rigLegend} />
-      <StrandedShelf work={snapshot?.strandedWork ?? []} />
       {selected === null && hover !== null && (
         <HoverTooltip
           hit={hover.hit}

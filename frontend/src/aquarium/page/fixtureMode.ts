@@ -10,6 +10,7 @@ const VALID_KINDS: ReadonlySet<string> = new Set<FixtureKind>([
   'perf',
   'blind',
   'flow',
+  'layout',
 ]);
 
 function isFixtureKind(value: string): value is FixtureKind {

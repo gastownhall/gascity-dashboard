@@ -1,7 +1,7 @@
 // Stranded work: actionable beads whose assigned owner is gone. A distressed
-// AGENT rises to the surface shelf as a fish; stranded WORK has no agent to be,
-// so it surfaces as a per-rig marker instead (the pellet stays sunk — "blocked"
-// is already its position). The predicate is deliberately structural, not
+// AGENT rises to the surface as a fish; stranded WORK has no agent to be, so it
+// surfaces as a shared status-ledger fact (the pellet stays sunk — "blocked" is
+// already its position). The predicate is deliberately structural, not
 // age-scored: a bead is stranded when it was ASSIGNED to an agent whose session
 // is no longer live (orphaned mid-flight) AND every dependency is closed (so it
 // is actually workable). Unassigned backlog is NOT stranded — a rig with no live
@@ -23,7 +23,7 @@ export interface StrandedInputs {
 }
 
 /** The orphaned beads across all rigs (empty when nothing is stranded), each
- *  carrying its rig and bead-detail link for the drillable shelf. */
+ *  carrying its rig and bead-detail link for the shared ledger drill-down. */
 export function buildStrandedWork(inputs: StrandedInputs): StrandedWorkItem[] {
   // Only beads present in the active store exist here; a dependency that has
   // left the store has closed and no longer blocks.

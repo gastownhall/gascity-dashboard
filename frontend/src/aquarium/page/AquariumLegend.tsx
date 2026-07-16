@@ -168,27 +168,23 @@ function PriorityNote() {
 
 function FlowKey() {
   return (
-    <div className="flex flex-col gap-1 uppercase tracking-wider text-fg-muted">
-      <div className="flex items-center gap-2">
-        <ReceiptGlyph rings={1} />
-        <span>pickup</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <ReceiptGlyph rings={2} />
-        <span>completion</span>
-      </div>
+    <div className="flex items-center gap-2 uppercase tracking-wider text-fg-muted">
+      <BubbleTrailGlyph />
+      <span>work moved in last 15m</span>
     </div>
   );
 }
 
-function ReceiptGlyph({ rings }: { rings: 1 | 2 }) {
+function BubbleTrailGlyph() {
   return (
     <span
       role="img"
-      aria-label={rings === 1 ? 'one ring' : 'two rings'}
-      className="relative inline-block h-3 w-3 shrink-0 rounded-full border border-fg-muted"
+      aria-label="three bubble trail"
+      className="relative inline-block h-5 w-4 shrink-0"
     >
-      {rings === 2 && <span className="absolute inset-[3px] rounded-full border border-fg-muted" />}
+      <span className="absolute bottom-0 left-0 h-1.5 w-1.5 rounded-full border border-fg-muted" />
+      <span className="absolute bottom-1.5 right-0 h-2 w-2 rounded-full border border-fg-muted" />
+      <span className="absolute right-1 top-0 h-1.5 w-1.5 rounded-full border border-fg-muted" />
     </span>
   );
 }
@@ -216,7 +212,7 @@ function RigRow({ entry, showAgents }: { entry: RigLegendEntry; showAgents?: boo
           style={{ background: rigSwatchColor(entry.hue) }}
         />
         <span className="min-w-0 grow truncate">{entry.key}</span>
-        <span className="tnum shrink-0 text-fg-faint">{entry.openBeadTotal}</span>
+        <span className="tnum shrink-0 text-fg-faint">{entry.openBeadTotal} open</span>
       </div>
       {showAgents === true && entry.agents.length > 0 && (
         <div className="w-full truncate pl-[18px] normal-case tracking-normal text-fg-faint">

@@ -75,7 +75,7 @@ describe("'aquarium' fixture vs the real derive pipeline", () => {
   });
 
   it('manifest.rigs is a complete, exact rollup of every rendered formation label (round-2 honesty fix: unrigged included)', () => {
-    // render/text.ts draws `${formation.key.toUpperCase()} · ${formation.openBeadTotal}`
+    // render/text.ts draws `${formation.key.toUpperCase()} · ${formation.openBeadTotal} OPEN`
     // for every derived formation — every one of those on-screen labels must
     // have a matching manifest.rigs entry with the exact same count, or the
     // honesty auditor has nothing to validate the label against.

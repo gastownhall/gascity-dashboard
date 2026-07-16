@@ -89,7 +89,7 @@ describe('buildFish — session-backed fish', () => {
     expect(fish[0]?.pose).toBe('idle');
   });
 
-  it('labels a live Codex-style session as active with unavailable turn telemetry, not idle', () => {
+  it('labels a live Codex-style session concisely as active and preserves the telemetry caveat for details', () => {
     const s = session({
       id: 'gc-2568',
       session_name: 'mayor',
@@ -100,7 +100,8 @@ describe('buildFish — session-backed fish', () => {
     });
     const { fish } = buildFish(inputs({ sessions: [s] }));
     expect(fish[0]?.pose).toBe('idle');
-    expect(fish[0]?.poseWord).toBe('active, turn activity unavailable');
+    expect(fish[0]?.poseWord).toBe('active');
+    expect(fish[0]?.turnActivityUnavailable).toBe(true);
   });
 
   it('is working when activity is in-turn', () => {

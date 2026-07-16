@@ -32,16 +32,23 @@ export function poseWord(pose: AquariumPose): string {
  * either an idle or an in-turn agent, so say exactly what is known.
  */
 export function poseWordForSession(pose: AquariumPose, session: PoseSessionFacts): string {
+  if (turnActivityUnavailable(pose, session)) return 'active';
+  return poseWord(pose);
+}
+
+/** True when a live session omits its provider's authoritative turn signal.
+ * Ambient copy stays concise; detail surfaces explain this qualification. */
+export function turnActivityUnavailable(pose: AquariumPose, session: PoseSessionFacts): boolean {
+  return pose === 'idle' && isLiveWithoutTurnActivity(session);
+}
+
+function isLiveWithoutTurnActivity(session: PoseSessionFacts): boolean {
   const activity = session.activity?.trim().toLowerCase();
   const state = session.state?.trim().toLowerCase();
-  if (
-    pose === 'idle' &&
+  return (
     (activity === undefined || activity.length === 0) &&
     (session.running === true || state === 'active' || state === 'running')
-  ) {
-    return 'active, turn activity unavailable';
-  }
-  return poseWord(pose);
+  );
 }
 
 const CALM_POSES: ReadonlySet<AquariumPose> = new Set(['working', 'idle', 'asleep']);
@@ -77,6 +84,10 @@ export function derivePose(
     throw new Error('derivePose: a fish with no session must carry a distress reason');
   }
   if (session.activity === 'in-turn') return 'working';
+  // A provider that cannot report turn activity must not let an old activity
+  // timestamp override the supervisor's authoritative live process state.
+  // Keep the calm visual pose; poseWordForSession supplies the truthful label.
+  if (isLiveWithoutTurnActivity(session)) return 'idle';
   if (isAsleep(session, nowMs)) return 'asleep';
   return 'idle';
 }

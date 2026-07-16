@@ -91,6 +91,9 @@ function FishCardBody({ fish }: { fish: FishEntity }) {
         <div className="tnum text-fg-muted">{fish.bellyPct}% context</div>
       )}
       {fish.taskBeadId !== undefined && <div className="text-fg-muted">bead {fish.taskBeadId}</div>}
+      {fish.turnActivityUnavailable === true && (
+        <div className="text-fg-muted">Turn activity is not reported by this provider.</div>
+      )}
       <Link to={fish.linkTo} className={CARD_LINK_CLASS}>
         open agent
       </Link>

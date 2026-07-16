@@ -156,7 +156,9 @@ export function useAquariumData(fixtureKind: FixtureKind | null): AquariumDataRe
     supervisorListIsIncomplete,
   );
   const dataState: AquariumDataState = isFixture
-    ? 'complete'
+    ? fixtureKind === 'layout'
+      ? 'partial'
+      : 'complete'
     : liveReadUnavailable
       ? 'unavailable'
       : liveReadLoading

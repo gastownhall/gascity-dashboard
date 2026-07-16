@@ -91,3 +91,14 @@ describe('EntityCard placement', () => {
     expect(card.style.top).toBe('76px'); // 60 + CARD_OFFSET_PX
   });
 });
+
+describe('EntityCard fish telemetry', () => {
+  it('keeps unavailable turn telemetry in the detail card instead of the ambient status label', () => {
+    renderCard({
+      kind: 'fish',
+      entity: fish({ pose: 'idle', poseWord: 'active', turnActivityUnavailable: true }),
+    });
+    expect(screen.getByText('active')).toBeTruthy();
+    expect(screen.getByText(/turn activity is not reported by this provider/i)).toBeTruthy();
+  });
+});

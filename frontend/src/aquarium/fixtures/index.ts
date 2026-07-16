@@ -9,6 +9,7 @@ import { buildAquariumFixture } from './aquariumFixture';
 import { buildPerfFixture } from './perfFixture';
 import { buildBlindFixture } from './blindFixture';
 import { buildFlowFixture } from './flowFixture';
+import { buildLayoutFixture } from './layoutFixture';
 
 export interface FixtureScene {
   inputs: DeriveInputs;
@@ -26,7 +27,15 @@ export function buildFixtureInputs(kind: FixtureKind): FixtureScene {
       return buildBlindFixture();
     case 'flow':
       return buildFlowFixture();
+    case 'layout':
+      return buildLayoutFixture();
   }
 }
 
-export { buildAquariumFixture, buildPerfFixture, buildBlindFixture, buildFlowFixture };
+export {
+  buildAquariumFixture,
+  buildPerfFixture,
+  buildBlindFixture,
+  buildFlowFixture,
+  buildLayoutFixture,
+};

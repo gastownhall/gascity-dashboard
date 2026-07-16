@@ -7,6 +7,7 @@ describe('resolveFixtureKindFromSearch', () => {
     expect(resolveFixtureKindFromSearch('?fixture=perf')).toBe('perf');
     expect(resolveFixtureKindFromSearch('?fixture=blind')).toBe('blind');
     expect(resolveFixtureKindFromSearch('?fixture=flow')).toBe('flow');
+    expect(resolveFixtureKindFromSearch('?fixture=layout')).toBe('layout');
   });
 
   it('returns null when the query param is absent', () => {

@@ -5,6 +5,7 @@
 // Usage:
 //   node scripts/snap-reef-aquarium.mjs
 //   node scripts/snap-reef-aquarium.mjs --test
+//   node scripts/snap-reef-aquarium.mjs --test --live-ux
 //   node scripts/snap-reef-aquarium.mjs --skip-perf
 //   node scripts/snap-reef-aquarium.mjs --out=/tmp/round-3
 //
@@ -45,6 +46,7 @@ const CITY_BASE = `${BASE}/city/${encodeURIComponent(CITY)}`;
 
 const args = argv.slice(2);
 const TEST_MODE = args.includes('--test');
+const LIVE_UX_MODE = args.includes('--live-ux');
 const SKIP_PERF = args.includes('--skip-perf');
 const outArg = args.find((a) => a.startsWith('--out='));
 const OUT = outArg ? outArg.slice('--out='.length) : `/tmp/reef-aquarium-snaps/${timestamp()}`;
@@ -70,6 +72,12 @@ if (LOD2_CAM.zoom < LOD2_ZOOM) {
 }
 
 const VIEWPORT = { width: 1440, height: 900 };
+const RESPONSIVE_VIEWPORTS = [
+  { width: 390, height: 844 },
+  { width: 768, height: 1024 },
+  { width: 1280, height: 800 },
+  { width: 1440, height: 900 },
+];
 const PERF_WARMUP_SAMPLES = 60;
 const PERF_MIN_SAMPLES = 300;
 const PERF_P95_THRESHOLD_MS = 16.0;
@@ -151,9 +159,9 @@ async function waitForRecentRigMovement(page, timeoutMs) {
   return null;
 }
 
-async function newThemeContext(browser, theme) {
+async function newThemeContext(browser, theme, viewport = VIEWPORT) {
   return browser.newContext({
-    viewport: VIEWPORT,
+    viewport,
     deviceScaleFactor: 1,
     colorScheme: theme,
     // Pre-pin the theme in localStorage, same mechanism as scripts/snap.mjs,
@@ -163,6 +171,185 @@ async function newThemeContext(browser, theme) {
       origins: [{ origin: BASE, localStorage: [{ name: 'gascity:theme', value: theme }] }],
     },
   });
+}
+
+function attachLiveWatchers(page, bucket) {
+  const onConsole = (msg) => {
+    if (msg.type() === 'error') bucket.push(`console error: ${msg.text()}`);
+  };
+  const onPageError = (err) => bucket.push(`page error: ${err.message}`);
+  const onResponse = (response) => {
+    if (response.status() >= 400) {
+      bucket.push(
+        `failed response: ${response.request().method()} ${response.url()} -> ${response.status()}`,
+      );
+    }
+  };
+  const onRequestFailed = (request) => {
+    const failure = request.failure()?.errorText ?? 'request failed';
+    if (failure !== 'net::ERR_ABORTED') {
+      bucket.push(`failed request: ${request.method()} ${request.url()} (${failure})`);
+    }
+  };
+  page.on('console', onConsole);
+  page.on('pageerror', onPageError);
+  page.on('response', onResponse);
+  page.on('requestfailed', onRequestFailed);
+  return () => {
+    page.off('console', onConsole);
+    page.off('pageerror', onPageError);
+    page.off('response', onResponse);
+    page.off('requestfailed', onRequestFailed);
+  };
+}
+
+async function responsiveLedgerGeometry(page) {
+  return page.evaluate(() => {
+    const facts = document.querySelector('[data-aquarium-ledger-facts]');
+    if (!(facts instanceof HTMLElement)) return { missing: 'ledger facts' };
+    const rects = Array.from(facts.children)
+      .filter((node) => node instanceof HTMLElement)
+      .map((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          text: node.textContent?.trim() ?? '',
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+        };
+      })
+      .filter((rect) => rect.right > rect.left && rect.bottom > rect.top);
+    const intersections = [];
+    for (let i = 0; i < rects.length; i += 1) {
+      for (let j = i + 1; j < rects.length; j += 1) {
+        const a = rects[i];
+        const b = rects[j];
+        if (
+          Math.max(a.left, b.left) < Math.min(a.right, b.right) &&
+          Math.max(a.top, b.top) < Math.min(a.bottom, b.bottom)
+        ) {
+          intersections.push([a.text, b.text]);
+        }
+      }
+    }
+    return {
+      intersections,
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+      rects,
+    };
+  });
+}
+
+async function assertSingleLedgerPanel(page, button, label, bucket) {
+  await button.click();
+  const panels = page.locator('[data-aquarium-ledger] [role="region"]');
+  const count = await panels.count();
+  if (count !== 1) bucket.push(`${label}: expected one shared ledger panel, received ${count}`);
+  if (count === 1) {
+    const box = await panels.first().boundingBox();
+    const viewport = page.viewportSize();
+    if (box === null || viewport === null)
+      bucket.push(`${label}: detail panel had no measurable box`);
+    else if (box.x < 0 || box.x + box.width > viewport.width) {
+      bucket.push(`${label}: detail panel overflows horizontally (${JSON.stringify(box)})`);
+    }
+  }
+  await button.click();
+}
+
+async function assertVisibleFishKeyboardFocus(page, bucket) {
+  const firstFishLink = page.locator('nav[aria-label="fish"] a').first();
+  if ((await firstFishLink.count()) !== 1) {
+    bucket.push('missing semantic fish link');
+    return null;
+  }
+  await firstFishLink.focus();
+  const box = await firstFishLink.boundingBox();
+  const viewport = page.viewportSize();
+  if (box === null || viewport === null) {
+    bucket.push('focused fish link had no measurable box');
+    return box;
+  }
+  if (
+    box.width <= 0 ||
+    box.height <= 0 ||
+    box.x < 0 ||
+    box.y < 0 ||
+    box.x + box.width > viewport.width ||
+    box.y + box.height > viewport.height
+  ) {
+    bucket.push(`focused fish link is not fully visible (${JSON.stringify(box)})`);
+  }
+  return box;
+}
+
+async function captureResponsiveLiveUx(browser, errors, shots) {
+  const diagnostics = [];
+  for (const viewport of RESPONSIVE_VIEWPORTS) {
+    const bucket = [];
+    const ctx = await newThemeContext(browser, 'light', viewport);
+    const page = await ctx.newPage();
+    const detach = attachLiveWatchers(page, bucket);
+    try {
+      await page.goto(fixtureUrl('layout', null), {
+        waitUntil: 'domcontentloaded',
+        timeout: 15_000,
+      });
+      await page.waitForSelector('canvas', { timeout: 10_000 });
+      await page.waitForSelector('[data-aquarium-ledger-facts]', { timeout: 10_000 });
+      await page.waitForTimeout(1_000);
+
+      const ledgerFacts = page.locator('[data-aquarium-ledger-facts]');
+      const attention = ledgerFacts.getByRole('button', { name: /^\d+ need attention$/i });
+      const stranded = ledgerFacts.getByRole('button', { name: /^◆ \d+ stranded$/i });
+      const coverage = ledgerFacts.getByRole('button', {
+        name: 'Explain partial bead coverage',
+      });
+      for (const [label, locator] of [
+        ['attention', attention],
+        ['stranded', stranded],
+        ['partial coverage', coverage],
+      ]) {
+        if ((await locator.count()) !== 1) bucket.push(`missing required ${label} control`);
+      }
+
+      const geometry = await responsiveLedgerGeometry(page);
+      if ('missing' in geometry) bucket.push(`missing ${geometry.missing}`);
+      else {
+        if (geometry.intersections.length > 0) {
+          bucket.push(`ledger facts overlap: ${JSON.stringify(geometry.intersections)}`);
+        }
+        if (geometry.scrollWidth > geometry.innerWidth) {
+          bucket.push(`horizontal overflow: ${geometry.scrollWidth}px > ${geometry.innerWidth}px`);
+        }
+      }
+
+      if ((await attention.count()) === 1)
+        await assertSingleLedgerPanel(page, attention, 'attention', bucket);
+      if ((await stranded.count()) === 1)
+        await assertSingleLedgerPanel(page, stranded, 'stranded', bucket);
+      if ((await coverage.count()) === 1)
+        await assertSingleLedgerPanel(page, coverage, 'partial coverage', bucket);
+
+      const focusedFishLink = await assertVisibleFishKeyboardFocus(page, bucket);
+      diagnostics.push({ viewport, geometry, focusedFishLink });
+
+      const path = `${OUT}/responsive-${viewport.width}x${viewport.height}.png`;
+      await page.screenshot({ path });
+      shots.push(path);
+    } catch (err) {
+      bucket.push(err instanceof Error ? err.message : String(err));
+    } finally {
+      detach();
+      await page.close().catch(() => {});
+      await ctx.close().catch(() => {});
+    }
+    for (const entry of bucket)
+      errors.push(`[responsive ${viewport.width}x${viewport.height}] ${entry}`);
+  }
+  await writeFile(`${OUT}/responsive-layout.json`, JSON.stringify(diagnostics, null, 2));
 }
 
 async function captureLod(ctx, theme, lodLabel, cam, errors, shots) {
@@ -433,33 +620,39 @@ async function main() {
 
   const browser = await chromium.launch({ headless: true });
   try {
-    for (const theme of THEMES) {
-      const ctx = await newThemeContext(browser, theme);
-      try {
-        const m0 = await captureLod(ctx, theme, 'lod0', null, errors, shots);
-        const m1 = await captureLod(ctx, theme, 'lod1', LOD1_CAM, errors, shots);
-        const m2 = await captureLod(ctx, theme, 'lod2', LOD2_CAM, errors, shots);
-        const manifest = m0 ?? m1 ?? m2;
-        if (manifest) {
-          await writeFile(`${OUT}/manifest.json`, JSON.stringify(manifest, null, 2));
-        } else {
-          errors.push(`[${theme}] window.__aquariumManifest was never captured for any LOD`);
+    if (LIVE_UX_MODE) {
+      await captureResponsiveLiveUx(browser, errors, shots);
+      console.log('[responsive] live UX matrix captured');
+    } else
+      for (const theme of THEMES) {
+        const ctx = await newThemeContext(browser, theme);
+        try {
+          const m0 = await captureLod(ctx, theme, 'lod0', null, errors, shots);
+          const m1 = await captureLod(ctx, theme, 'lod1', LOD1_CAM, errors, shots);
+          const m2 = await captureLod(ctx, theme, 'lod2', LOD2_CAM, errors, shots);
+          const manifest = m0 ?? m1 ?? m2;
+          if (manifest) {
+            await writeFile(`${OUT}/manifest.json`, JSON.stringify(manifest, null, 2));
+          } else {
+            errors.push(`[${theme}] window.__aquariumManifest was never captured for any LOD`);
+          }
+          console.log(`[${theme}] lod0/lod1/lod2 captured`);
+        } finally {
+          await ctx.close().catch(() => {});
         }
-        console.log(`[${theme}] lod0/lod1/lod2 captured`);
-      } finally {
-        await ctx.close().catch(() => {});
       }
-    }
 
-    await captureRecentRigMovement(browser, errors, shots);
-    console.log('[flow] recent rig movement captured');
+    if (!LIVE_UX_MODE) {
+      await captureRecentRigMovement(browser, errors, shots);
+      console.log('[flow] recent rig movement captured');
 
-    await captureBlindCrops(browser, errors, shots);
-    console.log('[blind] crops captured');
+      await captureBlindCrops(browser, errors, shots);
+      console.log('[blind] crops captured');
 
-    if (!SKIP_PERF) {
-      perf = await runPerfSweep(browser, errors);
-      console.log('[perf] camera workout captured');
+      if (!SKIP_PERF) {
+        perf = await runPerfSweep(browser, errors);
+        console.log('[perf] camera workout captured');
+      }
     }
   } finally {
     await browser.close();

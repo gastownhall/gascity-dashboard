@@ -13,11 +13,17 @@ export interface SrFishListProps {
 
 export function SrFishList({ fish }: SrFishListProps) {
   return (
-    <nav aria-label="fish" className="sr-only">
+    <nav aria-label="fish">
       <ul>
         {fish.map((f) => (
-          <li key={f.id}>
-            <Link to={f.linkTo}>
+          <li
+            key={f.id}
+            className="sr-only focus-within:not-sr-only focus-within:absolute focus-within:bottom-16 focus-within:left-1/2 focus-within:z-30 focus-within:w-max focus-within:max-w-[calc(100%-2rem)] focus-within:-translate-x-1/2 focus-within:rounded-sm focus-within:border focus-within:border-rule focus-within:bg-surface focus-within:px-3 focus-within:py-2"
+          >
+            <Link
+              to={f.linkTo}
+              className="focus-mark block max-w-full truncate text-body text-fg hover:text-accent"
+            >
               {f.homeKey} · {f.name.length > 0 ? f.name : '(unnamed)'} · {f.poseWord}
             </Link>
           </li>

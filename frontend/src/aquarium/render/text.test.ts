@@ -83,12 +83,12 @@ describe('rig labels across zoom (map labels at the working overview)', () => {
 
   it('names the rig at the default home framing (~0.5), so projects read without deep zoom', () => {
     const drawn = drawAt(0.5);
-    expect(drawn.some((d) => d.text === 'REEF-GAMMA · 46')).toBe(true);
+    expect(drawn.some((d) => d.text === 'REEF-GAMMA · 46 OPEN')).toBe(true);
   });
 
   it('keeps the rig name + open-bead count on as the operator zooms further in', () => {
     const drawn = drawAt(1.0);
-    expect(drawn.some((d) => d.text === 'REEF-GAMMA · 46')).toBe(true);
+    expect(drawn.some((d) => d.text === 'REEF-GAMMA · 46 OPEN')).toBe(true);
   });
 });
 

@@ -205,8 +205,9 @@ licenses it; outside this route, nothing here applies.
   posture, never a motion, so it survives a still frame and reduced-motion.
   Reduced-motion holds the surfaced fish as a truthful still frame.
   Work that is stuck with no agent to be its fish surfaces as a single warn
-  **"N stranded"** pill at the surface that expands to a drill-in list (grouped
-  by rig, each row linking to the bead), and it counts **orphaned** work only —
+  **"N stranded"** fact in the shared status ledger that expands to a drill-in
+  list (grouped by rig, each row linking to the bead), and it counts
+  **orphaned** work only —
   a bead whose assigned agent's session died mid-flight. An idle rig's unassigned
   backlog is backlog, not an alarm: surfacing every ready bead of every agentless
   rig would drown this scan line, so it stays in the drift and the formation
@@ -229,12 +230,13 @@ licenses it; outside this route, nothing here applies.
   and tethered to that fish. It means current bead assignment; the fish pose
   separately carries whether turn activity is observed. Pickup and completion
   transitions both feed the observation window, but are not drawn as separate
-  event receipts. A fixed three-dot
-  bubble trail above a formation means only that the rig produced at least one
-  pickup or completion in the last fifteen minutes; bubble count never encodes
-  event count or kind. The cue is static, so reduced motion needs no alternate
-  treatment. Rig ownership comes from the per-rig bead feed, never from bead-id
-  text. A failed rig read is excluded from flow totals and retains its prior
+  event receipts. A fixed hollow three-bubble trail above a formation means
+  only that the rig produced at least one pickup or completion in the last
+  fifteen minutes; bubble count never encodes event count or kind. Hollow
+  outlines keep the cue visually distinct from filled bead morsels. The cue is
+  static, so reduced motion needs no alternate treatment. Rig ownership comes
+  from the per-rig bead feed, never from bead-id text. A failed rig read is
+  excluded from flow totals and retains its prior
   transition state so absence cannot become a false completion. The
   backlogged-rig, waiting-P0, and needs-attention facts are quiet,
   keyboard-operable drill-downs when their count is nonzero. They expand in
@@ -246,11 +248,25 @@ licenses it; outside this route, nothing here applies.
   Partial coverage is also drillable: when the denominator is known it names
   the rig reads that failed and states that counts exclude them; when an
   upstream list is incomplete it says the denominator is unknown.
+- **Keyboard navigation stays visible.** The semantic fish list remains
+  visually hidden at rest, but its currently focused link surfaces as a compact
+  card over the tank. Keyboard users never enter an invisible sequence of
+  drill-down targets.
 - **Provider telemetry is never guessed.** `activity: in-turn` is the only fact
   that may be called working. A live session whose provider omits turn activity
-  is labelled "active, turn activity unavailable," never idle or working. Its
-  calm visual pose reflects the absence of turn evidence, not a claim that the
-  agent has stopped.
+  is labelled "active," never idle or working. Its detail card explains that
+  turn activity is not reported by the provider. Its calm visual pose reflects
+  the absence of turn evidence, not a claim that the agent has stopped.
+- **Visible morsels are practical targets.** Every rendered bead is hoverable
+  and clickable at a stable screen-space distance at overview, LOD1, and LOD2.
+  Hit testing uses the same LOD-thinning predicate as painting, so an invisible
+  backlog item is never an invisible target. Fish win when marks overlap; dense
+  pellet clusters resolve to the nearest visible bead deterministically.
+- **Formation counts name what they count.** In-scene and key labels say
+  "N open," because the exact total may be larger than the visibly thinned
+  morsel cloud. Selecting a rig marks its formation and every currently
+  rendered bead in that rig, preserving the spatial association without
+  pretending the sample is the total.
 - **Dependencies reveal on focus, never globally.** Selecting a bead pellet
   draws a faint dashed link to each bead it depends on whose pellet is on screen
   (dashed so it never reads as the solid fish-to-bead tether). A busy city has
@@ -288,9 +304,9 @@ licenses it; outside this route, nothing here applies.
 
 **The Pane Rule.** The reef is a window, not a page. Chrome inside the glass
 is limited to the tide report and its in-place drill-down, its conditional
-attention mark and drill-down, partial-coverage detail, the connection state,
-the zoom controls, the drillable "N stranded" pill (present only when work is
-orphaned), and a
+attention mark and drill-down, the conditional "N stranded" fact and
+drill-down, partial-coverage detail, the connection state, the zoom controls,
+and a
 collapsible key (the rig roster mapping colour to rig name + open-bead count,
 and the bead **zone** key naming where each state's morsel lives); everything
 else the operator learns by looking at the water. The key is translucent and collapses to a single toggle,
