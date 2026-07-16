@@ -99,9 +99,10 @@ function isObservedApiPath(pathname) {
   return pathname.startsWith('/api/') || pathname.startsWith('/gc-supervisor/');
 }
 
-// Fixture mode is meant to be fully client-rendered; any /api/ or
-// /gc-supervisor/ traffic during a fixture run is itself a bug worth
-// reporting, not just failed requests.
+// The aquarium fixture itself is fully client-rendered, and its hook test
+// enforces zero supervisor calls. The surrounding dashboard shell still reads
+// shared live data, so this browser watcher reports failures without treating
+// successful shell traffic as an aquarium regression.
 function attachWatchers(page, bucket) {
   const onConsole = (msg) => {
     if (msg.type() === 'error') bucket.push(`console error: ${msg.text()}`);
@@ -111,9 +112,9 @@ function attachWatchers(page, bucket) {
   };
   const onResponse = (response) => {
     const url = new URL(response.url());
-    if (isObservedApiPath(url.pathname)) {
+    if (isObservedApiPath(url.pathname) && response.status() >= 400) {
       bucket.push(
-        `unexpected network request in fixture mode: ${response.request().method()} ${url} -> ${response.status()}`,
+        `failed fixture-shell response: ${response.request().method()} ${url} -> ${response.status()}`,
       );
     }
   };
@@ -122,9 +123,7 @@ function attachWatchers(page, bucket) {
     const failure = request.failure()?.errorText ?? 'request failed';
     if (failure === 'net::ERR_ABORTED') return;
     if (isObservedApiPath(url.pathname)) {
-      bucket.push(
-        `unexpected network request in fixture mode: ${request.method()} ${url} (${failure})`,
-      );
+      bucket.push(`failed fixture-shell request: ${request.method()} ${url} (${failure})`);
     }
   };
   page.on('console', onConsole);
@@ -242,6 +241,34 @@ async function responsiveLedgerGeometry(page) {
   });
 }
 
+async function responsiveChromeGeometry(page) {
+  return page.evaluate(() => {
+    const legend = document.querySelector('[data-aquarium-legend]');
+    const zoom = document.querySelector('[data-aquarium-zoom]');
+    if (!(legend instanceof HTMLElement)) return { missing: 'map key' };
+    if (!(zoom instanceof HTMLElement)) return { missing: 'zoom controls' };
+    const legendRect = legend.getBoundingClientRect();
+    const zoomRect = zoom.getBoundingClientRect();
+    return {
+      legend: {
+        left: legendRect.left,
+        top: legendRect.top,
+        right: legendRect.right,
+        bottom: legendRect.bottom,
+      },
+      zoom: {
+        left: zoomRect.left,
+        top: zoomRect.top,
+        right: zoomRect.right,
+        bottom: zoomRect.bottom,
+      },
+      overlaps:
+        Math.max(legendRect.left, zoomRect.left) < Math.min(legendRect.right, zoomRect.right) &&
+        Math.max(legendRect.top, zoomRect.top) < Math.min(legendRect.bottom, zoomRect.bottom),
+    };
+  });
+}
+
 async function assertSingleLedgerPanel(page, button, label, bucket) {
   await button.click();
   const panels = page.locator('[data-aquarium-ledger] [role="region"]');
@@ -303,7 +330,7 @@ async function captureResponsiveLiveUx(browser, errors, shots) {
 
       const ledgerFacts = page.locator('[data-aquarium-ledger-facts]');
       const attention = ledgerFacts.getByRole('button', { name: /^\d+ need attention$/i });
-      const stranded = ledgerFacts.getByRole('button', { name: /^◆ \d+ stranded$/i });
+      const stranded = ledgerFacts.getByRole('button', { name: /^⊘ \d+ stranded$/i });
       const coverage = ledgerFacts.getByRole('button', {
         name: 'Explain partial bead coverage',
       });
@@ -326,6 +353,12 @@ async function captureResponsiveLiveUx(browser, errors, shots) {
         }
       }
 
+      const chromeGeometry = await responsiveChromeGeometry(page);
+      if ('missing' in chromeGeometry) bucket.push(`missing ${chromeGeometry.missing}`);
+      else if (chromeGeometry.overlaps) {
+        bucket.push(`map key overlaps zoom controls: ${JSON.stringify(chromeGeometry)}`);
+      }
+
       if ((await attention.count()) === 1)
         await assertSingleLedgerPanel(page, attention, 'attention', bucket);
       if ((await stranded.count()) === 1)
@@ -334,7 +367,7 @@ async function captureResponsiveLiveUx(browser, errors, shots) {
         await assertSingleLedgerPanel(page, coverage, 'partial coverage', bucket);
 
       const focusedFishLink = await assertVisibleFishKeyboardFocus(page, bucket);
-      diagnostics.push({ viewport, geometry, focusedFishLink });
+      diagnostics.push({ viewport, geometry, chromeGeometry, focusedFishLink });
 
       const path = `${OUT}/responsive-${viewport.width}x${viewport.height}.png`;
       await page.screenshot({ path });

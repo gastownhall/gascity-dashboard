@@ -11,7 +11,7 @@
 // it; nothing here is a stub.
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { KeyboardEvent, MouseEvent, MutableRefObject, PointerEvent, WheelEvent } from 'react';
+import type { KeyboardEvent, MouseEvent, MutableRefObject, PointerEvent } from 'react';
 import {
   clampCamera,
   homeCamera,
@@ -41,7 +41,7 @@ const HASH_WRITE_THROTTLE_MS = 400;
 export interface AquariumCameraApi {
   cameraRef: MutableRefObject<Camera>;
   lodTierRef: MutableRefObject<LodTier>;
-  onWheel: (e: WheelEvent<HTMLCanvasElement>) => void;
+  onWheel: (e: globalThis.WheelEvent) => void;
   onPointerDown: (e: PointerEvent<HTMLCanvasElement>) => void;
   onPointerMove: (e: PointerEvent<HTMLCanvasElement>) => void;
   onPointerUp: (e: PointerEvent<HTMLCanvasElement>) => void;
@@ -132,9 +132,11 @@ export function useAquariumCamera(viewport: Viewport, onChange?: () => void): Aq
   }, []);
 
   const onWheel = useCallback(
-    (e: WheelEvent<HTMLCanvasElement>) => {
+    (e: globalThis.WheelEvent) => {
+      const target = e.currentTarget;
+      if (!(target instanceof HTMLCanvasElement)) return;
       e.preventDefault();
-      const rect = e.currentTarget.getBoundingClientRect();
+      const rect = target.getBoundingClientRect();
       const factor = wheelZoomFactor(e.deltaY, e.deltaMode, viewportRef.current.cssHeight);
       commit(
         zoomAtCursor(

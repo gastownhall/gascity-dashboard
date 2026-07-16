@@ -77,6 +77,9 @@ describe('AquariumLegend', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(container.firstElementChild?.className).not.toContain('w-[16rem]');
     expect(container.firstElementChild?.className).not.toContain('backdrop-blur');
+    const collapsedHint = screen.getByText('⊘ stranded bead: no live agent');
+    expect(collapsedHint.className).toContain('hidden');
+    expect(collapsedHint.className).toContain('min-[480px]:inline');
     fireEvent.click(toggle);
     expect(screen.queryByText('geo')).toBeTruthy();
   });

@@ -88,6 +88,16 @@ describe('AquariumPage (fixture mode)', () => {
     expect(screen.getByRole('img').getAttribute('tabindex')).toBe('0');
   });
 
+  it('registers wheel zoom as a non-passive native listener', () => {
+    const addEventListener = vi.spyOn(HTMLCanvasElement.prototype, 'addEventListener');
+
+    renderAquarium('aquarium');
+
+    expect(addEventListener).toHaveBeenCalledWith('wheel', expect.any(Function), {
+      passive: false,
+    });
+  });
+
   it('the ledger count matches the fixture manifest exactly', () => {
     const { manifest } = buildFixtureInputs('aquarium');
     renderAquarium('aquarium');

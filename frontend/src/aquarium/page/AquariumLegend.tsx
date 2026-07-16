@@ -44,6 +44,7 @@ export function AquariumLegend({ legend }: AquariumLegendProps) {
   if (legend.active.length === 0 && legend.quiet.length === 0) return null;
   return (
     <div
+      data-aquarium-legend
       className={`absolute left-4 z-10 flex flex-col items-start gap-2 border border-rule bg-surface/70 px-3 py-2 text-label ${open ? 'bottom-[4.5rem] w-[20rem] max-w-[calc(100vw-2rem)] sm:bottom-4' : 'bottom-4 w-auto'}`}
     >
       <button
@@ -57,7 +58,7 @@ export function AquariumLegend({ legend }: AquariumLegendProps) {
         </span>
         <span>Map key</span>
         {!open && (
-          <span className="normal-case tracking-normal text-fg-faint">
+          <span className="hidden normal-case tracking-normal text-fg-faint min-[480px]:inline">
             ⊘ stranded bead: no live agent
           </span>
         )}

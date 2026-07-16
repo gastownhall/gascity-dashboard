@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import type { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent } from 'react';
+import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LOD1_ZOOM, type Viewport } from '../contracts';
 import { useAquariumCamera, wheelZoomFactor } from './useAquariumCamera';
@@ -54,9 +54,14 @@ describe('useAquariumCamera', () => {
     expect(result.current.cameraRef.current).not.toEqual(start);
 
     const afterPan = result.current.cameraRef.current.zoom;
+    const wheelTarget = document.createElement('canvas');
+    vi.spyOn(wheelTarget, 'getBoundingClientRect').mockReturnValue({
+      left: 10,
+      top: 20,
+    } as DOMRect);
     act(() =>
       result.current.onWheel(
-        wheelEvent(target, { deltaY: -100, deltaMode: 0, clientX: 610, clientY: 420 }),
+        wheelEvent(wheelTarget, { deltaY: -100, deltaMode: 0, clientX: 610, clientY: 420 }),
       ),
     );
     expect(result.current.cameraRef.current.zoom).toBeGreaterThan(afterPan);
@@ -118,14 +123,14 @@ function pointerEvent(
 }
 
 function wheelEvent(
-  currentTarget: object,
-  fields: Partial<WheelEvent<HTMLCanvasElement>>,
-): WheelEvent<HTMLCanvasElement> {
+  currentTarget: HTMLCanvasElement,
+  fields: Partial<globalThis.WheelEvent>,
+): globalThis.WheelEvent {
   return {
     currentTarget,
     preventDefault: vi.fn(),
     ...fields,
-  } as unknown as WheelEvent<HTMLCanvasElement>;
+  } as unknown as globalThis.WheelEvent;
 }
 
 function mouseEvent(

@@ -142,6 +142,14 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
 
   const requestPaintRef = useRef<() => void>(() => {});
   const camera = useAquariumCamera(viewport, () => requestPaintRef.current());
+  const onCameraWheel = camera.onWheel;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    const onWheel = (event: globalThis.WheelEvent) => onCameraWheel(event);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
+  }, [onCameraWheel]);
   const renderLoop = useAquariumRenderLoop({
     canvasRef,
     viewport,
@@ -216,7 +224,6 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
         aria-label={ariaLabel}
         tabIndex={0}
         className="absolute inset-0 h-full w-full outline-none focus-mark"
-        onWheel={camera.onWheel}
         onPointerDown={camera.onPointerDown}
         onPointerMove={onCanvasPointerMove}
         onPointerUp={camera.onPointerUp}
