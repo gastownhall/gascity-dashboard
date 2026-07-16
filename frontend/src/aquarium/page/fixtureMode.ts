@@ -5,7 +5,12 @@
 
 import { FIXTURE_QUERY_PARAM, type FixtureKind } from '../contracts';
 
-const VALID_KINDS: ReadonlySet<string> = new Set<FixtureKind>(['aquarium', 'perf', 'blind']);
+const VALID_KINDS: ReadonlySet<string> = new Set<FixtureKind>([
+  'aquarium',
+  'perf',
+  'blind',
+  'flow',
+]);
 
 function isFixtureKind(value: string): value is FixtureKind {
   return VALID_KINDS.has(value);

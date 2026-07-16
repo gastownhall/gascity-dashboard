@@ -8,10 +8,12 @@ import type { FixtureKind, FixtureManifest } from '../contracts';
 import { buildAquariumFixture } from './aquariumFixture';
 import { buildPerfFixture } from './perfFixture';
 import { buildBlindFixture } from './blindFixture';
+import { buildFlowFixture } from './flowFixture';
 
 export interface FixtureScene {
   inputs: DeriveInputs;
   manifest: FixtureManifest;
+  transitionBaselineInputs?: DeriveInputs;
 }
 
 export function buildFixtureInputs(kind: FixtureKind): FixtureScene {
@@ -22,7 +24,9 @@ export function buildFixtureInputs(kind: FixtureKind): FixtureScene {
       return buildPerfFixture();
     case 'blind':
       return buildBlindFixture();
+    case 'flow':
+      return buildFlowFixture();
   }
 }
 
-export { buildAquariumFixture, buildPerfFixture, buildBlindFixture };
+export { buildAquariumFixture, buildPerfFixture, buildBlindFixture, buildFlowFixture };

@@ -32,6 +32,8 @@ describe('observeFlow', () => {
 
     expect(result.flow).toMatchObject({
       observedForMs: 0,
+      observedRigCount: 2,
+      totalRigCount: 2,
       backloggedRigCount: 2,
       movingRigCount: 0,
       p0Waiting: 1,
@@ -83,6 +85,8 @@ describe('observeFlow', () => {
     ]);
 
     expect(unavailable.flow.receipts).toEqual([]);
+    expect(unavailable.flow.observedRigCount).toBe(1);
+    expect(unavailable.flow.totalRigCount).toBe(2);
     expect(unavailable.flow.backloggedRigCount).toBe(1);
     expect(unavailable.flow.stillRigKeys).toEqual(['beta']);
   });

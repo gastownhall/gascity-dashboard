@@ -14,6 +14,8 @@ function renderOverlay(overrides: Partial<Parameters<typeof AquariumOverlay>[0]>
       needsAttention={0}
       flow={FLOW}
       connState="open"
+      dataState="complete"
+      coverageKnown
       onZoomIn={onZoomIn}
       onZoomOut={onZoomOut}
       onReset={onReset}
@@ -26,6 +28,8 @@ function renderOverlay(overrides: Partial<Parameters<typeof AquariumOverlay>[0]>
 const FLOW: FlowObservation = {
   observedForMs: 0,
   windowMs: 60 * 60 * 1_000,
+  observedRigCount: 2,
+  totalRigCount: 2,
   backloggedRigCount: 2,
   movingRigCount: 0,
   stillRigKeys: [],
@@ -41,6 +45,18 @@ describe('AquariumOverlay', () => {
     expect(ledger.className).not.toContain('text-accent');
   });
 
+  it('labels a cold inventory read as loading instead of reporting zero work', () => {
+    renderOverlay({ dataState: 'loading' });
+    expect(screen.getByText('loading reef inventory')).toBeTruthy();
+    expect(screen.queryByText(/0 backlogged rigs/i)).toBeNull();
+  });
+
+  it('surfaces an unavailable inventory read instead of reporting zero work', () => {
+    renderOverlay({ dataState: 'unavailable' });
+    expect(screen.getByText('reef inventory unavailable')).toBeTruthy();
+    expect(screen.queryByText(/0 backlogged rigs/i)).toBeNull();
+  });
+
   it('reads "<n> need attention" in the accent tone when n > 0', () => {
     renderOverlay({ needsAttention: 3 });
     const ledger = screen.getByText('3 need attention');
@@ -53,6 +69,8 @@ describe('AquariumOverlay', () => {
         needsAttention={2}
         flow={FLOW}
         connState="degraded"
+        dataState="complete"
+        coverageKnown
         onZoomIn={vi.fn()}
         onZoomOut={vi.fn()}
         onReset={vi.fn()}
@@ -78,6 +96,46 @@ describe('AquariumOverlay', () => {
     const status = screen.getByRole('status');
     expect(status.className).toContain('text-fg-muted');
     expect(status.className).not.toContain('text-accent');
+  });
+
+  it('reports partial bead coverage separately from an open event connection', () => {
+    renderOverlay({
+      connState: 'open',
+      dataState: 'partial',
+      flow: { ...FLOW, observedRigCount: 1, totalRigCount: 2 },
+    });
+    expect(screen.getByRole('status').textContent).toContain('clear');
+    expect(screen.getByRole('note', { name: 'Bead coverage' }).textContent).toContain(
+      'partial · 1/2 rigs',
+    );
+  });
+
+  it('does not claim exact coverage when an upstream list is partial', () => {
+    renderOverlay({ connState: 'open', dataState: 'partial', coverageKnown: false });
+    expect(screen.getByRole('note', { name: 'Bead coverage' }).textContent).toContain(
+      'partial inventory',
+    );
+    expect(screen.getByRole('note', { name: 'Bead coverage' }).textContent).not.toContain('2/2');
+  });
+
+  it('keeps the status ledger clear of mobile zoom controls', () => {
+    const { container } = render(
+      <AquariumOverlay
+        needsAttention={0}
+        flow={FLOW}
+        connState="open"
+        dataState="complete"
+        coverageKnown
+        onZoomIn={vi.fn()}
+        onZoomOut={vi.fn()}
+        onReset={vi.fn()}
+      />,
+    );
+    const zoomControls = container.querySelector('[data-aquarium-zoom]');
+    expect(zoomControls?.className).toContain('bottom-4');
+    expect(zoomControls?.className).toContain('sm:top-4');
+    expect(zoomControls?.className).toContain('bg-surface/70');
+    expect(zoomControls?.className).not.toContain('backdrop-blur');
   });
 
   it('invokes the zoom/reset callbacks from the top-right controls', () => {

@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invalidate } from '../../api/cache';
 import {
@@ -114,6 +114,8 @@ describe('useAquariumData (live mode)', () => {
 
     const { result } = renderHook(() => useAquariumData(null));
 
+    expect(result.current.dataState).toBe('loading');
+
     await waitFor(() => {
       expect(Object.keys(result.current.inputs.beadsByRig).sort()).toEqual([
         'reef-alpha',
@@ -128,6 +130,7 @@ describe('useAquariumData (live mode)', () => {
       'td-b1',
     ]);
     expect(result.current.inputs.unavailableBeadRigKeys).toEqual([]);
+    expect(result.current.dataState).toBe('complete');
     expect(listBeads).toHaveBeenCalledWith('test-city', { rig: 'reef-alpha', limit: 250 });
     expect(listBeads).toHaveBeenCalledWith('test-city', { rig: 'reef-beta', limit: 250 });
   });
@@ -161,7 +164,9 @@ describe('useAquariumData (live mode)', () => {
 
     expect(result.current.inputs.beadsByRig['reef-alpha']).toEqual({ items: [], total: 0 });
     expect(result.current.inputs.unavailableBeadRigKeys).toEqual(['reef-alpha']);
-    expect(result.current.connState).toBe('degraded');
+    expect(result.current.connState).toBe('closed');
+    expect(result.current.dataState).toBe('partial');
+    expect(result.current.coverageKnown).toBe(true);
   });
 
   it('marks a bounded, truncated rig response as unavailable for transition claims', async () => {
@@ -186,7 +191,106 @@ describe('useAquariumData (live mode)', () => {
     });
 
     expect(result.current.inputs.unavailableBeadRigKeys).toEqual(['reef-alpha']);
-    expect(result.current.connState).toBe('degraded');
+    expect(result.current.connState).toBe('closed');
+    expect(result.current.dataState).toBe('partial');
+  });
+
+  it('marks a partial supervisor rig list as partial even when every returned rig bead read succeeds', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    const listRigs = vi.fn(async () => ({
+      items: [
+        {
+          name: 'reef-alpha',
+          path: '/rigs/reef-alpha',
+          agent_count: 1,
+          running_count: 1,
+          suspended: false,
+        },
+      ],
+      total: 2,
+      partial: true,
+      partial_errors: ['reef-beta store unavailable'],
+    }));
+    setSupervisorApiForTests({
+      ...baseApi,
+      listRigs,
+      listBeads: vi.fn(async () => ({ items: [], total: 0 })),
+    });
+
+    const { result } = renderHook(() => useAquariumData(null));
+    await waitFor(() => expect(result.current.inputs.rigs).toHaveLength(1));
+    await waitFor(() => expect(result.current.dataState).toBe('partial'));
+    expect(result.current.coverageKnown).toBe(false);
+  });
+
+  it('marks a failed refresh with retained cache data as partial', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const listRigs = vi
+      .fn()
+      .mockResolvedValueOnce(await baseApi.listRigs('test-city'))
+      .mockRejectedValueOnce(new Error('rig refresh failed'));
+    setSupervisorApiForTests({
+      ...baseApi,
+      listRigs,
+      listBeads: vi.fn(async () => ({ items: [], total: 0 })),
+    });
+
+    const { result } = renderHook(() => useAquariumData(null));
+    await waitFor(() => expect(result.current.dataState).toBe('complete'));
+    await act(async () => result.current.refresh());
+
+    expect(result.current.inputs.rigs).toHaveLength(2);
+    expect(result.current.dataState).toBe('partial');
+    expect(result.current.coverageKnown).toBe(false);
+  });
+
+  it('stays loading until pending-interaction reads finish', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    let resolvePending: ((value: { supported: boolean }) => void) | undefined;
+    const pending = new Promise<{ supported: boolean }>((resolve) => {
+      resolvePending = resolve;
+    });
+    setSupervisorApiForTests({
+      ...baseApi,
+      listAgents: vi.fn(async () => ({
+        items: [
+          {
+            name: 'reef-alpha/scout',
+            available: true,
+            running: true,
+            state: 'idle',
+            suspended: false,
+            session: { name: 'reef-alpha-scout', attached: false },
+          },
+        ],
+        total: 1,
+      })),
+      listSessions: vi.fn(async () => ({
+        items: [
+          {
+            id: 'gc-scout',
+            template: 'codex',
+            session_name: 'reef-alpha-scout',
+            title: 'scout',
+            state: 'running',
+            created_at: '2026-07-15T00:00:00Z',
+            attached: false,
+            running: true,
+            provider: 'codex',
+          },
+        ],
+        total: 1,
+      })),
+      listBeads: vi.fn(async () => ({ items: [], total: 0 })),
+      sessionPending: vi.fn(() => pending),
+    });
+
+    const { result } = renderHook(() => useAquariumData(null));
+    await waitFor(() => expect(baseApi.listRigs).toHaveBeenCalled());
+    expect(result.current.dataState).toBe('loading');
+    await act(async () => resolvePending?.({ supported: true }));
+    await waitFor(() => expect(result.current.dataState).toBe('complete'));
   });
 });
 
@@ -210,6 +314,7 @@ describe('useAquariumData (fixture mode)', () => {
     expect(listRigs).not.toHaveBeenCalled();
     expect(result.current.inputs.agents.length).toBeGreaterThan(0);
     expect(result.current.inputs.unavailableBeadRigKeys).toEqual([]);
+    expect(result.current.dataState).toBe('complete');
     expect(result.current.manifest?.kind).toBe('aquarium');
   });
 

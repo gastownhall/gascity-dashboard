@@ -58,7 +58,8 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
   );
   const fixtureKind = fixtureOverride ?? urlFixtureKind;
 
-  const { inputs, connState, manifest } = useAquariumData(fixtureKind);
+  const { inputs, connState, dataState, coverageKnown, manifest, transitionBaselineInputs } =
+    useAquariumData(fixtureKind);
   const reducedMotion = usePrefersReducedMotion();
   const { resolved: themeMood } = useTheme();
 
@@ -74,7 +75,11 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
 
   // Fixture mode publishes ground truth for the snapshot harness.
   useEffect(() => {
-    if (manifest !== null) window.__aquariumManifest = manifest;
+    if (manifest === null) return;
+    window.__aquariumManifest = manifest;
+    return () => {
+      delete window.__aquariumManifest;
+    };
   }, [manifest]);
 
   const palette: ScenePalette = useMemo(
@@ -88,10 +93,23 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
   const memoryRef = useRef<DeriveMemory | null>(null);
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null);
   useEffect(() => {
-    const result = deriveWorldSnapshot(inputs, memoryRef.current, Date.now());
+    const nowMs = Date.now();
+    const baseline =
+      transitionBaselineInputs === null
+        ? null
+        : deriveWorldSnapshot(transitionBaselineInputs, null, nowMs - 1_000);
+    const result = deriveWorldSnapshot(inputs, baseline?.memory ?? memoryRef.current, nowMs);
     memoryRef.current = result.memory;
     setSnapshot(result.snapshot);
-  }, [inputs]);
+  }, [inputs, transitionBaselineInputs]);
+
+  useEffect(() => {
+    if (manifest === null || snapshot === null) return;
+    window.__aquariumFlow = snapshot.flow;
+    return () => {
+      delete window.__aquariumFlow;
+    };
+  }, [manifest, snapshot]);
 
   // The reef key: which colour is which rig, and where each bead state lives.
   const rigLegend = useMemo(
@@ -162,7 +180,7 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
     [camera, resolveHit],
   );
 
-  const ariaLabel = `${snapshot?.fish.length ?? 0} fish; ${snapshot?.needsAttention ?? 0} need attention; connection ${connState}`;
+  const ariaLabel = `${snapshot?.fish.length ?? 0} fish; ${snapshot?.needsAttention ?? 0} need attention; connection ${connState}; inventory ${dataState}`;
 
   return (
     <div className="relative" style={{ width: viewport.cssWidth, height: viewport.cssHeight }}>
@@ -185,6 +203,8 @@ export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
         needsAttention={snapshot?.needsAttention ?? 0}
         flow={snapshot?.flow ?? EMPTY_FLOW_OBSERVATION}
         connState={connState}
+        dataState={dataState}
+        coverageKnown={coverageKnown}
         onZoomIn={camera.zoomIn}
         onZoomOut={camera.zoomOut}
         onReset={camera.resetCamera}

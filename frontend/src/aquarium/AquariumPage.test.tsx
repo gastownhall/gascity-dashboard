@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../contexts/ThemeContext';
@@ -60,7 +60,7 @@ function seedThemeTokens(): void {
   }
 }
 
-function renderAquarium(fixtureOverride: 'aquarium' | 'perf' | 'blind') {
+function renderAquarium(fixtureOverride: 'aquarium' | 'perf' | 'blind' | 'flow') {
   return render(
     <ThemeProvider>
       <MemoryRouter
@@ -145,5 +145,15 @@ describe('AquariumPage (fixture mode)', () => {
     // relies on (useAquariumRenderLoop skips painting silently on a null
     // context); the real proof is that render() above didn't throw.
     expect(() => renderAquarium('aquarium')).not.toThrow();
+  });
+
+  it('publishes deterministic pickup and completion receipts for the flow fixture', async () => {
+    renderAquarium('flow');
+    await waitFor(() => {
+      expect(window.__aquariumFlow?.receipts).toEqual([
+        expect.objectContaining({ beadId: 'aq-alpha-scout', kind: 'pickup' }),
+        expect.objectContaining({ beadId: 'flow-beta-completed', kind: 'completion' }),
+      ]);
+    });
   });
 });

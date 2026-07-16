@@ -3,7 +3,7 @@
 // single maroon mark; top-right is quiet zoom controls. Everything else the
 // operator learns by looking at the water.
 
-import type { AquariumConnState } from './useAquariumData';
+import type { AquariumConnState, AquariumDataState } from './useAquariumData';
 import type { FlowObservation } from '../contracts';
 import { formatTideReport } from './tideReport';
 
@@ -11,6 +11,8 @@ export interface AquariumOverlayProps {
   needsAttention: number;
   flow: FlowObservation;
   connState: AquariumConnState;
+  dataState: AquariumDataState;
+  coverageKnown: boolean;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
@@ -40,21 +42,27 @@ export function AquariumOverlay({
   needsAttention,
   flow,
   connState,
+  dataState,
+  coverageKnown,
   onZoomIn,
   onZoomOut,
   onReset,
 }: AquariumOverlayProps) {
   return (
     <>
-      <div className="pointer-events-none absolute left-4 top-4 z-10 flex max-w-[min(70vw,64rem)] items-baseline gap-3">
-        <TideLine flow={flow} />
+      <div className="pointer-events-none absolute left-4 right-4 top-4 z-10 flex flex-wrap items-baseline gap-x-3 gap-y-1 sm:right-auto sm:max-w-[min(70vw,64rem)]">
+        <TideLine flow={flow} dataState={dataState} />
         {needsAttention > 0 && <AttentionMark needsAttention={needsAttention} />}
         <span aria-hidden="true" className="text-fg-muted">
           ·
         </span>
         <TankLight connState={connState} />
+        {dataState === 'partial' && <CoverageNote flow={flow} coverageKnown={coverageKnown} />}
       </div>
-      <div className="absolute right-4 top-4 z-10 flex items-center gap-4">
+      <div
+        data-aquarium-zoom
+        className="absolute bottom-4 right-4 z-10 flex items-center gap-4 border border-rule bg-surface/70 px-3 py-2 sm:bottom-auto sm:top-4 sm:border-0 sm:bg-transparent sm:p-0"
+      >
         <button
           type="button"
           onClick={onZoomOut}
@@ -81,9 +89,27 @@ export function AquariumOverlay({
 
 // The single maroon mark in the whole /reef viewport (DESIGN.md's One Mark
 // Rule, adapted). text-accent appears nowhere else on this route.
-function TideLine({ flow }: { flow: FlowObservation }) {
+function TideLine({ flow, dataState }: { flow: FlowObservation; dataState: AquariumDataState }) {
+  const copy =
+    dataState === 'loading'
+      ? 'loading reef inventory'
+      : dataState === 'unavailable'
+        ? 'reef inventory unavailable'
+        : formatTideReport(flow);
+  return <span className="tnum text-label font-semibold text-fg-muted sm:text-title">{copy}</span>;
+}
+
+function CoverageNote({ flow, coverageKnown }: { flow: FlowObservation; coverageKnown: boolean }) {
   return (
-    <span className="tnum text-title font-semibold text-fg-muted">{formatTideReport(flow)}</span>
+    <span
+      role="note"
+      aria-label="Bead coverage"
+      className="tnum text-label uppercase tracking-wider text-warn"
+    >
+      {coverageKnown
+        ? `◒ partial · ${flow.observedRigCount}/${flow.totalRigCount} rigs`
+        : '◒ partial inventory'}
+    </span>
   );
 }
 

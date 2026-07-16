@@ -142,6 +142,10 @@ export interface FlowReceipt {
 export interface FlowObservation {
   observedForMs: number;
   windowMs: number;
+  /** Rigs whose bounded bead read was complete in this snapshot. */
+  observedRigCount: number;
+  /** All rigs requested in this snapshot, including incomplete reads. */
+  totalRigCount: number;
   backloggedRigCount: number;
   movingRigCount: number;
   /** At most two available, backlogged rigs with no observed transition. */
@@ -156,6 +160,8 @@ export const FLOW_RECEIPT_LIFETIME_MS = 15 * 60 * 1_000;
 export const EMPTY_FLOW_OBSERVATION: FlowObservation = Object.freeze({
   observedForMs: 0,
   windowMs: FLOW_OBSERVATION_WINDOW_MS,
+  observedRigCount: 0,
+  totalRigCount: 0,
   backloggedRigCount: 0,
   movingRigCount: 0,
   stillRigKeys: Object.freeze([]),
@@ -304,7 +310,7 @@ export type PaintScene = (
 // ---------------------------------------------------------------------------
 // Fixtures & harness contract
 
-export type FixtureKind = 'aquarium' | 'perf' | 'blind';
+export type FixtureKind = 'aquarium' | 'perf' | 'blind' | 'flow';
 
 /** URL contract (dev-only): /reef?fixture=<kind>#cam=<x>,<y>,<zoom> */
 export const FIXTURE_QUERY_PARAM = 'fixture';
@@ -324,6 +330,8 @@ export interface FixtureManifest {
   }>;
   pelletBeadIds: string[];
   needsAttention: number;
+  /** flow fixture only: transitions the derived snapshot must expose. */
+  flowReceipts?: Array<Pick<FlowReceipt, 'beadId' | 'rigKey' | 'kind'>>;
   /** blind fixture only: camera per fish (same order as fish[]) for unlabeled crops */
   blindCams?: Array<{ x: number; y: number; zoom: number }>;
 }
@@ -332,6 +340,8 @@ declare global {
   interface Window {
     /** set in fixture mode for the snapshot harness */
     __aquariumManifest?: FixtureManifest;
+    /** set in fixture mode so the harness can verify derived flow evidence. */
+    __aquariumFlow?: FlowObservation;
     /** set in fixture mode; per-frame RENDER WORK time (advanceSim + paintScene
      *  wall-clock ms) — the perf gate metric. NOT the rAF interval, which is
      *  vsync-locked to the display refresh and cannot go below ~16.67ms at

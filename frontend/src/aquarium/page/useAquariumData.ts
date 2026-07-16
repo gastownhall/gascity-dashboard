@@ -26,13 +26,19 @@ import type { DeriveInputs } from '../derive/deriveWorld';
 import { buildFixtureInputs } from '../fixtures';
 
 export type AquariumConnState = GcEventConnState | 'fixture';
+export type AquariumDataState = 'loading' | 'complete' | 'partial' | 'unavailable';
 
 export interface AquariumDataResult {
   inputs: DeriveInputs;
   connState: AquariumConnState;
+  dataState: AquariumDataState;
+  /** False when a partial upstream list makes the missing rig denominator unknowable. */
+  coverageKnown: boolean;
   /** Non-null only in fixture mode — the ground truth AquariumPage exposes
    *  as `window.__aquariumManifest` for the honesty-auditor screenshot pass. */
   manifest: FixtureManifest | null;
+  /** Fixture-only prior snapshot used to produce deterministic transition receipts. */
+  transitionBaselineInputs: DeriveInputs | null;
   refresh: () => Promise<void>;
 }
 
@@ -126,16 +132,55 @@ export function useAquariumData(fixtureKind: FixtureKind | null): AquariumDataRe
     [sessionItems, agentItems, rigItems, pendingCache.data, beadsCache.data],
   );
 
+  const liveReads = [agentsCache, sessionsCache, rigsCache, pendingCache, beadsCache];
+  const liveReadUnavailable = liveReads.some(
+    (read) => read.data === undefined && read.error !== null,
+  );
+  const liveReadLoading = liveReads.some((read) => read.data === undefined);
+  const liveReadStale = liveReads.some((read) => read.data !== undefined && read.error !== null);
+  const upstreamListPartial = [agentsCache.data, sessionsCache.data, rigsCache.data].some(
+    supervisorListIsIncomplete,
+  );
+  const dataState: AquariumDataState = isFixture
+    ? 'complete'
+    : liveReadUnavailable
+      ? 'unavailable'
+      : liveReadLoading
+        ? 'loading'
+        : liveReadStale || upstreamListPartial
+          ? 'partial'
+          : (beadsCache.data?.unavailableRigKeys.length ?? 0) > 0
+            ? 'partial'
+            : 'complete';
+  const coverageKnown = isFixture || (!liveReadStale && !upstreamListPartial);
+
   return {
     inputs: fixtureScene?.inputs ?? liveInputs,
-    connState: isFixture
-      ? 'fixture'
-      : (beadsCache.data?.unavailableRigKeys.length ?? 0) > 0
-        ? 'degraded'
-        : sseState,
+    connState: isFixture ? 'fixture' : sseState,
+    dataState,
+    coverageKnown,
     manifest: fixtureScene?.manifest ?? null,
+    transitionBaselineInputs: fixtureScene?.transitionBaselineInputs ?? null,
     refresh,
   };
+}
+
+function supervisorListIsIncomplete(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const list = value as {
+    items?: unknown;
+    total?: unknown;
+    partial?: unknown;
+    partial_errors?: unknown;
+    next_cursor?: unknown;
+  };
+  const itemCount = Array.isArray(list.items) ? list.items.length : 0;
+  return (
+    list.partial === true ||
+    (Array.isArray(list.partial_errors) && list.partial_errors.length > 0) ||
+    (typeof list.next_cursor === 'string' && list.next_cursor.length > 0) ||
+    (typeof list.total === 'number' && list.total > itemCount)
+  );
 }
 
 /**

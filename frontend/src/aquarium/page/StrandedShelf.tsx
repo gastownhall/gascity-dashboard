@@ -22,7 +22,7 @@ export function StrandedShelf({ work }: StrandedShelfProps) {
   );
 
   return (
-    <div className="pointer-events-auto absolute left-4 top-11 z-10 max-w-sm">
+    <div className="pointer-events-auto absolute left-4 top-24 z-10 max-w-sm sm:top-11">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

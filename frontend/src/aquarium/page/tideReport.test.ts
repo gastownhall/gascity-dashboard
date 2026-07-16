@@ -6,6 +6,8 @@ function flow(overrides: Partial<FlowObservation> = {}): FlowObservation {
   return {
     observedForMs: 0,
     windowMs: 60 * 60 * 1_000,
+    observedRigCount: 2,
+    totalRigCount: 2,
     backloggedRigCount: 2,
     movingRigCount: 0,
     stillRigKeys: [],
@@ -43,5 +45,16 @@ describe('formatTideReport', () => {
         }),
       ),
     ).toBe('work moved in 1 of 1 rig over 6m · 0 P0 waiting');
+  });
+
+  it('names incomplete rig coverage instead of presenting sampled backlog as a total', () => {
+    expect(
+      formatTideReport(
+        flow({
+          observedRigCount: 1,
+          totalRigCount: 2,
+        }),
+      ),
+    ).toBe('observing flow · 2 observed backlogged rigs · 3 P0 waiting');
   });
 });

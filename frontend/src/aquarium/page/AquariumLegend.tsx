@@ -38,11 +38,13 @@ const TOGGLE_CLASS =
   'pointer-events-auto flex items-center gap-2 text-label uppercase tracking-wider text-fg-muted hover:text-fg transition-colors duration-150 ease-out-quart focus-mark';
 
 export function AquariumLegend({ legend }: AquariumLegendProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [quietOpen, setQuietOpen] = useState(false);
   if (legend.active.length === 0 && legend.quiet.length === 0) return null;
   return (
-    <div className="absolute bottom-4 left-4 z-10 flex w-[16rem] flex-col items-start gap-2 border border-rule bg-surface/70 px-3 py-2 text-label backdrop-blur-sm">
+    <div
+      className={`absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2 border border-rule bg-surface/70 px-3 py-2 text-label ${open ? 'w-[16rem]' : 'w-auto'}`}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -74,6 +76,9 @@ export function AquariumLegend({ legend }: AquariumLegendProps) {
           <Section title="Beads">
             <ZoneKey />
             <PriorityNote />
+          </Section>
+          <Section title="Flow">
+            <FlowKey />
           </Section>
         </div>
       )}
@@ -158,6 +163,33 @@ function PriorityNote() {
       </span>
       <span className="whitespace-nowrap">bigger · brighter = priority</span>
     </div>
+  );
+}
+
+function FlowKey() {
+  return (
+    <div className="flex flex-col gap-1 uppercase tracking-wider text-fg-muted">
+      <div className="flex items-center gap-2">
+        <ReceiptGlyph rings={1} />
+        <span>pickup</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <ReceiptGlyph rings={2} />
+        <span>completion</span>
+      </div>
+    </div>
+  );
+}
+
+function ReceiptGlyph({ rings }: { rings: 1 | 2 }) {
+  return (
+    <span
+      role="img"
+      aria-label={rings === 1 ? 'one ring' : 'two rings'}
+      className="relative inline-block h-3 w-3 shrink-0 rounded-full border border-fg-muted"
+    >
+      {rings === 2 && <span className="absolute inset-[3px] rounded-full border border-fg-muted" />}
+    </span>
   );
 }
 

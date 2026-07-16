@@ -38,6 +38,8 @@ export function observeFlow(inputs: ObserveFlowInputs): {
 } {
   const startedAtMs = inputs.memory?.startedAtMs ?? inputs.nowMs;
   const unavailable = new Set(inputs.unavailableRigKeys);
+  const rigKeys = Object.keys(inputs.openTotalsByRig);
+  const observedRigCount = rigKeys.filter((rigKey) => !unavailable.has(rigKey)).length;
   const observedForMs = Math.min(
     FLOW_OBSERVATION_WINDOW_MS,
     Math.max(0, inputs.nowMs - startedAtMs),
@@ -58,6 +60,8 @@ export function observeFlow(inputs: ObserveFlowInputs): {
     flow: {
       observedForMs,
       windowMs: FLOW_OBSERVATION_WINDOW_MS,
+      observedRigCount,
+      totalRigCount: rigKeys.length,
       backloggedRigCount: availableBacklog.length,
       movingRigCount: movingRigs.size,
       stillRigKeys: selectStillRigs(inputs.current, availableBacklog, movingRigs, observedForMs),

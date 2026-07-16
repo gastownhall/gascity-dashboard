@@ -6,6 +6,7 @@ describe('resolveFixtureKindFromSearch', () => {
     expect(resolveFixtureKindFromSearch('?fixture=aquarium')).toBe('aquarium');
     expect(resolveFixtureKindFromSearch('?fixture=perf')).toBe('perf');
     expect(resolveFixtureKindFromSearch('?fixture=blind')).toBe('blind');
+    expect(resolveFixtureKindFromSearch('?fixture=flow')).toBe('flow');
   });
 
   it('returns null when the query param is absent', () => {

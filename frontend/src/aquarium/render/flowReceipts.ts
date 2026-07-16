@@ -44,9 +44,9 @@ export function paintFlowReceipts(
     const hue = rigHue(receipt.rigKey);
     ctx.strokeStyle =
       hue === null ? palette.pellet : withHueChroma(palette.text, hue, RECEIPT_CHROMA);
-    ctx.lineWidth = Math.max(1.5 / scale, 2);
-    ctx.globalAlpha = Math.max(0.12, 0.7 * (1 - progress));
-    const radius = BASE_RADIUS + RADIUS_GROWTH * progress;
+    ctx.lineWidth = Math.max(2 / scale, 2);
+    ctx.globalAlpha = Math.max(0.12, 0.86 * (1 - progress));
+    const radius = Math.max((11 + 6 * progress) / scale, BASE_RADIUS + RADIUS_GROWTH * progress);
     ring(ctx, x, y, radius);
     if (receipt.kind === 'completion') ring(ctx, x, y, radius * 0.58);
   }

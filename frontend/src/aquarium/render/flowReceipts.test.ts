@@ -28,6 +28,8 @@ function flow(kind: 'pickup' | 'completion', ageMsAtSnapshot = 1_000): FlowObser
   return {
     observedForMs: 6_000,
     windowMs: 60_000,
+    observedRigCount: 1,
+    totalRigCount: 1,
     backloggedRigCount: 1,
     movingRigCount: 1,
     stillRigKeys: [],
@@ -88,5 +90,11 @@ describe('paintFlowReceipts', () => {
     paintFlowReceipts(early.ctx, flow('pickup'), [FORMATION], PALETTE, VIEW, 1, 6_000, true);
     paintFlowReceipts(late.ctx, flow('pickup'), [FORMATION], PALETTE, VIEW, 1, 60_000, true);
     expect(late.arcs).toEqual(early.arcs);
+  });
+
+  it('keeps receipt rings legible at the overview zoom', () => {
+    const overview = recordingContext();
+    paintFlowReceipts(overview.ctx, flow('pickup'), [FORMATION], PALETTE, VIEW, 0.36, 6_000, true);
+    expect((overview.arcs[0]?.radius ?? 0) * 0.36).toBeGreaterThanOrEqual(10);
   });
 });

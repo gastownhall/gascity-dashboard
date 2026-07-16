@@ -10,6 +10,7 @@ import {
   buildAquariumFixture,
   buildBlindFixture,
   buildFixtureInputs,
+  buildFlowFixture,
   buildPerfFixture,
 } from './index';
 import { RICH_FISH_BUDGET } from '../render/fishPainter';
@@ -236,5 +237,18 @@ describe('buildFixtureInputs dispatcher', () => {
     expect(buildFixtureInputs('aquarium').manifest.kind).toBe('aquarium');
     expect(buildFixtureInputs('perf').manifest.kind).toBe('perf');
     expect(buildFixtureInputs('blind').manifest.kind).toBe('blind');
+    expect(buildFixtureInputs('flow').manifest.kind).toBe('flow');
+  });
+});
+
+describe("'flow' fixture", () => {
+  const scene = buildFlowFixture();
+
+  it('provides a baseline and current snapshot with one expected pickup and completion', () => {
+    expect(scene.transitionBaselineInputs).toBeDefined();
+    expect(scene.manifest.flowReceipts).toEqual([
+      { beadId: 'aq-alpha-scout', rigKey: 'reef-alpha', kind: 'pickup' },
+      { beadId: 'flow-beta-completed', rigKey: 'reef-beta', kind: 'completion' },
+    ]);
   });
 });
