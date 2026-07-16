@@ -12,6 +12,7 @@ export const LOG_COMPONENT = {
   views: 'views',
   convoy: 'convoy',
   runs: 'runs',
+  aquarium: 'aquarium',
 } as const;
 
 export type LogComponent = (typeof LOG_COMPONENT)[keyof typeof LOG_COMPONENT];

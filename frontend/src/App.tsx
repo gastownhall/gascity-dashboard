@@ -78,6 +78,13 @@ export function App() {
     () => filterEnabledViews(ALL_VIEWS, enabledModules),
     [enabledModules],
   );
+  // Registry-declared full-bleed routes (e.g. /reef) get Layout's unpadded
+  // <main> — computed from the same filtered set so a disabled module can
+  // never leave a stale full-bleed match behind.
+  const fullBleedPaths = useMemo(
+    () => enabledViews.filter((v) => v.fullBleed === true).map((v) => v.path),
+    [enabledViews],
+  );
   const defaultResolution = useMemo(
     () => resolveDefaultViewWithLogging(enabledViews, defaultViewEnv),
     [enabledViews, defaultViewEnv],
@@ -98,7 +105,7 @@ export function App() {
           <ReadOnlyProvider readOnly={readOnly}>
             <RunSummaryProvider>
               <AttentionRoot enabledModules={enabledModules} operator={operator}>
-                <Layout>
+                <Layout fullBleedPaths={fullBleedPaths}>
                   <Suspense fallback={null}>
                     <Routes>
                       {/* `/` resolution (PRD §6 / bead 9yj.5):

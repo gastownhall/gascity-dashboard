@@ -53,6 +53,12 @@ export interface ViewDescriptor<TElement = unknown> {
   /** Module's declared candidacy for `/`. Operator may override via
    *  DEFAULT_VIEW env. Registry validates exactly-one resolution. */
   defaultRoute?: boolean;
+  /** Opt out of Layout's standard padded/max-width column and render this
+   *  view's element directly inside an unpadded, relatively-positioned
+   *  `<main>` (Header still renders above it). For routes that own their
+   *  entire viewport as a scene rather than a document (e.g. `/reef`).
+   *  Defaults to false — every other view keeps the reading-measure shell. */
+  fullBleed?: boolean;
 }
 
 // ── Backend module ───────────────────────────────────────────────────────

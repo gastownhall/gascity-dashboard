@@ -9,12 +9,14 @@
 import { activityView } from './modules/activity.module.js';
 import { healthView } from './modules/health.module.js';
 import { maintainerView } from './modules/maintainer/maintainer.module.js';
+import { reefView } from './modules/reef.module.js';
 import type { FrontendViewDescriptor } from './types.js';
 
 export const ALL_VIEWS: ReadonlyArray<FrontendViewDescriptor> = [
   activityView,
   healthView,
   maintainerView,
+  reefView,
 ];
 
 export type { FrontendViewDescriptor };

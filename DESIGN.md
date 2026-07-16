@@ -134,3 +134,186 @@ Both the Active and Historical sections of the Runs view collapse to a small def
 - **Don't** carry meaning in color alone. Strip the page to greyscale; every state must still be readable.
 - **Don't** use em dashes in UI copy. Commas, colons, semicolons, periods, or parentheses.
 - **Don't** use `#000` or `#fff`. Every neutral is tinted toward the maroon hue.
+
+## 7. /reef (the aquarium): a licensed diorama
+
+The reef route is the one page in the system that is a scene, not a spread. It
+renders the live fleet as an aquarium seen through glass: a full-bleed Canvas
+2D world with a stable seabed geography (rigs as formations), sessions as
+procedurally drawn fish, and open beads as food pellets. The operator pans and
+zooms; detail arrives with proximity. This section is the named carve-out that
+licenses it; outside this route, nothing here applies.
+
+### Still binding on /reef
+
+- **The Greyscale Test, carried by posture.** Every fish state must be
+  identifiable with color stripped: pose, position in the water column, eye,
+  and fin attitude carry the state. Color carries emphasis and rig identity
+  (below), never state.
+- **The One Mark Rule, adapted.** When attention is needed, the single maroon
+  per viewport is the overlay's "N need attention" mark beside the neutral tide
+  report. When no agent needs attention, the viewport has no maroon. No fish,
+  pellet, formation, recent-movement cue, or tide-report fact is ever maroon.
+- **Colour as fleet identity (the licensed exception).** On /reef only, hue is
+  an identity channel, not merely emphasis: every session of a rig and its beads
+  carry the rig's hue, so project ownership reads at a glance. This is the one
+  place the system lets colour carry meaning, and it is bounded. Hue names the
+  _group_, never the _state_ — state stays in pose, position, eye, and fin, so
+  the Greyscale Test above still passes: strip colour and every state is still
+  legible; only the group label is lost. The rig palette is a curated, vivid,
+  non-maroon set (the ledger keeps maroon to itself). Hue is the ONLY project
+  signal and never carries state. The fish channels stay orthogonal: **hue** =
+  rig, **size and shape** = agent type, **pose** = agent state. Pellets carry
+  **hue** = rig and **luminance** = priority (below); their status is not a
+  colour at all. The mayor's city stratum and unrigged agents
+  carry no project, so they swim neutral against the coloured schools. A busy
+  city has more rigs than curated hues, so hue is a _coarse_ group, not a unique
+  per-rig key; the collapsible key (below) and the per-formation coloured label
+  carry the exact rig. Bead status is read from WHERE a morsel lives in the
+  water, never a shade: drifting in the column (open), held at a fish's mouth (in
+  progress), settled squashed on the seabed (blocked), and a slashed bead `⊘`
+  on the seabed (in progress, but its assigned live agent was not observed). A
+  hairline tethers a working fish to the in-progress bead held at its mouth, so
+  the working pair reads as one unit without a hover. Diamonds remain Formula
+  Run and fixture vocabulary; reef beads never use them.
+- **Pellets carry bead metadata as food behaviour, not a chart.** Beyond hue
+  (rig), an open bead's other facts read diegetically: its
+  **age** is its drift height (fresh food floats high, stale food sinks toward
+  but stays above the seabed, so the vertical spread reads backlog staleness);
+  its **priority** is its morsel size (a higher-priority bead is a bigger,
+  choicer morsel), spread wide enough that a P0 is a different order of morsel
+  rather than a subtly larger dot, with an unprioritised bead sized neutrally
+  (never smaller than a known low priority — absence of a priority is not
+  evidence of low priority), and reinforced by a same-hue **luminance** (dim P3 →
+  bright P0/P1) — size stays authoritative because depth haze dims a distant
+  morsel, so luminance never decides priority alone; and a **newly-created** bead
+  falls in from the surface like scattered food (the arrival twin of the closing
+  gulp). Pellet size is bead priority here, distinct from fish size = agent type
+  — the two marks never collide. A **P0** morsel additionally **blooms in its own
+  rig hue** from LOD1 up (a soft same-hue glow, no gradient, no animation, no
+  foreign white catchlight): redundant emphasis on the highest-priority beads,
+  not a new channel, so the scarce P0s read at a glance in their own colour. Each
+  stays truthful: age is `created_at`, size, luminance and bloom are `priority`,
+  the drop fires only on a real new bead.
+- **The surface shelf is the "needs a human" scan line.** Every distressed agent
+  (awaiting-input, errored, stalled, rate-limited — the shared
+  `AgentNeedsYouReason`) rises to a stack of micro-lanes just under the waterline,
+  so one glance at the top strip reads what needs you instead of scanning the
+  whole column for scattered distress. Each rises near its home x and trails a
+  faint mooring line down to its rig's formation, so "which rig needs you"
+  survives the climb; the per-pose silhouette (nose-up open gape / belly-up /
+  nose-down upright list / tucked-and-narrow) keeps the four reasons distinct
+  within the shelf, so the Greyscale Test still passes — each cue is a frozen
+  posture, never a motion, so it survives a still frame and reduced-motion.
+  Reduced-motion holds the surfaced fish as a truthful still frame.
+  Work that is stuck with no agent to be its fish surfaces as a single warn
+  **"N stranded"** fact in the shared status ledger that expands to a drill-in
+  list (grouped by rig, each row linking to the bead), and it counts
+  **orphaned** work only —
+  a bead whose assigned agent's session died mid-flight. An idle rig's unassigned
+  backlog is backlog, not an alarm: surfacing every ready bead of every agentless
+  rig would drown this scan line, so it stays in the drift and the formation
+  totals. The pill is warn, never the ledger's reserved maroon.
+- **The backlog thins with distance so the fleet stays the subject.** A busy
+  city has hundreds of open beads and only a handful of live sessions, so at the
+  whole-tank overview the drifting backlog is sampled to a representative slice
+  (held, owner-unobserved, blocked and P0 morsels always draw); zooming in only ever adds pellets,
+  and the exact per-rig totals stay in the formation label and the key. Fewer
+  visible pellets never means fewer beads — the same truthful contract as the
+  per-rig render cap. This keeps the operator's subject, the fleet, from
+  drowning in a cloud of near-identical food.
+- **Flow is observed, never reconstructed.** The neutral tide report states
+  exactly how long this browser session has observed the reef, how many
+  backlogged rigs produced a pickup or completion in the rolling one-hour
+  window, up to two available backlogged rigs that stayed still after five
+  minutes, and the current count of waiting P0 beads. Before five minutes it
+  says "observing flow" and makes no stillness claim. Current work has one
+  authoritative mark: an in-progress morsel is held at its agent fish's mouth
+  and tethered to that fish. It means current bead assignment; the fish pose
+  separately carries whether turn activity is observed. Pickup and completion
+  transitions both feed the observation window, but are not drawn as separate
+  event receipts. A fixed hollow three-bubble trail above a formation means
+  only that the rig produced at least one pickup or completion in the last
+  fifteen minutes; bubble count never encodes event count or kind. Hollow
+  outlines keep the cue visually distinct from filled bead morsels. The cue is
+  static, so reduced motion needs no alternate treatment. Rig ownership comes
+  from the per-rig bead feed, never from bead-id text. A failed rig read is
+  excluded from flow totals and retains its prior
+  transition state so absence cannot become a false completion. The
+  backlogged-rig, waiting-P0, and needs-attention facts are quiet,
+  keyboard-operable drill-downs when their count is nonzero. They expand in
+  place, never into a modal. Selecting a P0 bead draws a dashed focus mark
+  around its morsel; selecting a rig marks its formation and currently rendered
+  beads; selecting an attention row marks its fish. The expanded backlog copy
+  names both semantics plainly: held morsel means that agent's current bead;
+  bubble trail means work moved in the last fifteen minutes.
+  Partial coverage is also drillable: when the denominator is known it names
+  the rig reads that failed and states that counts exclude them; when an
+  upstream list is incomplete it says the denominator is unknown.
+- **Keyboard navigation stays visible.** The semantic fish list remains
+  visually hidden at rest, but its currently focused link surfaces as a compact
+  card over the tank. Keyboard users never enter an invisible sequence of
+  drill-down targets.
+- **Provider telemetry is never guessed.** `activity: in-turn` is the only fact
+  that may be called working. A live session whose provider omits turn activity
+  is labelled "activity unknown," never idle or working. Its detail card explains that
+  turn activity is not reported by the provider. Its calm visual pose reflects
+  the absence of turn evidence, not a claim that the agent has stopped.
+- **Visible morsels are practical targets.** Every rendered bead is hoverable
+  and clickable at a stable screen-space distance at overview, LOD1, and LOD2.
+  Hit testing uses the same LOD-thinning predicate as painting, so an invisible
+  backlog item is never an invisible target. Fish win when marks overlap; dense
+  pellet clusters resolve to the nearest visible bead deterministically.
+- **Formation counts name what they count.** In-scene and key labels say
+  "N open," because the exact total may be larger than the visibly thinned
+  morsel cloud. Selecting a rig marks its formation and every currently
+  rendered bead in that rig, preserving the spatial association without
+  pretending the sample is the total.
+- **Dependencies reveal on focus, never globally.** Selecting a bead pellet
+  draws a faint dashed link to each bead it depends on whose pellet is on screen
+  (dashed so it never reads as the solid fish-to-bead tether). A busy city has
+  hundreds of dependency edges; drawing them all at once is spaghetti that
+  re-creates the coloured-dust problem, so the graph is revealed one bead at a
+  time and clears when the selection does — the honest-zoom principle applied to
+  interaction, not just distance.
+- **The One Voice Rule and tabular figures** for all overlay and in-scene
+  text. The scene draws creatures; the type stays the system's type.
+- **`prefers-reduced-motion`.** The scene freezes to a truthful still frame:
+  poses and positions remain facts, autonomous animation stops, state changes
+  swap instantly. User-initiated pan and zoom still work, as instant jumps.
+- **Truthfulness.** Nothing fish-shaped or pellet-shaped is decorative. Every
+  fish is a live session, every pellet is a real bead, every count is a real
+  count. Ambience (water gradient, light shafts, particulate, kelp) is
+  licensed only for things no operator could mistake for data.
+- **No external assets.** The scene is procedural: no sprite sheets, no image
+  files, no icon fonts.
+
+### Suspended on /reef only
+
+- **The Flat Page Rule.** The scene has depth by definition: parallax layers,
+  fog with distance, a gradient water column. The page around the canvas
+  stays flat.
+- **The gradient prohibition**, for the water itself. Water is a gradient;
+  text and controls are not.
+- **The 150ms fade rule**, for continuous motion. Swimming, drifting, and
+  camera glides are continuous; discrete state changes still resolve quickly
+  rather than theatrically.
+- **Light-by-default's fixed surface.** The tank keys its water mood to the
+  theme: sunlit shallows in light, midnight deep in dark. The dark tank is a
+  scene, not a dark-slate chrome reflex.
+
+### Named Rules
+
+**The Pane Rule.** The reef is a window, not a page. Chrome inside the glass
+is limited to the tide report and its in-place drill-down, its conditional
+attention mark and drill-down, the conditional "N stranded" fact and
+drill-down, partial-coverage detail, the connection state, the zoom controls,
+and a
+collapsible key (the rig roster mapping colour to rig name + open-bead count,
+and the bead **zone** key naming where each state's morsel lives); everything
+else the operator learns by looking at the water. The key is translucent and collapses to a single toggle,
+so the glass clears on demand.
+
+**The Honest Zoom Rule.** Zooming in may only reveal true detail. If a label,
+number, or creature becomes legible at closer zoom, it must be a fact from the
+live snapshot; the scene never invents detail to fill the glass.

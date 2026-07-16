@@ -24,6 +24,7 @@ import type {
   HealthOutputBody,
   Message,
   MonitorFeedItemResponse,
+  RigResponse,
   SessionPendingResponse,
   SessionResponse,
   StatusBody,
@@ -263,6 +264,7 @@ function countByStatus(beads: readonly Bead[], status: BeadStatus): number {
 export interface TestCitySupervisorData {
   cities: CityInfo[];
   beads: Bead[];
+  rigs: RigResponse[];
   agents: AgentResponse[];
   sessions: SessionResponse[];
   mail: Message[];
@@ -314,6 +316,16 @@ export function buildTestCitySupervisorData(nowMs: number = Date.now()): TestCit
   const beads = [...BEAD_SPECS, ...WORKFLOW_GROUPS].map((s) => specToBead(s, iso));
   const beadById = new Map(beads.map((b) => [b.id, b]));
   const agents = AGENT_SPECS.map((s) => specToAgent(s, iso));
+  const rigs: RigResponse[] = TEST_CITY_RIGS.map((name) => {
+    const rigAgents = agents.filter((agent) => agent.rig === name);
+    return {
+      name,
+      path: `/tmp/${TEST_CITY_NAME}/rigs/${name}`,
+      suspended: false,
+      agent_count: rigAgents.length,
+      running_count: rigAgents.filter((agent) => agent.running).length,
+    };
+  });
   const sessions = buildSessions(AGENT_SPECS, iso);
   const mail = MAIL_SPECS.map((s) => specToMessage(s, iso));
   const formulaFeed = RUN_SPECS.map((s) => specToRun(s, iso));
@@ -363,6 +375,7 @@ export function buildTestCitySupervisorData(nowMs: number = Date.now()): TestCit
   return {
     cities,
     beads,
+    rigs,
     agents,
     sessions,
     mail,

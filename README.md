@@ -19,6 +19,7 @@ Until then, this repo exists so the dashboard can move quickly as a standalone N
 - **Mail** — read any agent's inbox via a persistent "Reading as" strip, with generated-supervisor send/reply/archive/read-state writes. Sends always go from the operator; impersonation is read-only.
 - **Activity** — supervisor events, deploy history, and recent project commits in one operator-facing timeline with route-level filters.
 - **Health** — supervisor state, host memory + load, admin process stats, local tool diagnostics, plus a 24-hour dolt-noms trend sparkline.
+- **Reef (experimental)** — a direct-link ambient aquarium at `/reef`: live sessions become fish, real beads become morsels, and rig ownership reads as schools and labelled bead fields. It is intentionally absent from primary navigation while its visual language is evaluated.
 - **Maintainer / Triage** — optional first-party GitHub triage workspace, enabled with `MODULES_ENABLED=maintainer`; supervisor sling dispatch stays in the browser and the dashboard service records only local slung-state/audit facts.
 
 ## Quick start (dev)

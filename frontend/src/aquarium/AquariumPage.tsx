@@ -1,0 +1,309 @@
+// /reef route shell. Wires data (useAquariumData) -> world derivation
+// (deriveWorldSnapshot) -> simulation + paint (useAquariumRenderLoop) ->
+// camera (useAquariumCamera) -> overlay chrome + a11y (AquariumOverlay,
+// SrFishList, EntityCard, HoverTooltip). specs/plans/reef-aquarium.md is the
+// binding contract; DESIGN.md §7 is the visual carve-out.
+//
+// UNRESOLVED IMPORTS (expected at hand-off): derive/deriveWorld.ts and
+// render/palette.ts are owned by sibling modules and did not exist at the
+// time this file was written.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { MouseEvent, PointerEvent } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
+import {
+  EMPTY_FLOW_OBSERVATION,
+  LOD1_ZOOM,
+  type FixtureKind,
+  type ReefFocus,
+  type ScenePalette,
+  type SimState,
+  type Viewport,
+  type WorldSnapshot,
+} from './contracts';
+import { deriveWorldSnapshot, type DeriveMemory } from './derive/deriveWorld';
+import { buildScenePalette } from './render/palette';
+import { AquariumLegend } from './page/AquariumLegend';
+import { AquariumOverlay } from './page/AquariumOverlay';
+import { buildRigLegend } from './page/rigLegend';
+import { EntityCard } from './page/EntityCard';
+import { resolveFixtureKindFromSearch } from './page/fixtureMode';
+import { hitTestScene, type HitResult } from './page/hitTest';
+import { HoverTooltip } from './page/HoverTooltip';
+import { readBodyFontFamily, readThemeTokens } from './page/paletteTokens';
+import { SrFishList } from './page/SrFishList';
+import { useAquariumCamera } from './page/useAquariumCamera';
+import { useAquariumData } from './page/useAquariumData';
+import { useAquariumRenderLoop } from './page/useAquariumRenderLoop';
+import { reefFocusIsEligible } from './page/ledgerEligibility';
+
+export interface AquariumPageProps {
+  /** Overrides the URL's `?fixture=` param — the route tests' entry point
+   *  into fixture mode, since jsdom has no real navigation. */
+  fixtureOverride?: FixtureKind;
+}
+
+const HOVER_THROTTLE_MS = 60;
+
+interface SelectedHit {
+  hit: NonNullable<HitResult>;
+  screenX: number;
+  screenY: number;
+}
+
+export function AquariumPage({ fixtureOverride }: AquariumPageProps) {
+  const location = useLocation();
+  const urlFixtureKind = useMemo(
+    () => resolveFixtureKindFromSearch(location.search),
+    [location.search],
+  );
+  const fixtureKind = fixtureOverride ?? urlFixtureKind;
+
+  const { inputs, connState, dataState, coverageKnown, manifest, transitionBaselineInputs } =
+    useAquariumData(fixtureKind);
+  const reducedMotion = usePrefersReducedMotion();
+  const { resolved: themeMood } = useTheme();
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [viewport, setViewport] = useState<Viewport>(measureViewport);
+
+  useEffect(() => {
+    const measure = () => setViewport(measureViewport());
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  // Fixture mode publishes ground truth for the snapshot harness.
+  useEffect(() => {
+    if (manifest === null) return;
+    window.__aquariumManifest = manifest;
+    return () => {
+      delete window.__aquariumManifest;
+    };
+  }, [manifest]);
+
+  const palette: ScenePalette = useMemo(
+    () => buildScenePalette(themeMood, readThemeTokens(), readBodyFontFamily()),
+    [themeMood],
+  );
+
+  // deriveWorldSnapshot on data change; memory lives in a ref (it is
+  // pipeline-internal continuity state, not something a re-render should
+  // reset), nowMs is injected here — the one call site, not inside derive/.
+  const memoryRef = useRef<DeriveMemory | null>(null);
+  const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null);
+  useEffect(() => {
+    const nowMs = Date.now();
+    const baseline =
+      transitionBaselineInputs === null
+        ? null
+        : deriveWorldSnapshot(transitionBaselineInputs, null, nowMs - 1_000);
+    const result = deriveWorldSnapshot(inputs, baseline?.memory ?? memoryRef.current, nowMs);
+    memoryRef.current = result.memory;
+    setSnapshot(result.snapshot);
+  }, [inputs, transitionBaselineInputs]);
+
+  useEffect(() => {
+    if (manifest === null || snapshot === null) return;
+    window.__aquariumFlow = snapshot.flow;
+    return () => {
+      delete window.__aquariumFlow;
+    };
+  }, [manifest, snapshot]);
+
+  // The reef key: which colour is which rig, and where each bead state lives.
+  const rigLegend = useMemo(
+    () => buildRigLegend(snapshot?.formations ?? [], snapshot?.fish ?? []),
+    [snapshot],
+  );
+
+  // requestPaintRef breaks the circular dependency between the camera hook
+  // (which needs to trigger a repaint on gesture) and the render-loop hook
+  // (which needs the camera's ref to paint from) — same "keep a ref pointed
+  // at the latest callback" idiom useCachedData.ts uses for its fetcher.
+  const [hover, setHover] = useState<SelectedHit | null>(null);
+  const [selected, setSelected] = useState<SelectedHit | null>(null);
+  const [focus, setFocus] = useState<ReefFocus | null>(null);
+  useEffect(() => {
+    if (focus === null || snapshot === null) return;
+    if (!reefFocusIsEligible(snapshot, focus, inputs.unavailableBeadRigKeys)) setFocus(null);
+  }, [focus, inputs.unavailableBeadRigKeys, snapshot]);
+  const lastHoverAtRef = useRef(0);
+  // Only a selected PELLET drives dependency links; a selected fish draws none.
+  const selectedBeadId =
+    focus?.kind === 'bead'
+      ? focus.beadId
+      : selected?.hit.kind === 'pellet'
+        ? selected.hit.entity.beadId
+        : null;
+
+  const requestPaintRef = useRef<() => void>(() => {});
+  const camera = useAquariumCamera(viewport, () => requestPaintRef.current());
+  const onCameraWheel = camera.onWheel;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    const onWheel = (event: globalThis.WheelEvent) => onCameraWheel(event);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
+  }, [onCameraWheel]);
+  const renderLoop = useAquariumRenderLoop({
+    canvasRef,
+    viewport,
+    snapshot,
+    cameraRef: camera.cameraRef,
+    palette,
+    reducedMotion,
+    isFixture: fixtureKind !== null,
+    selectedBeadId,
+    focus,
+  });
+  requestPaintRef.current = renderLoop.requestPaint;
+
+  const resolveHit = useCallback(
+    (cssX: number, cssY: number): SelectedHit | null => {
+      if (snapshot === null) return null;
+      const world = camera.worldFromClientOffset(cssX, cssY);
+      const hit = hitTestScene(
+        world.x,
+        world.y,
+        snapshot.fish,
+        renderLoop.simRef.current.fish,
+        snapshot.pellets,
+        renderLoop.simRef.current.pellets,
+        camera.cameraRef.current.zoom,
+      );
+      return hit === null ? null : { hit, screenX: cssX, screenY: cssY };
+    },
+    [snapshot, camera, renderLoop.simRef],
+  );
+
+  const onCanvasClick = useCallback(
+    (e: MouseEvent<HTMLCanvasElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setFocus(null);
+      setSelected(resolveHit(e.clientX - rect.left, e.clientY - rect.top));
+    },
+    [resolveHit],
+  );
+
+  const onCanvasPointerMove = useCallback(
+    (e: PointerEvent<HTMLCanvasElement>) => {
+      camera.onPointerMove(e);
+      const now = Date.now();
+      if (now - lastHoverAtRef.current < HOVER_THROTTLE_MS) return;
+      lastHoverAtRef.current = now;
+      const rect = e.currentTarget.getBoundingClientRect();
+      setHover(resolveHit(e.clientX - rect.left, e.clientY - rect.top));
+    },
+    [camera, resolveHit],
+  );
+
+  const onFocusChange = useCallback(
+    (nextFocus: ReefFocus | null) => {
+      setSelected(null);
+      setHover(null);
+      setFocus(nextFocus);
+      if (nextFocus === null || snapshot === null) return;
+      const point = focusWorldPoint(nextFocus, snapshot, renderLoop.simRef.current);
+      if (point !== null) camera.focusWorldPoint(point.x, point.y, LOD1_ZOOM);
+    },
+    [camera, renderLoop.simRef, snapshot],
+  );
+
+  const ariaLabel = `${snapshot?.fish.length ?? 0} fish; ${snapshot?.needsAttention ?? 0} need attention; connection ${connState}; inventory ${dataState}`;
+
+  return (
+    <div className="relative" style={{ width: viewport.cssWidth, height: viewport.cssHeight }}>
+      <canvas
+        ref={canvasRef}
+        role="img"
+        aria-label={ariaLabel}
+        tabIndex={0}
+        className="absolute inset-0 h-full w-full outline-none focus-mark"
+        onPointerDown={camera.onPointerDown}
+        onPointerMove={onCanvasPointerMove}
+        onPointerUp={camera.onPointerUp}
+        onPointerLeave={() => setHover(null)}
+        onDoubleClick={camera.onDoubleClick}
+        onKeyDown={camera.onKeyDown}
+        onClick={onCanvasClick}
+      />
+      <AquariumOverlay
+        needsAttention={snapshot?.needsAttention ?? 0}
+        flow={snapshot?.flow ?? EMPTY_FLOW_OBSERVATION}
+        connState={connState}
+        dataState={dataState}
+        coverageKnown={coverageKnown}
+        formations={snapshot?.formations ?? []}
+        fish={snapshot?.fish ?? []}
+        pellets={snapshot?.pellets ?? []}
+        strandedWork={snapshot?.strandedWork ?? []}
+        unavailableRigKeys={inputs.unavailableBeadRigKeys}
+        focus={focus}
+        onFocusChange={onFocusChange}
+        onZoomIn={camera.zoomIn}
+        onZoomOut={camera.zoomOut}
+        onReset={camera.resetCamera}
+      />
+      <AquariumLegend legend={rigLegend} />
+      {selected === null && hover !== null && (
+        <HoverTooltip
+          hit={hover.hit}
+          screenX={hover.screenX}
+          screenY={hover.screenY}
+          viewport={viewport}
+        />
+      )}
+      {selected !== null && (
+        <EntityCard
+          hit={selected.hit}
+          anchorX={selected.screenX}
+          anchorY={selected.screenY}
+          viewport={viewport}
+          onDismiss={() => setSelected(null)}
+        />
+      )}
+      <SrFishList fish={snapshot?.fish ?? []} />
+    </div>
+  );
+}
+
+/**
+ * The viewport under the Header, measured live — never a hardcoded px. The
+ * Header is app chrome rendered by Layout above this route's `<main>`;
+ * querying it by tag is safe because /reef renders no `<header>` of its own.
+ * Before the first post-mount measurement (there is exactly one `<header>`
+ * in the DOM at that point, or none on a very first paint before Layout
+ * commits) this degrades to a 0px header inset, corrected on the immediate
+ * follow-up effect run.
+ */
+function measureViewport(): Viewport {
+  const header = document.querySelector('header');
+  const headerHeight = header !== null ? header.getBoundingClientRect().height : 0;
+  return {
+    cssWidth: window.innerWidth,
+    cssHeight: Math.max(0, window.innerHeight - headerHeight),
+    dpr: window.devicePixelRatio || 1,
+  };
+}
+
+function focusWorldPoint(
+  focus: ReefFocus,
+  snapshot: WorldSnapshot,
+  sim: SimState,
+): { x: number; y: number } | null {
+  switch (focus.kind) {
+    case 'rig': {
+      const formation = snapshot.formations.find((candidate) => candidate.key === focus.rigKey);
+      return formation === undefined ? null : { x: formation.anchorX, y: formation.anchorY };
+    }
+    case 'bead':
+      return sim.pellets[focus.beadId] ?? null;
+    case 'fish':
+      return sim.fish[focus.fishId] ?? null;
+  }
+}

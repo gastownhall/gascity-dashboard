@@ -28,11 +28,13 @@ import {
   zListBodyAgentResponse,
   zListBodyBead,
   zListBodySessionResponse,
+  zListBodyRigResponse,
   zListBodyWireEvent,
   zMailListBody,
   zMessage,
   zMonitorFeedItemResponse,
   zSessionResponse,
+  zRigResponse,
   zStatusBody,
   zSupervisorCitiesOutputBody,
   zSupervisorHealthOutputBody,
@@ -50,6 +52,7 @@ void test('every seeded item conforms to the generated supervisor zod schemas', 
   for (const bead of data.beads) zBead.parse(bead);
   for (const agent of data.agents) zAgentResponse.parse(agent);
   for (const session of data.sessions) zSessionResponse.parse(session);
+  for (const rig of data.rigs) zRigResponse.parse(rig);
   for (const message of data.mail) zMessage.parse(message);
   for (const run of data.formulaFeed) zMonitorFeedItemResponse.parse(run);
   for (const event of data.events) zTypedEventStreamEnvelope.parse(event);
@@ -67,6 +70,7 @@ void test('matched list envelopes conform to their generated zod schemas', () =>
   parseMatched('/beads', zListBodyBead);
   parseMatched('/agents', zListBodyAgentResponse);
   parseMatched('/sessions', zListBodySessionResponse);
+  parseMatched('/rigs', zListBodyRigResponse);
   parseMatched('/mail', zMailListBody);
   parseMatched('/events', zListBodyWireEvent);
   parseMatched('/formulas/feed', zFormulaFeedBody);
