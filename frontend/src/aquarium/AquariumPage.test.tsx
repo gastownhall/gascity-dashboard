@@ -147,13 +147,10 @@ describe('AquariumPage (fixture mode)', () => {
     expect(() => renderAquarium('aquarium')).not.toThrow();
   });
 
-  it('publishes deterministic pickup and completion receipts for the flow fixture', async () => {
+  it('publishes the rigs with recent movement for the flow fixture', async () => {
     renderAquarium('flow');
     await waitFor(() => {
-      expect(window.__aquariumFlow?.receipts).toEqual([
-        expect.objectContaining({ beadId: 'aq-alpha-scout', kind: 'pickup' }),
-        expect.objectContaining({ beadId: 'flow-beta-completed', kind: 'completion' }),
-      ]);
+      expect(window.__aquariumFlow?.recentlyMovingRigKeys).toEqual(['reef-alpha', 'reef-beta']);
     });
   });
 

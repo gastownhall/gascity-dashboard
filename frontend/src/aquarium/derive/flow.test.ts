@@ -38,11 +38,11 @@ describe('observeFlow', () => {
       movingRigCount: 0,
       p0Waiting: 1,
       stillRigKeys: [],
-      receipts: [],
+      recentlyMovingRigKeys: [],
     });
   });
 
-  it('emits one pickup receipt when a bead becomes held, then does not repeat it', () => {
+  it('marks a rig as recently moving when a bead becomes held without exposing event marks', () => {
     const first = observe({ b1: holder('alpha') }, {}, null, NOW);
     const pickedUp = observe(
       { b1: holder('alpha', 'held') },
@@ -57,24 +57,16 @@ describe('observeFlow', () => {
       NOW + 2_000,
     );
 
-    expect(pickedUp.flow.receipts).toEqual([
-      expect.objectContaining({ beadId: 'b1', rigKey: 'alpha', kind: 'pickup' }),
-    ]);
-    expect(stable.flow.receipts).toHaveLength(1);
+    expect(pickedUp.flow.recentlyMovingRigKeys).toEqual(['alpha']);
+    expect(stable.flow.recentlyMovingRigKeys).toEqual(['alpha']);
   });
 
-  it('attributes completion to the previous holder rig, never to a bead-id prefix', () => {
+  it('attributes recent completion movement to the previous holder rig, never a bead-id prefix', () => {
     const previous = { 'beta-looking-id': holder('alpha', 'held') };
     const first = observe(previous, {}, null, NOW);
     const completed = observe({}, previous, first.memory, NOW + 1_000);
 
-    expect(completed.flow.receipts).toEqual([
-      expect.objectContaining({
-        beadId: 'beta-looking-id',
-        rigKey: 'alpha',
-        kind: 'completion',
-      }),
-    ]);
+    expect(completed.flow.recentlyMovingRigKeys).toEqual(['alpha']);
   });
 
   it('suppresses transitions and stillness claims for an unavailable rig', () => {
@@ -84,7 +76,7 @@ describe('observeFlow', () => {
       'alpha',
     ]);
 
-    expect(unavailable.flow.receipts).toEqual([]);
+    expect(unavailable.flow.recentlyMovingRigKeys).toEqual([]);
     expect(unavailable.flow.observedRigCount).toBe(1);
     expect(unavailable.flow.totalRigCount).toBe(2);
     expect(unavailable.flow.backloggedRigCount).toBe(1);
@@ -114,5 +106,24 @@ describe('observeFlow', () => {
     const first = observe({}, {}, null, NOW);
     const later = observe({}, {}, first.memory, NOW + 3 * 60 * 60 * 1_000);
     expect(later.flow.observedForMs).toBe(later.flow.windowMs);
+  });
+
+  it('expires the recent-movement cue after 15 minutes while retaining rolling movement', () => {
+    const first = observe({ b1: holder('alpha') }, {}, null, NOW);
+    const pickedUp = observe(
+      { b1: holder('alpha', 'held') },
+      { b1: holder('alpha') },
+      first.memory,
+      NOW + 1_000,
+    );
+    const later = observe(
+      { b1: holder('alpha', 'held') },
+      { b1: holder('alpha', 'held') },
+      pickedUp.memory,
+      NOW + 15 * 60 * 1_000 + 1_000,
+    );
+
+    expect(later.flow.recentlyMovingRigKeys).toEqual([]);
+    expect(later.flow.movingRigCount).toBe(1);
   });
 });

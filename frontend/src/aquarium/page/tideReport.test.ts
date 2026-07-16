@@ -12,7 +12,7 @@ function flow(overrides: Partial<FlowObservation> = {}): FlowObservation {
     movingRigCount: 0,
     stillRigKeys: [],
     p0Waiting: 3,
-    receipts: [],
+    recentlyMovingRigKeys: [],
     ...overrides,
   };
 }

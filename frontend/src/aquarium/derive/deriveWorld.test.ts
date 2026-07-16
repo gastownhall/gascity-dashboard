@@ -161,7 +161,7 @@ describe('deriveWorldSnapshot — diff-eater', () => {
     );
 
     expect(snapshot.pellets.filter((p) => p.state === 'eaten')).toEqual([]);
-    expect(snapshot.flow.receipts).toEqual([]);
+    expect(snapshot.flow.recentlyMovingRigKeys).toEqual([]);
   });
 });
 

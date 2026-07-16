@@ -51,7 +51,7 @@ function snapshot(overrides: Partial<WorldSnapshot> = {}): WorldSnapshot {
       movingRigCount: 0,
       stillRigKeys: [],
       p0Waiting: 1,
-      receipts: [],
+      recentlyMovingRigKeys: [],
     },
     ...overrides,
   };

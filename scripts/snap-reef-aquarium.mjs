@@ -19,7 +19,7 @@
 // Output (under --out, default /tmp/reef-aquarium-snaps/<timestamp>/):
 //   <theme>-lod0.png, <theme>-lod1.png, <theme>-lod2.png   per theme (light, dark)
 //   manifest.json               window.__aquariumManifest (identical across themes)
-//   flow.png / flow.json        deterministic pickup + completion receipt proof
+//   flow.png / flow.json        deterministic recent rig movement proof
 //   blind-<i>.png               unlabeled fish crops (light theme only)
 //   blind-key.json              answer key for the blind crops (index -> pose)
 //   perf.json                   frame-time stats from the scripted camera workout
@@ -141,11 +141,11 @@ async function waitForManifest(page, timeoutMs) {
   return null;
 }
 
-async function waitForFlowReceipts(page, timeoutMs) {
+async function waitForRecentRigMovement(page, timeoutMs) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const flow = await page.evaluate(() => window.__aquariumFlow ?? null);
-    if (flow?.receipts?.length > 0) return flow;
+    if (flow?.recentlyMovingRigKeys?.length > 0) return flow;
     await page.waitForTimeout(150);
   }
   return null;
@@ -256,7 +256,7 @@ async function captureBlindCrops(browser, errors, shots) {
   return manifest;
 }
 
-async function captureFlowReceipts(browser, errors, shots) {
+async function captureRecentRigMovement(browser, errors, shots) {
   const ctx = await newThemeContext(browser, 'light');
   const page = await ctx.newPage();
   const bucket = [];
@@ -268,16 +268,16 @@ async function captureFlowReceipts(browser, errors, shots) {
     });
     await page.waitForSelector('canvas', { timeout: 10_000 });
     const manifest = await waitForManifest(page, 10_000);
-    const flow = await waitForFlowReceipts(page, 10_000);
+    const flow = await waitForRecentRigMovement(page, 10_000);
     if (!manifest) bucket.push('missing window.__aquariumManifest for flow fixture');
     if (!flow) {
-      bucket.push('missing window.__aquariumFlow receipts for flow fixture');
+      bucket.push('missing window.__aquariumFlow recent movement for flow fixture');
     } else if (manifest) {
-      const actual = flow.receipts.map(({ beadId, rigKey, kind }) => ({ beadId, rigKey, kind }));
-      const expected = manifest.flowReceipts ?? [];
+      const actual = flow.recentlyMovingRigKeys;
+      const expected = manifest.recentlyMovingRigKeys ?? [];
       if (JSON.stringify(actual) !== JSON.stringify(expected)) {
         bucket.push(
-          `flow receipt mismatch: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`,
+          `recent movement mismatch: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`,
         );
       }
       await writeFile(`${OUT}/flow.json`, JSON.stringify(flow, null, 2));
@@ -451,8 +451,8 @@ async function main() {
       }
     }
 
-    await captureFlowReceipts(browser, errors, shots);
-    console.log('[flow] pickup/completion receipts captured');
+    await captureRecentRigMovement(browser, errors, shots);
+    console.log('[flow] recent rig movement captured');
 
     await captureBlindCrops(browser, errors, shots);
     console.log('[blind] crops captured');

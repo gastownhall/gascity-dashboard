@@ -50,7 +50,7 @@ const FLOW: FlowObservation = {
   movingRigCount: 0,
   stillRigKeys: [],
   p0Waiting: 3,
-  receipts: [],
+  recentlyMovingRigKeys: ['alpha'],
 };
 
 const FORMATIONS: RigFormation[] = [
@@ -154,11 +154,18 @@ describe('AquariumOverlay', () => {
     expect(screen.queryByRole('button', { name: '0 P0 waiting' })).toBeNull();
   });
 
-  it('expands backlogged rigs, explains receipt rings, and highlights a selected rig', () => {
+  it('expands backlogged rigs, explains current work and recent movement, and highlights a rig', () => {
     const { onFocusChange } = renderOverlay();
     fireEvent.click(screen.getByRole('button', { name: '2 backlogged rigs' }));
     expect(screen.getByRole('region', { name: 'Backlogged rig details' })).toBeTruthy();
-    expect(screen.getByText(/one ring marks a pickup; two rings mark a completion/i)).toBeTruthy();
+    expect(screen.getByText(/a morsel held at a fish's mouth is that agent's current bead/i)).toBeTruthy();
+    expect(screen.getByText(/bubble trail means work moved in the last 15 minutes/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Highlight rig alpha' }).textContent).toContain(
+      'moved recently',
+    );
+    expect(screen.getByRole('button', { name: 'Highlight rig beta' }).textContent).not.toContain(
+      'moved recently',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Highlight rig alpha' }));
     expect(onFocusChange).toHaveBeenCalledWith({ kind: 'rig', rigKey: 'alpha' });
   });

@@ -244,11 +244,8 @@ describe('buildFixtureInputs dispatcher', () => {
 describe("'flow' fixture", () => {
   const scene = buildFlowFixture();
 
-  it('provides a baseline and current snapshot with one expected pickup and completion', () => {
+  it('provides a baseline and current snapshot with two expected recently moving rigs', () => {
     expect(scene.transitionBaselineInputs).toBeDefined();
-    expect(scene.manifest.flowReceipts).toEqual([
-      { beadId: 'aq-alpha-scout', rigKey: 'reef-alpha', kind: 'pickup' },
-      { beadId: 'flow-beta-completed', rigKey: 'reef-beta', kind: 'completion' },
-    ]);
+    expect(scene.manifest.recentlyMovingRigKeys).toEqual(['reef-alpha', 'reef-beta']);
   });
 });

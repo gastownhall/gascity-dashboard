@@ -1,20 +1,15 @@
 import {
   FLOW_OBSERVATION_WINDOW_MS,
-  FLOW_RECEIPT_LIFETIME_MS,
+  FLOW_RECENT_MOVEMENT_MS,
   FLOW_STILL_MIN_OBSERVATION_MS,
   type FlowObservation,
-  type FlowReceipt,
-  type FlowReceiptKind,
 } from '../contracts';
 import type { BeadHolder } from './pellets';
 
 const MAX_STILL_RIGS = 2;
 
 interface ObservedEvent {
-  id: string;
-  beadId: string;
   rigKey: string;
-  kind: FlowReceiptKind;
   observedAtMs: number;
 }
 
@@ -66,7 +61,7 @@ export function observeFlow(inputs: ObserveFlowInputs): {
       movingRigCount: movingRigs.size,
       stillRigKeys: selectStillRigs(inputs.current, availableBacklog, movingRigs, observedForMs),
       p0Waiting: countP0Waiting(inputs.current, unavailable),
-      receipts: buildReceipts(events, startedAtMs, inputs.nowMs),
+      recentlyMovingRigKeys: selectRecentlyMovingRigs(events, availableRigKeys, inputs.nowMs),
     },
     memory: { startedAtMs, events },
   };
@@ -100,21 +95,22 @@ function countP0Waiting(
   ).length;
 }
 
-function buildReceipts(
+function selectRecentlyMovingRigs(
   events: readonly ObservedEvent[],
-  startedAtMs: number,
+  availableRigKeys: ReadonlySet<string>,
   nowMs: number,
-): FlowReceipt[] {
-  return events
-    .filter((event) => nowMs - event.observedAtMs < FLOW_RECEIPT_LIFETIME_MS)
-    .map((event) => ({
-      id: event.id,
-      beadId: event.beadId,
-      rigKey: event.rigKey,
-      kind: event.kind,
-      observedAtOffsetMs: event.observedAtMs - startedAtMs,
-      ageMsAtSnapshot: nowMs - event.observedAtMs,
-    }));
+): string[] {
+  return [
+    ...new Set(
+      events
+        .filter(
+          (event) =>
+            availableRigKeys.has(event.rigKey) &&
+            nowMs - event.observedAtMs < FLOW_RECENT_MOVEMENT_MS,
+        )
+        .map((event) => event.rigKey),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
 }
 
 function detectEvents(
@@ -130,30 +126,15 @@ function detectEvents(
       current.state === 'held' &&
       !unavailable.has(current.rigKey)
     ) {
-      events.push(makeEvent(beadId, current.rigKey, 'pickup', inputs.nowMs));
+      events.push({ rigKey: current.rigKey, observedAtMs: inputs.nowMs });
     }
   }
   for (const [beadId, previous] of Object.entries(inputs.previous)) {
     if (inputs.current[beadId] === undefined && !unavailable.has(previous.rigKey)) {
-      events.push(makeEvent(beadId, previous.rigKey, 'completion', inputs.nowMs));
+      events.push({ rigKey: previous.rigKey, observedAtMs: inputs.nowMs });
     }
   }
   return events;
-}
-
-function makeEvent(
-  beadId: string,
-  rigKey: string,
-  kind: FlowReceiptKind,
-  observedAtMs: number,
-): ObservedEvent {
-  return {
-    id: `${kind}:${beadId}:${observedAtMs}`,
-    beadId,
-    rigKey,
-    kind,
-    observedAtMs,
-  };
 }
 
 function p0WaitingForRig(holders: Readonly<Record<string, BeadHolder>>, rigKey: string): number {

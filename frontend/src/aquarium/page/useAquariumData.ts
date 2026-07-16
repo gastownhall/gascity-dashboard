@@ -37,7 +37,7 @@ export interface AquariumDataResult {
   /** Non-null only in fixture mode — the ground truth AquariumPage exposes
    *  as `window.__aquariumManifest` for the honesty-auditor screenshot pass. */
   manifest: FixtureManifest | null;
-  /** Fixture-only prior snapshot used to produce deterministic transition receipts. */
+  /** Fixture-only prior snapshot used to produce deterministic recent movement. */
   transitionBaselineInputs: DeriveInputs | null;
   refresh: () => Promise<void>;
 }

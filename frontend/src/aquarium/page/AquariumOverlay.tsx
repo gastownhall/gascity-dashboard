@@ -405,11 +405,13 @@ function LedgerDetails(props: LedgerDetailsProps) {
   );
 }
 
-function BacklogDetails({ backloggedRigs, focus, onFocusChange }: LedgerDetailsProps) {
+function BacklogDetails({ backloggedRigs, flow, focus, onFocusChange }: LedgerDetailsProps) {
+  const recentlyMoving = new Set(flow.recentlyMovingRigKeys);
   return (
     <>
       <p className="mt-1 text-label text-fg-muted">
-        One ring marks a pickup; two rings mark a completion. Receipts fade after 15 minutes.
+        A morsel held at a fish&apos;s mouth is that agent&apos;s current bead. A bubble trail means
+        work moved in the last 15 minutes.
       </p>
       <ul className="mt-2 space-y-1">
         {backloggedRigs.map((formation) => {
@@ -430,6 +432,7 @@ function BacklogDetails({ backloggedRigs, focus, onFocusChange }: LedgerDetailsP
                 </span>
                 <span className="tnum shrink-0 text-label uppercase tracking-wider">
                   {formation.openBeadTotal} open
+                  {recentlyMoving.has(formation.key) ? ' · moved recently' : ''}
                 </span>
               </button>
             </li>

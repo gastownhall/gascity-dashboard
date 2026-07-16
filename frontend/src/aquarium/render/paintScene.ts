@@ -35,7 +35,7 @@ import {
   type StaticLayerCache,
 } from './sceneCache';
 import { paintTextLayers } from './text';
-import { paintFlowReceipts } from './flowReceipts';
+import { paintRecentRigMovement } from './rigMovement';
 import { paintActorFocus, paintRigFocus } from './focusHighlights';
 import {
   paintDeepDrift,
@@ -74,16 +74,7 @@ export const paintScene: PaintScene = (ctx, snapshot, sim, camera, viewport, pal
   blitStatic(ctx, cache, camera, viewport, CACHE_MARGIN);
 
   applyLayer(ctx, mid);
-  paintFlowReceipts(
-    ctx,
-    snapshot.flow,
-    snapshot.formations,
-    palette,
-    midView,
-    mid.scale,
-    clockMs,
-    opts.reducedMotion,
-  );
+  paintRecentRigMovement(ctx, snapshot.flow, snapshot.formations, palette, midView, mid.scale);
   paintRigFocus(ctx, opts.focus, snapshot.formations, palette, midView, mid.scale);
 
   applyLayer(ctx, actors);

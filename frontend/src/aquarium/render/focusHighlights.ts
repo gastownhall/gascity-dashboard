@@ -1,6 +1,5 @@
-// Ledger focus marks. Dashed circles are deliberately distinct from the solid
-// one-ring pickup / two-ring completion receipts. The mark uses rig identity
-// hue where available, while the dash pattern carries selection in greyscale.
+// Ledger focus marks. The mark uses rig identity hue where available, while
+// the dash pattern carries selection in greyscale.
 
 import type {
   FishEntity,

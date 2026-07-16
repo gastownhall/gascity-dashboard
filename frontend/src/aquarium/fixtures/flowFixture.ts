@@ -48,10 +48,7 @@ export function buildFlowFixture(): {
     manifest: {
       ...current.manifest,
       kind: 'flow',
-      flowReceipts: [
-        { beadId: PICKUP_BEAD_ID, rigKey: ALPHA_RIG, kind: 'pickup' },
-        { beadId: COMPLETION_BEAD_ID, rigKey: BETA_RIG, kind: 'completion' },
-      ],
+      recentlyMovingRigKeys: [ALPHA_RIG, BETA_RIG],
     },
   };
 }

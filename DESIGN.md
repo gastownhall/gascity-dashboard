@@ -153,7 +153,7 @@ licenses it; outside this route, nothing here applies.
 - **The One Mark Rule, adapted.** When attention is needed, the single maroon
   per viewport is the overlay's "N need attention" mark beside the neutral tide
   report. When no agent needs attention, the viewport has no maroon. No fish,
-  pellet, formation, flow receipt, or tide-report fact is ever maroon.
+  pellet, formation, recent-movement cue, or tide-report fact is ever maroon.
 - **Colour as fleet identity (the licensed exception).** On /reef only, hue is
   an identity channel, not merely emphasis: every session of a rig and its beads
   carry the rig's hue, so project ownership reads at a glance. This is the one
@@ -224,20 +224,25 @@ licenses it; outside this route, nothing here applies.
   backlogged rigs produced a pickup or completion in the rolling one-hour
   window, up to two available backlogged rigs that stayed still after five
   minutes, and the current count of waiting P0 beads. Before five minutes it
-  says "observing flow" and makes no stillness claim. A real pickup releases one
-  expanding ring above its owning formation; a real completion releases two
-  concentric rings. Rings keep the rig hue, while ring count carries event kind
-  in greyscale. They decay after fifteen minutes and freeze at their truthful
-  snapshot age under reduced motion. Rig ownership comes from the per-rig bead
-  feed, never from bead-id text. A failed rig read is excluded from flow totals
-  and retains its prior transition state so absence cannot become a false
-  completion. The backlogged-rig, waiting-P0, and needs-attention facts are
-  quiet, keyboard-operable drill-downs when their count is nonzero. They expand
-  in place, never into a modal. Selecting a P0 bead draws a dashed focus mark
+  says "observing flow" and makes no stillness claim. Current work has one
+  authoritative mark: an in-progress morsel is held at its agent fish's mouth
+  and tethered to that fish. It means current bead assignment; the fish pose
+  separately carries whether turn activity is observed. Pickup and completion
+  transitions both feed the observation window, but are not drawn as separate
+  event receipts. A fixed three-dot
+  bubble trail above a formation means only that the rig produced at least one
+  pickup or completion in the last fifteen minutes; bubble count never encodes
+  event count or kind. The cue is static, so reduced motion needs no alternate
+  treatment. Rig ownership comes from the per-rig bead feed, never from bead-id
+  text. A failed rig read is excluded from flow totals and retains its prior
+  transition state so absence cannot become a false completion. The
+  backlogged-rig, waiting-P0, and needs-attention facts are quiet,
+  keyboard-operable drill-downs when their count is nonzero. They expand in
+  place, never into a modal. Selecting a P0 bead draws a dashed focus mark
   around its morsel; selecting a rig marks its formation and currently rendered
-  beads; selecting an attention row marks its fish. Dashed focus marks must
-  remain visually distinct from solid flow receipts. The expanded flow copy says
-  plainly that one solid ring is a pickup and two solid rings are a completion.
+  beads; selecting an attention row marks its fish. The expanded backlog copy
+  names both semantics plainly: held morsel means that agent's current bead;
+  bubble trail means work moved in the last fifteen minutes.
   Partial coverage is also drillable: when the denominator is known it names
   the rig reads that failed and states that counts exclude them; when an
   upstream list is incomplete it says the denominator is unknown.
