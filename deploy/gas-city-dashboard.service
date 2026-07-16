@@ -77,7 +77,8 @@ RestrictNamespaces=true
 LockPersonality=true
 # NO MemoryDenyWriteExecute: it blocks the mprotect() V8's JIT needs, so node
 # SIGTRAPs at startup (code=dumped/status=TRAP) before running a line of the
-# server. Re-add only alongside `node --jitless`.
+# server. Re-add only alongside `node --jitless`. This same fault was reported
+# and fixed independently by Tudor Saitoc in gastownhall/gascity-dashboard#174.
 SystemCallArchitectures=native
 
 [Install]
