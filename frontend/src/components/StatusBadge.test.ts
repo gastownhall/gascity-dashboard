@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beadStatusTone } from './StatusBadge';
+import { beadStatusTone, stateTone } from './StatusBadge';
 
 describe('beadStatusTone', () => {
   it('uses one canonical tone map for bead detail and bead list badges', () => {
@@ -23,5 +23,18 @@ describe('beadStatusTone', () => {
     expect(beadStatusTone('Active')).toBe('ok');
     expect(beadStatusTone(' completed ')).toBe('neutral');
     expect(beadStatusTone('Blocked')).toBe('stuck');
+  });
+});
+
+describe('stateTone', () => {
+  it("classifies 'crashed' as stuck, alongside failed/errored/stuck", () => {
+    // shared/src/agents/needsYou.ts FAILURE_STATES already includes 'crashed'
+    // (an agent needing the operator); stateTone previously fell through to
+    // 'neutral' for it, disagreeing with the needs-you selector's own claim
+    // that the two classify a state the same way (gascity-dashboard-h5rl.2).
+    expect(stateTone('crashed')).toBe('stuck');
+    expect(stateTone('failed')).toBe('stuck');
+    expect(stateTone('errored')).toBe('stuck');
+    expect(stateTone('stuck')).toBe('stuck');
   });
 });

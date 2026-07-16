@@ -5,6 +5,7 @@ import {
   buildAgentSynopsis,
   isRunningAgent,
   isVisibleUnderRunning,
+  stateBucket,
   stateTone,
 } from './Agents';
 
@@ -111,6 +112,24 @@ describe('stateTone', () => {
     // via the default branch — not crash, not lie with a tone we picked
     // at random.
     expect(stateTone('this-state-does-not-exist')).toBe('neutral');
+  });
+});
+
+describe('stateBucket', () => {
+  it("classifies 'crashed' agents into the 'stuck' bucket, alongside failed/errored/stuck", () => {
+    // shared/src/agents/needsYou.ts FAILURE_STATES already includes
+    // 'crashed'; stateBucket previously fell through to 'idle' for it,
+    // disagreeing with the needs-you selector (gascity-dashboard-h5rl.2).
+    expect(stateBucket(mkAgent('crashed'))).toBe('stuck');
+    expect(stateBucket(mkAgent('failed'))).toBe('stuck');
+    expect(stateBucket(mkAgent('errored'))).toBe('stuck');
+  });
+
+  it('reports crashed agents in the synopsis stuck count, not idle', () => {
+    const rows: AgentResponse[] = [mkAgent('active'), mkAgent('crashed')];
+    const synopsis = buildAgentSynopsis(rows);
+    expect(synopsis).toContain('1 stuck');
+    expect(synopsis).not.toContain('2 idle');
   });
 });
 
