@@ -14,6 +14,13 @@ import {
 import type { FishSpine } from './fishGeometry';
 import { TAU, at, type Pt } from './mathUtil';
 
+describe('agent role size hierarchy', () => {
+  it('keeps mayor largest, then project-lead/role, then worker/pool', () => {
+    expect(SPECIES.grouper.length).toBeGreaterThan(SPECIES.role.length);
+    expect(SPECIES.role.length).toBeGreaterThan(SPECIES.pool.length);
+  });
+});
+
 const DEG = Math.PI / 180;
 const ALL_SPECIES: readonly FishSpecies[] = ['pool', 'role', 'grouper'];
 

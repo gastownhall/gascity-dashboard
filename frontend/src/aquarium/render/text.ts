@@ -38,7 +38,7 @@ export function paintTextLayers(
   // operator can tell projects apart, faded out only at the fully zoomed-out
   // whole-tank view (where they would read as categorical bars)
   if (fRig > 0.01) {
-    paintRigLabels(ctx, snapshot, palette, mid, viewport, fRig);
+    paintRigLabels(ctx, snapshot, sim, palette, mid, act, viewport, fRig);
   }
   // at LOD1 the drift resolves into its initiatives: same-epic beads get a
   // shared label, and the few held morsels name "what's being worked on" — while
@@ -73,8 +73,10 @@ function setLetterSpacing(ctx: CanvasRenderingContext2D, value: string): void {
 function paintRigLabels(
   ctx: CanvasRenderingContext2D,
   snapshot: WorldSnapshot,
+  sim: SimState,
   palette: ScenePalette,
   mid: LayerTransform,
+  act: LayerTransform,
   viewport: Viewport,
   alpha: number,
 ): void {
@@ -84,17 +86,91 @@ function paintRigLabels(
   setLetterSpacing(ctx, '1px');
   for (const formation of snapshot.formations) {
     if (formation.key === CITY_KEY) continue;
-    const pos = worldToScreen(mid, formation.anchorX, formation.anchorY);
+    const cluster = rigClusterScreenPoints(formation.key, snapshot, sim, act);
+    const pos = rigLabelPosition(formation, cluster, mid);
     if (offscreen(pos, viewport, 140)) continue;
-    ctx.fillStyle = rigLabelColor(formation.key, palette);
+    const color = rigLabelColor(formation.key, palette);
+    if (cluster.length > 0) paintRigClusterBracket(ctx, cluster, pos, color, alpha);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
     // A rig with no open work reads as just its name; "· 0" is noise (and read
     // as odd on the neutral UNRIGGED stratum). The name still maps colour→rig.
     const name = formation.key.toUpperCase();
     const label = formation.openBeadTotal > 0 ? `${name} · ${formation.openBeadTotal} OPEN` : name;
-    ctx.fillText(label, pos.x, pos.y + 26);
+    ctx.fillText(label, pos.x, pos.y);
   }
   setLetterSpacing(ctx, '0px');
   ctx.globalAlpha = 1;
+}
+
+/** The visible data field owned by one rig. A label over this field answers
+ * "which rig do these beads belong to?" directly; hue remains a secondary
+ * accelerator, never the only grouping signal. */
+function rigClusterScreenPoints(
+  rigKey: string,
+  snapshot: WorldSnapshot,
+  sim: SimState,
+  act: LayerTransform,
+): Pt[] {
+  const points: Pt[] = [];
+  for (const pellet of snapshot.pellets) {
+    if (pellet.rigKey !== rigKey || pellet.state === 'eaten') continue;
+    const kin = sim.pellets[pellet.beadId];
+    if (kin !== undefined) points.push(worldToScreen(act, kin.x, kin.y));
+  }
+  return points;
+}
+
+function rigLabelPosition(
+  formation: WorldSnapshot['formations'][number],
+  cluster: readonly Pt[],
+  mid: LayerTransform,
+): Pt {
+  if (cluster.length === 0) {
+    const anchor = worldToScreen(mid, formation.anchorX, formation.anchorY);
+    return {
+      x: anchor.x,
+      y: anchor.y - Math.max(28, formation.radius * mid.scale * 0.55),
+    };
+  }
+  let sumX = 0;
+  let minY = Number.POSITIVE_INFINITY;
+  for (const point of cluster) {
+    sumX += point.x;
+    minY = Math.min(minY, point.y);
+  }
+  // Three deterministic annotation lanes keep neighbouring rig names from
+  // sitting on one baseline in a busy city while preserving stable geography.
+  const lane = formation.seed % 3;
+  return { x: sumX / cluster.length, y: minY - 14 - lane * 13 };
+}
+
+/** A quiet map-style bracket spans the rig's rendered bead field. It is an
+ * ownership annotation, not a container: no fill, no card, no false boundary. */
+function paintRigClusterBracket(
+  ctx: CanvasRenderingContext2D,
+  cluster: readonly Pt[],
+  label: Pt,
+  color: string,
+  alpha: number,
+): void {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  for (const point of cluster) {
+    minX = Math.min(minX, point.x);
+    maxX = Math.max(maxX, point.x);
+  }
+  const halfWidth = Math.min(90, Math.max(14, (maxX - minX) / 2 + 6));
+  const y = label.y + 6;
+  ctx.globalAlpha = alpha * 0.42;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(label.x - halfWidth, y + 4);
+  ctx.lineTo(label.x - halfWidth, y);
+  ctx.lineTo(label.x + halfWidth, y);
+  ctx.lineTo(label.x + halfWidth, y + 4);
+  ctx.stroke();
 }
 
 /** The rig's own hue as a legible label colour, so the operator reads a rig's

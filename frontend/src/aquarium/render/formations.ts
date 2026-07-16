@@ -347,28 +347,32 @@ function paintContactShadow(
   }
 }
 
-/** Two grain passes (light + dark speckle dots) so rock reads as textured
- * stone, not a flat blob. Dot radius stays ~constant in css px. */
+/** Two grain passes (light + dark mineral ticks) so rock reads as textured
+ * stone without introducing unlabelled pellet-shaped dots. */
 function paintSpeckleOne(
   ctx: CanvasRenderingContext2D,
   g: FormationGeometry,
   colors: FormationColors,
   effScale: number,
 ): void {
-  const r = Math.max(1.4, 2.4 / effScale);
+  const half = Math.max(1.8, 3 / effScale);
   const passes: ReadonlyArray<[string, readonly Pt[]]> = [
     [colors.speckleDark, g.speckle.dark],
     [colors.speckleLight, g.speckle.light],
   ];
   for (const [color, pts] of passes) {
-    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1, 1.2 / effScale);
+    ctx.lineCap = 'round';
     ctx.beginPath();
     for (const p of pts) {
-      ctx.moveTo(p.x + r, p.y);
-      ctx.arc(p.x, p.y, r, 0, TAU);
+      const lean = Math.sin(p.x * 0.013 + p.y * 0.019) * half * 0.7;
+      ctx.moveTo(p.x - half, p.y - lean);
+      ctx.lineTo(p.x + half, p.y + lean);
     }
-    ctx.fill();
+    ctx.stroke();
   }
+  ctx.lineCap = 'butt';
 }
 
 function paintKelpOne(

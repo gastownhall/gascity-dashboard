@@ -71,17 +71,19 @@ describe('buildPellets', () => {
     expect(byId.get('a-2')?.state).toBe('sunken');
   });
 
-  it('leaves held pellets fishId undefined when the assignee has no matching session', () => {
+  it('marks in-progress work as owner-not-observed when no live fish matches its assignee', () => {
     const inputs: BuildPelletsInputs = {
       beadsByRig: { alpha: { items: [bead('a-1', 'in_progress', 'polecat-gc-999')], total: 1 } },
       sessionIdsByFishId: new Map([['fish-1', 'gc-1']]),
       nowMs: NOW,
       prevBeadIds: new Set(),
     };
-    expect(buildPellets(inputs).pellets[0]?.fishId).toBeUndefined();
+    const pellet = buildPellets(inputs).pellets[0];
+    expect(pellet?.state).toBe('orphaned');
+    expect(pellet?.fishId).toBeUndefined();
   });
 
-  it('caps rendered pellets per rig, preferring held then sunken then drifting, and reports overflow', () => {
+  it('caps rendered pellets per rig, preferring held, owner-unobserved, sunken, then drifting', () => {
     const items: Bead[] = [];
     for (let i = 0; i < PELLET_RENDER_CAP_PER_RIG + 10; i += 1) items.push(bead(`d-${i}`, 'open'));
     items.push(bead('held-1', 'in_progress', 'polecat-gc-1'));

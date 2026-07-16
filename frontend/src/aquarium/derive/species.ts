@@ -20,12 +20,23 @@ export interface SpeciesResult {
   isMayor: boolean;
 }
 
-/** `agent_kind === 'pool'` outranks mayor detection (a pool-kind identity is
- * never a grouper, even if its name happens to be "mayor"). */
+/** Identity outranks the supervisor's generic `agent_kind` because some named
+ * orchestration sessions (notably an oversight-rig project lead) currently
+ * arrive as `pool`. The reef's operator-facing hierarchy is stable:
+ * mayor/grouper > project lead or other named role > pool worker. */
 export function deriveSpecies(identity: SpeciesIdentity): SpeciesResult {
-  if (identity.agentKind === 'pool') return { species: 'pool', isMayor: false };
   if (isMayorIdentity(identity)) return { species: 'grouper', isMayor: true };
+  if (isProjectLeadIdentity(identity)) return { species: 'role', isMayor: false };
+  if (identity.agentKind === 'pool') return { species: 'pool', isMayor: false };
   return { species: 'role', isMayor: false };
+}
+
+function isProjectLeadIdentity(identity: SpeciesIdentity): boolean {
+  return [identity.alias, identity.primaryName, identity.displayName].some((value) => {
+    if (value === undefined) return false;
+    const normalized = value.toLowerCase().replaceAll('_', '-');
+    return normalized.includes('project-lead') || /(?:^|[/.\-])pl(?:$|[.\-])/.test(normalized);
+  });
 }
 
 function isMayorIdentity(identity: SpeciesIdentity): boolean {

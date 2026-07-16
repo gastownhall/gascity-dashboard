@@ -202,8 +202,9 @@ function paintGrain(
   c: SeabedColors,
 ): void {
   for (let pass = 0; pass < 2; pass += 1) {
-    ctx.fillStyle = pass === 0 ? c.grainLight : c.grainDark;
+    ctx.strokeStyle = pass === 0 ? c.grainLight : c.grainDark;
     ctx.globalAlpha = 0.5;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     for (let i = pass; i < GRAIN_COUNT; i += 2) {
       const x = hash01(i * 2 + 1) * WORLD.width;
@@ -212,12 +213,15 @@ function paintGrain(
       // as it approaches the viewer, sparser + smoother receding to the back
       const depth = hash01(i * 3 + 7) ** 1.5;
       const y = WORLD.seabedY + 30 + depth * (WORLD.height - WORLD.seabedY - 30);
-      const r = 2 + depth * 3.4;
-      ctx.moveTo(x + r, y);
-      ctx.arc(x, y, r, 0, TAU);
+      const half = 2 + depth * 3.4;
+      const lean = (hash01(i * 5 + 11) - 0.5) * half;
+      ctx.moveTo(x - half, Math.min(WORLD.height, y - lean));
+      ctx.lineTo(x + half, Math.min(WORLD.height, y + lean));
     }
-    ctx.fill();
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
   }
+  ctx.lineCap = 'butt';
   ctx.globalAlpha = 1;
 }
 
@@ -301,7 +305,9 @@ export function paintParticulate(
   view: ViewRect,
   clockMs: number,
 ): void {
-  ctx.fillStyle = derived(palette).mote;
+  ctx.strokeStyle = derived(palette).mote;
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = 'round';
   ctx.beginPath();
   const t = clockMs / 1000;
   for (let i = 0; i < MOTE_COUNT; i += 1) {
@@ -309,11 +315,13 @@ export function paintParticulate(
     const x = hash01(i * 2 + 1) * WORLD.width + Math.sin(t * 0.2 + i * 1.7) * 9;
     const y = (hash01(i * 3 + 2) * WORLD.height + t * fallSpeed) % WORLD.height;
     if (x < view.left || x > view.right || y < view.top || y > view.bottom) continue;
-    const r = 1.2 + hash01(i * 5 + 3) * 1.6;
-    ctx.moveTo(x + r, y);
-    ctx.arc(x, y, r, 0, TAU);
+    const length = 3 + hash01(i * 5 + 3) * 4;
+    const lean = (hash01(i * 11 + 9) - 0.5) * length * 0.55;
+    ctx.moveTo(x - lean * 0.5, y - length * 0.5);
+    ctx.lineTo(x + lean * 0.5, y + length * 0.5);
   }
-  ctx.fill();
+  ctx.stroke();
+  ctx.lineCap = 'butt';
 }
 
 /** Subtle darkening toward the seabed, anchored to world depth. */
@@ -418,7 +426,9 @@ export function paintDeepDrift(
   view: ViewRect,
   clockMs: number,
 ): void {
-  ctx.fillStyle = derived(palette).deepDrift;
+  ctx.strokeStyle = derived(palette).deepDrift;
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
   ctx.beginPath();
   const t = clockMs / 1000;
   for (let i = 0; i < DEEP_DRIFT_COUNT; i += 1) {
@@ -426,11 +436,13 @@ export function paintDeepDrift(
     const x = hash01(i * 2 + 9) * WORLD.width + Math.sin(t * 0.12 + i * 0.9) * 22;
     const y = (hash01(i * 3 + 5) * WORLD.height + t * drift) % WORLD.height;
     if (x < view.left || x > view.right || y < view.top || y > view.bottom) continue;
-    const r = 2.5 + hash01(i * 5 + 2) * 4.5;
-    ctx.moveTo(x + r, y);
-    ctx.arc(x, y, r, 0, TAU);
+    const length = 7 + hash01(i * 5 + 2) * 9;
+    const lean = (hash01(i * 17 + 3) - 0.5) * length * 0.7;
+    ctx.moveTo(x - lean * 0.5, y - length * 0.5);
+    ctx.lineTo(x + lean * 0.5, y + length * 0.5);
   }
-  ctx.fill();
+  ctx.stroke();
+  ctx.lineCap = 'butt';
 }
 
 const DEEP_DRIFT_COUNT = 70;

@@ -20,7 +20,7 @@ describe('AquariumLegend', () => {
       ],
       quiet: [],
     });
-    fireEvent.click(screen.getByRole('button', { name: /key/i }));
+    fireEvent.click(screen.getByRole('button', { name: /map key/i }));
     expect(screen.getByText('geo')).toBeTruthy();
     expect(screen.getByText('26 open')).toBeTruthy();
     // the "by whom": active agent names ride the rig row
@@ -30,6 +30,8 @@ describe('AquariumLegend', () => {
     expect(screen.getByText('open')).toBeTruthy();
     expect(screen.getByText('in progress')).toBeTruthy();
     expect(screen.getByText('blocked')).toBeTruthy();
+    expect(screen.getByText('in progress · no live agent')).toBeTruthy();
+    expect(screen.getByText('seabed ⊘')).toBeTruthy();
     expect(screen.getByText('needs help')).toBeTruthy();
     expect(screen.getByText('seabed')).toBeTruthy();
   });
@@ -39,7 +41,7 @@ describe('AquariumLegend', () => {
       active: [entry({ key: 'geo', openBeadTotal: 26, agents: ['w1'] })],
       quiet: [entry({ key: 'aoa', openBeadTotal: 8 }), entry({ key: 'zed', openBeadTotal: 3 })],
     });
-    fireEvent.click(screen.getByRole('button', { name: /key/i }));
+    fireEvent.click(screen.getByRole('button', { name: /map key/i }));
     // quiet rigs are hidden until the toggle is opened
     expect(screen.queryByText('aoa')).toBeNull();
     const quietToggle = screen.getByRole('button', { name: /quiet/i });
@@ -54,7 +56,7 @@ describe('AquariumLegend', () => {
       active: [entry({ key: 'geo', hue: 245, openBeadTotal: 26, agents: ['w1'] })],
       quiet: [entry({ key: 'unrigged', hue: null, openBeadTotal: 0 })],
     });
-    fireEvent.click(screen.getByRole('button', { name: /key/i }));
+    fireEvent.click(screen.getByRole('button', { name: /map key/i }));
     fireEvent.click(screen.getByRole('button', { name: /quiet/i }));
     const swatches = Array.from(container.querySelectorAll('span[aria-hidden="true"]'));
     const styles = swatches.map((s) => (s as HTMLElement).style.background);
@@ -69,7 +71,8 @@ describe('AquariumLegend', () => {
       active: [entry({ key: 'geo', openBeadTotal: 26, agents: ['w1'] })],
       quiet: [],
     });
-    const toggle = screen.getByRole('button', { name: /key/i });
+    const toggle = screen.getByRole('button', { name: /map key/i });
+    expect(toggle.textContent).toContain('⊘ stranded bead: no live agent');
     expect(screen.queryByText('geo')).toBeNull();
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(container.firstElementChild?.className).not.toContain('w-[16rem]');
@@ -80,7 +83,7 @@ describe('AquariumLegend', () => {
 
   it('explains the current three-bubble recent-movement cue', () => {
     renderLegend({ active: [entry({ key: 'geo', openBeadTotal: 26, agents: ['w1'] })], quiet: [] });
-    fireEvent.click(screen.getByRole('button', { name: /key/i }));
+    fireEvent.click(screen.getByRole('button', { name: /map key/i }));
     expect(screen.getByText('work moved in last 15m')).toBeTruthy();
     expect(screen.getByLabelText('three bubble trail')).toBeTruthy();
     expect(screen.queryByText('pickup')).toBeNull();

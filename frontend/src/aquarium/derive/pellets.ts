@@ -132,12 +132,16 @@ function toPellet(
   arriving: boolean,
   titleById: ReadonlyMap<string, string>,
 ): PelletEntity[] {
-  const state = pelletStateForStatus(bead.status);
-  if (state === undefined) return [];
+  const wireState = pelletStateForStatus(bead.status);
+  if (wireState === undefined) return [];
   const fishId =
-    state === 'held'
+    wireState === 'held'
       ? sessionIdToFishId.get(parseAssignee(bead.assignee ?? '').sessionId ?? '')
       : undefined;
+  // An in-progress bead with no matching live session is not visibly "held".
+  // Keep the wire fact (in progress) in its user-facing word, but render the
+  // ownership gap explicitly instead of placing a morsel beside no fish.
+  const state: PelletState = wireState === 'held' && fishId === undefined ? 'orphaned' : wireState;
   const dependsOn = (bead.dependencies ?? []).map((d) => d.depends_on_id);
   const parent = bead.parent;
   const epic =
@@ -193,9 +197,10 @@ export function beadLinkTo(beadId: string): string {
  * never evicted by the ordinary render budget. */
 const STATE_PRIORITY: Readonly<Record<PelletState, number>> = {
   held: 0,
-  sunken: 1,
-  drifting: 2,
-  eaten: 3,
+  orphaned: 1,
+  sunken: 2,
+  drifting: 3,
+  eaten: 4,
 };
 
 function capPerRig(rigPellets: readonly PelletEntity[]): {
@@ -222,7 +227,7 @@ function capPerRig(rigPellets: readonly PelletEntity[]): {
 }
 
 function signalPriority(pellet: PelletEntity): number {
-  if (pellet.state === 'held' || pellet.state === 'sunken') return 0;
+  if (pellet.state === 'held' || pellet.state === 'orphaned' || pellet.state === 'sunken') return 0;
   if (pellet.isP0 === true) return 1;
   return 2;
 }

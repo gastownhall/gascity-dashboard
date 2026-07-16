@@ -13,6 +13,7 @@ import { buildScenePalette } from './palette';
 import { paintTextLayers } from './text';
 import { parseOklch } from './oklch';
 import { rigHue } from './rigHue';
+import { PARALLAX, layerTransform, worldToScreen } from './layers';
 
 const TOKENS: Record<string, string> = {
   surface: '96% 0.012 75',
@@ -47,6 +48,13 @@ function recordingCtx(): { ctx: CanvasRenderingContext2D; drawn: DrawnText[] } {
     textAlign: 'left',
     font: '',
     fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    beginPath(): void {},
+    moveTo(): void {},
+    lineTo(): void {},
+    stroke(): void {},
+    setLineDash(): void {},
     globalAlpha: 1,
     letterSpacing: '0px',
   };
@@ -89,6 +97,35 @@ describe('rig labels across zoom (map labels at the working overview)', () => {
   it('keeps the rig name + open-bead count on as the operator zooms further in', () => {
     const drawn = drawAt(1.0);
     expect(drawn.some((d) => d.text === 'REEF-GAMMA · 46 OPEN')).toBe(true);
+  });
+});
+
+describe('rig labels identify the bead field instead of clipping under the reef', () => {
+  it('centres the rig label over its visible bead cluster', () => {
+    const clusterSnapshot: WorldSnapshot = {
+      ...SNAPSHOT,
+      pellets: [
+        pellet({ beadId: 'a', rigKey: 'reef-gamma' }),
+        pellet({ beadId: 'b', rigKey: 'reef-gamma' }),
+      ],
+    };
+    const sim: SimState = {
+      fish: {},
+      pellets: {
+        a: { x: 1180, y: 1450, phase: 0 },
+        b: { x: 1220, y: 1510, phase: 0 },
+      },
+      clockMs: 0,
+    };
+    const camera: Camera = { x: 1000, y: 1850, zoom: 0.5 };
+    const { ctx, drawn } = recordingCtx();
+    paintTextLayers(ctx, clusterSnapshot, sim, PALETTE, camera, VIEWPORT);
+
+    const label = drawn.find((d) => d.text === 'REEF-GAMMA · 46 OPEN');
+    const actorLayer = layerTransform(camera, VIEWPORT, PARALLAX.actors);
+    const clusterTop = worldToScreen(actorLayer, 1200, 1450);
+    expect(label?.x).toBeCloseTo(clusterTop.x, 5);
+    expect(label?.y).toBeLessThan(clusterTop.y);
   });
 });
 

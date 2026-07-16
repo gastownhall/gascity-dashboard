@@ -109,6 +109,7 @@ function PelletCardBody({ pellet }: { pellet: PelletEntity }) {
       <div className="text-label uppercase tracking-wider text-fg-muted">
         {PELLET_STATE_WORD[pellet.state]}
       </div>
+      <div className="text-label uppercase tracking-wider text-fg-faint">{pellet.rigKey}</div>
       {hasTitle && <div className="text-fg-muted">bead {pellet.beadId}</div>}
       <Link to={pellet.linkTo} className={CARD_LINK_CLASS}>
         open bead

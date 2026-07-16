@@ -269,6 +269,7 @@ describe('AquariumOverlay', () => {
     expect(
       screen.getByRole('button', { name: /1 stranded/i }).closest('[data-aquarium-ledger-facts]'),
     ).toBe(facts);
+    expect(screen.getByRole('button', { name: /1 stranded/i }).textContent).toContain('⊘');
   });
 
   it('expands stranded work through the shared ledger drill-down', () => {

@@ -3,7 +3,7 @@ import type { ScenePalette, ThemeMood } from '../contracts';
 import { WORLD } from '../contracts';
 import type { ViewRect } from './layers';
 import { buildScenePalette } from './palette';
-import { paintSeabed, seabedColors, seabedRidgeY } from './water';
+import { paintDeepDrift, paintParticulate, paintSeabed, seabedColors, seabedRidgeY } from './water';
 import { parseOklch } from './oklch';
 
 const TOKENS: Record<string, string> = {
@@ -124,5 +124,46 @@ describe('paintSeabed (fills to the bottom of a tall viewport)', () => {
     const { ctx, ys } = seabedRecordingCtx();
     paintSeabed(ctx, palette('light'), fullWidth(WORLD.height - 400));
     expect(Math.max(...ys)).toBeCloseTo(WORLD.height, 0);
+  });
+});
+
+describe('ambient particulate silhouette', () => {
+  function particleCtx(): {
+    ctx: CanvasRenderingContext2D;
+    arcs: { count: number };
+    strokes: { count: number };
+  } {
+    const arcs = { count: 0 };
+    const strokes = { count: 0 };
+    const stub = {
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+      lineCap: 'butt',
+      beginPath(): void {},
+      moveTo(): void {},
+      lineTo(): void {},
+      arc(): void {
+        arcs.count += 1;
+      },
+      fill(): void {},
+      stroke(): void {
+        strokes.count += 1;
+      },
+    };
+    return { ctx: stub as unknown as CanvasRenderingContext2D, arcs, strokes };
+  }
+
+  it('uses marine-snow streaks, never pellet-like dots, in both depth layers', () => {
+    const view: ViewRect = { left: 0, top: 0, right: WORLD.width, bottom: WORLD.height };
+    const near = particleCtx();
+    paintParticulate(near.ctx, palette('light'), view, 0);
+    const far = particleCtx();
+    paintDeepDrift(far.ctx, palette('light'), view, 0);
+
+    expect(near.arcs.count).toBe(0);
+    expect(far.arcs.count).toBe(0);
+    expect(near.strokes.count).toBeGreaterThan(0);
+    expect(far.strokes.count).toBeGreaterThan(0);
   });
 });

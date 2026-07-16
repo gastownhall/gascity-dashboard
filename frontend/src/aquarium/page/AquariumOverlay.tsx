@@ -387,7 +387,7 @@ function StrandedMark({
       onClick={onToggle}
       className="pointer-events-auto rounded-sm text-label uppercase tracking-wider text-warn underline decoration-dotted underline-offset-2 transition-colors duration-150 ease-out-quart hover:text-fg focus-mark"
     >
-      ◆ {count} stranded
+      ⊘ {count} stranded
     </button>
   );
 }

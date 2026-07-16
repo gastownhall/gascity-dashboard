@@ -29,8 +29,9 @@ function rigSwatchColor(hue: number | null): string {
  *  into the track so the surface and seabed rows never clip. */
 const ZONES: readonly { where: string; label: string; frac: number }[] = [
   { where: 'surface', label: 'needs help', frac: 0.08 },
-  { where: 'mid-water', label: 'open', frac: 0.42 },
-  { where: 'at a fish', label: 'in progress', frac: 0.6 },
+  { where: 'mid-water', label: 'open', frac: 0.34 },
+  { where: 'at a fish', label: 'in progress', frac: 0.52 },
+  { where: 'seabed ⊘', label: 'in progress · no live agent', frac: 0.72 },
   { where: 'seabed', label: 'blocked', frac: 0.92 },
 ];
 
@@ -43,7 +44,7 @@ export function AquariumLegend({ legend }: AquariumLegendProps) {
   if (legend.active.length === 0 && legend.quiet.length === 0) return null;
   return (
     <div
-      className={`absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2 border border-rule bg-surface/70 px-3 py-2 text-label ${open ? 'w-[16rem]' : 'w-auto'}`}
+      className={`absolute left-4 z-10 flex flex-col items-start gap-2 border border-rule bg-surface/70 px-3 py-2 text-label ${open ? 'bottom-[4.5rem] w-[20rem] max-w-[calc(100vw-2rem)] sm:bottom-4' : 'bottom-4 w-auto'}`}
     >
       <button
         type="button"
@@ -54,7 +55,12 @@ export function AquariumLegend({ legend }: AquariumLegendProps) {
         <span aria-hidden="true" className="text-fg-faint">
           {open ? '▾' : '▸'}
         </span>
-        Key
+        <span>Map key</span>
+        {!open && (
+          <span className="normal-case tracking-normal text-fg-faint">
+            ⊘ stranded bead: no live agent
+          </span>
+        )}
       </button>
       {open && (
         <div className="flex w-full min-w-0 flex-col gap-2">
@@ -133,7 +139,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
  *  the signal, never the colour. */
 function ZoneKey() {
   return (
-    <div className="relative" style={{ height: '6rem' }}>
+    <div className="relative" style={{ height: '7.5rem' }}>
       <span aria-hidden="true" className="absolute bottom-1 left-[3px] top-1 w-px bg-rule" />
       {ZONES.map((zone) => (
         <div

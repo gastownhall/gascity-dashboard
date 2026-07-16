@@ -64,7 +64,7 @@ function PelletSummary({ pellet }: { pellet: PelletEntity }) {
   const name = pellet.title.length > 0 ? pellet.title : pellet.label;
   return (
     <>
-      {name} · {PELLET_STATE_WORD[pellet.state]}
+      {name} · {PELLET_STATE_WORD[pellet.state]} · {pellet.rigKey}
     </>
   );
 }

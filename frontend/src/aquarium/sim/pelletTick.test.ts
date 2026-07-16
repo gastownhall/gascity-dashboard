@@ -80,6 +80,13 @@ describe('tickPellet — sunken', () => {
   });
 });
 
+describe('tickPellet — orphaned', () => {
+  it('settles in-progress work with no observed owner on the seabed', () => {
+    const kin = tickPellet(baseInputs({ state: 'orphaned', holderKin: undefined }));
+    expect(kin.y).toBeGreaterThanOrEqual(ANCHOR.y - 1);
+  });
+});
+
 describe('tickPellet — drifting', () => {
   it('drifts over the formation width, above the crest (open food, not on the seabed)', () => {
     const kin = tickPellet(baseInputs({ state: 'drifting' }));

@@ -57,6 +57,8 @@ export function tickPellet(inputs: PelletTickInputs): PelletKinematics {
   switch (inputs.state) {
     case 'held':
       return atMouth(inputs, mouthPhase(inputs.seed));
+    case 'orphaned':
+      return sunkenPosition(inputs);
     case 'sunken':
       return sunkenPosition(inputs);
     case 'drifting':

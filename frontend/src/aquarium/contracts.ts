@@ -64,7 +64,7 @@ export interface FishEntity {
   pose: AquariumPose;
   /** caption state word, e.g. "working", "awaiting input" */
   poseWord: string;
-  /** detail-only provider caveat; ambient status remains the concise "active" */
+  /** the provider does not expose authoritative in-turn/idle activity */
   turnActivityUnavailable?: true;
   /** effectiveContextPct: integer 0..100, undefined = indeterminate slim body */
   bellyPct: number | undefined;
@@ -78,7 +78,7 @@ export interface FishEntity {
   tombstoned: boolean;
 }
 
-export type PelletState = 'drifting' | 'held' | 'sunken' | 'eaten';
+export type PelletState = 'drifting' | 'held' | 'orphaned' | 'sunken' | 'eaten';
 
 /** User-facing status word for a pellet's internal physics state — the hover
  * tooltip and click card show this, never the raw enum ('drifting' read as the
@@ -86,6 +86,7 @@ export type PelletState = 'drifting' | 'held' | 'sunken' | 'eaten';
 export const PELLET_STATE_WORD: Record<PelletState, string> = {
   drifting: 'open',
   held: 'in progress',
+  orphaned: 'in progress, no live agent observed',
   sunken: 'blocked',
   eaten: 'closed',
 };

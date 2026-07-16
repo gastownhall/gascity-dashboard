@@ -39,7 +39,7 @@ describe('derivePose', () => {
     expect(derivePose(undefined, { activity: 'in-turn', state: 'asleep' }, NOW)).toBe('working');
   });
 
-  it('keeps a live running session active when its provider omits activity despite stale last_active', () => {
+  it('keeps a live running session calm when its provider omits activity despite stale last_active', () => {
     expect(
       derivePose(
         undefined,
@@ -57,7 +57,7 @@ describe('derivePose', () => {
         running: true,
         last_active: '2026-07-12T09:35:49.000Z',
       }),
-    ).toBe('active');
+    ).toBe('activity unknown');
   });
 
   it('is "asleep" once last_active is at or past the 1h threshold', () => {
@@ -105,21 +105,21 @@ describe('poseWord', () => {
     expect(poseWord('errored')).toBe('errored');
   });
 
-  it('does not call an active session idle when its provider omits turn activity', () => {
+  it('does not present liveness as a competing work-state when turn activity is unknown', () => {
     expect(
       poseWordForSession('idle', {
         state: 'active',
       }),
-    ).toBe('active');
+    ).toBe('activity unknown');
   });
 
-  it('does not call a running session idle when its provider omits turn activity', () => {
+  it('uses the same activity-unknown label for a running session with no turn signal', () => {
     expect(
       poseWordForSession('idle', {
         state: 'running',
         running: true,
       }),
-    ).toBe('active');
+    ).toBe('activity unknown');
   });
 
   it('keeps an explicit provider idle signal authoritative', () => {

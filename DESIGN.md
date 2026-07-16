@@ -171,9 +171,11 @@ licenses it; outside this route, nothing here applies.
   per-rig key; the collapsible key (below) and the per-formation coloured label
   carry the exact rig. Bead status is read from WHERE a morsel lives in the
   water, never a shade: drifting in the column (open), held at a fish's mouth (in
-  progress), settled squashed on the seabed (blocked). A hairline tethers a
-  working fish to the in-progress bead held at its mouth, so the working pair
-  reads as one unit without a hover.
+  progress), settled squashed on the seabed (blocked), and a slashed bead `⊘`
+  on the seabed (in progress, but its assigned live agent was not observed). A
+  hairline tethers a working fish to the in-progress bead held at its mouth, so
+  the working pair reads as one unit without a hover. Diamonds remain Formula
+  Run and fixture vocabulary; reef beads never use them.
 - **Pellets carry bead metadata as food behaviour, not a chart.** Beyond hue
   (rig), an open bead's other facts read diegetically: its
   **age** is its drift height (fresh food floats high, stale food sinks toward
@@ -215,7 +217,7 @@ licenses it; outside this route, nothing here applies.
 - **The backlog thins with distance so the fleet stays the subject.** A busy
   city has hundreds of open beads and only a handful of live sessions, so at the
   whole-tank overview the drifting backlog is sampled to a representative slice
-  (held, blocked and P0 morsels always draw); zooming in only ever adds pellets,
+  (held, owner-unobserved, blocked and P0 morsels always draw); zooming in only ever adds pellets,
   and the exact per-rig totals stay in the formation label and the key. Fewer
   visible pellets never means fewer beads — the same truthful contract as the
   per-rig render cap. This keeps the operator's subject, the fleet, from
@@ -254,7 +256,7 @@ licenses it; outside this route, nothing here applies.
   drill-down targets.
 - **Provider telemetry is never guessed.** `activity: in-turn` is the only fact
   that may be called working. A live session whose provider omits turn activity
-  is labelled "active," never idle or working. Its detail card explains that
+  is labelled "activity unknown," never idle or working. Its detail card explains that
   turn activity is not reported by the provider. Its calm visual pose reflects
   the absence of turn evidence, not a claim that the agent has stopped.
 - **Visible morsels are practical targets.** Every rendered bead is hoverable

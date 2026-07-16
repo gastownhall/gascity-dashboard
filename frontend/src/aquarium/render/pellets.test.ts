@@ -161,8 +161,8 @@ describe('LOD-aware backlog thinning', () => {
     expect(driftKeepCount(LOD2_ZOOM)).toBe(driftKeepCount(5)); // saturated at LOD2
   });
 
-  it('always keeps held, blocked, eaten and P0 at any zoom', () => {
-    for (const state of ['held', 'sunken', 'eaten'] as const) {
+  it('always keeps held, owner-unobserved, blocked, eaten and P0 at any zoom', () => {
+    for (const state of ['held', 'orphaned', 'sunken', 'eaten'] as const) {
       expect(pelletVisibleAtLod(glintPellet({ beadId: `x-${state}`, state }), 0)).toBe(true);
     }
     const p0 = glintPellet({ beadId: 'p0', state: 'drifting', isP0: true });
@@ -183,5 +183,48 @@ describe('LOD-aware backlog thinning', () => {
     for (const p of ids) {
       if (pelletVisibleAtLod(p, overview)) expect(pelletVisibleAtLod(p, lod2)).toBe(true);
     }
+  });
+});
+
+describe('owner-unobserved in-progress morsels', () => {
+  it('draws a slashed bead instead of a formula-like diamond or filled bead', () => {
+    let lineSegments = 0;
+    let circles = 0;
+    let fills = 0;
+    const stub = {
+      beginPath(): void {},
+      moveTo(): void {},
+      lineTo(): void {
+        lineSegments += 1;
+      },
+      stroke(): void {},
+      ellipse(): void {},
+      rect(): void {},
+      fill(): void {
+        fills += 1;
+      },
+      arc(): void {
+        circles += 1;
+      },
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+      lineJoin: 'miter',
+      globalAlpha: 1,
+    };
+    const pellet = glintPellet({ beadId: 'unattached', state: 'orphaned' });
+
+    paintPellets(
+      stub as unknown as CanvasRenderingContext2D,
+      [pellet],
+      simFor([pellet.beadId]),
+      palette('light'),
+      WIDE,
+      1,
+    );
+
+    expect(circles).toBe(1);
+    expect(lineSegments).toBe(1);
+    expect(fills).toBe(0);
   });
 });

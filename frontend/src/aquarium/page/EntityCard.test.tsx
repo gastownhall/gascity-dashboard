@@ -70,6 +70,15 @@ describe('EntityCard pellet body', () => {
     expect(screen.getByText(/mem-shs5t/)).toBeTruthy();
   });
 
+  it('names the rig and makes ownerless in-progress work explicit', () => {
+    renderCard({
+      kind: 'pellet',
+      entity: pellet({ state: 'orphaned', rigKey: 'aoa' }),
+    });
+    expect(screen.getByText('aoa')).toBeTruthy();
+    expect(screen.getByText(/in progress, no live agent observed/i)).toBeTruthy();
+  });
+
   it('the action link never carries the ledger maroon (One Mark Rule)', () => {
     // text-accent is the reserved maroon of the "N need attention" ledger and
     // must appear nowhere else on /reef — including the click-detail card.
@@ -96,9 +105,9 @@ describe('EntityCard fish telemetry', () => {
   it('keeps unavailable turn telemetry in the detail card instead of the ambient status label', () => {
     renderCard({
       kind: 'fish',
-      entity: fish({ pose: 'idle', poseWord: 'active', turnActivityUnavailable: true }),
+      entity: fish({ pose: 'idle', poseWord: 'activity unknown', turnActivityUnavailable: true }),
     });
-    expect(screen.getByText('active')).toBeTruthy();
+    expect(screen.getByText('activity unknown')).toBeTruthy();
     expect(screen.getByText(/turn activity is not reported by this provider/i)).toBeTruthy();
   });
 });

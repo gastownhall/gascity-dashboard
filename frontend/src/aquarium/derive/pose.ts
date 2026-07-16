@@ -32,7 +32,7 @@ export function poseWord(pose: AquariumPose): string {
  * either an idle or an in-turn agent, so say exactly what is known.
  */
 export function poseWordForSession(pose: AquariumPose, session: PoseSessionFacts): string {
-  if (turnActivityUnavailable(pose, session)) return 'active';
+  if (turnActivityUnavailable(pose, session)) return 'activity unknown';
   return poseWord(pose);
 }
 

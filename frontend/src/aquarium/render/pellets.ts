@@ -112,6 +112,10 @@ const driftScale: [number[], number[], number[]] = [[], [], []];
 const heldX: [number[], number[], number[]] = [[], [], []];
 const heldY: [number[], number[], number[]] = [[], [], []];
 const heldScale: [number[], number[], number[]] = [[], [], []];
+const orphanX: number[] = [];
+const orphanY: number[] = [];
+const orphanScale: number[] = [];
+const orphanTone: number[] = [];
 const sunkX: number[] = [];
 const sunkY: number[] = [];
 const sunkScale: number[] = [];
@@ -135,6 +139,10 @@ function resetBatches(): void {
     at(heldY, b).length = 0;
     at(heldScale, b).length = 0;
   }
+  orphanX.length = 0;
+  orphanY.length = 0;
+  orphanScale.length = 0;
+  orphanTone.length = 0;
   sunkX.length = 0;
   sunkY.length = 0;
   sunkScale.length = 0;
@@ -162,7 +170,7 @@ const BLOOM_RADIUS_FRACTION = 1.7;
 
 /** LOD-aware backlog thinning: at the whole-tank overview ~1000 near-identical
  * open pellets swamp the ~50 sparse fish (the fleet reads as "coloured dust").
- * Held (in-progress), blocked, eaten and every P0 always draw; the ordinary
+ * Held, owner-unobserved, blocked, eaten and every P0 always draw; the ordinary
  * drifting backlog is sampled by a stable id hash so the overview shows a
  * REPRESENTATIVE slice of each rig's food and zooming in only ever ADDS pellets
  * (honest zoom). The exact per-rig totals stay in the formation label + legend,
@@ -237,7 +245,12 @@ export function paintPellets(
         bloomY.push(kin.y);
         bloomScale.push(pellet.radiusScale);
       }
-      if (pellet.state === 'sunken') {
+      if (pellet.state === 'orphaned') {
+        orphanX.push(kin.x);
+        orphanY.push(kin.y);
+        orphanScale.push(pellet.radiusScale);
+        orphanTone.push(tier);
+      } else if (pellet.state === 'sunken') {
         const h = hashString(pellet.beadId);
         sunkX.push(kin.x);
         sunkY.push(kin.y);
@@ -282,11 +295,43 @@ export function paintPellets(
         at(heldScale, tone),
       );
     }
+    paintOrphaned(ctx, colors, layerScale);
     paintSunken(ctx, colors, square);
     paintEaten(ctx, colors);
     // one same-hue glow pass over this hue's visible P0 morsels, on top of fills
     paintBloom(ctx, colors.bloom);
   }
+}
+
+/** In-progress work whose live owner was not observed sits on the seabed as a
+ * slashed bead. The circle keeps it in the morsel vocabulary; the slash is a
+ * greyscale-safe missing-owner cue without colliding with Formula Run diamonds. */
+function paintOrphaned(
+  ctx: CanvasRenderingContext2D,
+  colors: PelletColors,
+  layerScale: number,
+): void {
+  const n = orphanX.length;
+  if (n === 0) return;
+  ctx.lineWidth = Math.max(1 / layerScale, 1.25);
+  ctx.lineJoin = 'round';
+  for (let tone = 0; tone < colors.tones.length; tone += 1) {
+    ctx.strokeStyle = at(colors.tones, tone);
+    ctx.beginPath();
+    for (let i = 0; i < n; i += 1) {
+      if (at(orphanTone, i) !== tone) continue;
+      const r = PELLET_RADIUS * at(orphanScale, i) * 1.2;
+      const x = at(orphanX, i);
+      const y = at(orphanY, i);
+      ctx.moveTo(x + r, y);
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      const slash = r * 0.72;
+      ctx.moveTo(x - slash, y + slash);
+      ctx.lineTo(x + slash, y - slash);
+    }
+    ctx.stroke();
+  }
+  ctx.lineJoin = 'miter';
 }
 
 /** A soft same-hue glow centred on each collected P0 morsel — one fillStyle, one
