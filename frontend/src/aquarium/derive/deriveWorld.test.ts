@@ -63,6 +63,21 @@ describe('deriveWorldSnapshot — pose SSOT parity', () => {
     expect(snapshot.needsAttention).toBe(1);
   });
 
+  it('renders supervisor waiting as stalled rather than rate-limited', () => {
+    const s = session({ session_name: 'city-infra-pl', id: 'gc-402101' });
+    const a = agent({
+      name: 'city-infra-pl',
+      state: 'waiting',
+      running: true,
+      active_bead: 'gc-372',
+      session: { attached: false, name: 'city-infra-pl' },
+    });
+    const { snapshot } = deriveWorldSnapshot(baseInputs({ sessions: [s], agents: [a] }), null, NOW);
+
+    expect(snapshot.fish[0]?.pose).toBe('stalled');
+    expect(snapshot.needsAttention).toBe(1);
+  });
+
   it('needsAttention counts only non-tombstoned distress fish', () => {
     const s = session({ session_name: 'sess-1', id: 'gc-1' });
     const { snapshot: round1, memory } = deriveWorldSnapshot(

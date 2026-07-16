@@ -68,6 +68,31 @@ describe('selectAgentsNeedingYou', () => {
     ]);
   });
 
+  test('treats supervisor waiting as stalled work, not a provider rate limit', () => {
+    const result = selectAgentsNeedingYou(
+      [
+        agent({
+          name: 'city-infra-pl',
+          state: 'waiting',
+          running: true,
+          available: true,
+          active_bead: 'gc-372',
+          session: liveSession,
+        }),
+      ],
+      [],
+    );
+
+    assert.deepEqual(result, [
+      {
+        name: 'city-infra-pl',
+        reason: 'stalled',
+        detail: 'Waiting on active work with no recent activity.',
+        action: 'nudge',
+      },
+    ]);
+  });
+
   test('ranks an awaiting-input ask above a coincident failure state', () => {
     const result = selectAgentsNeedingYou(
       [agent({ name: 'mayor', state: 'stuck' })],
@@ -82,7 +107,7 @@ describe('selectAgentsNeedingYou', () => {
     const result = selectAgentsNeedingYou(
       [
         agent({ name: 'crashed', state: 'errored' }),
-        agent({ name: 'throttled', running: true, state: 'waiting', session: liveSession }),
+        agent({ name: 'waiting', running: true, state: 'waiting', session: liveSession }),
         agent({ name: 'ghost', running: true, state: 'running' }),
       ],
       [],
@@ -90,9 +115,9 @@ describe('selectAgentsNeedingYou', () => {
     assert.deepEqual(result, [
       { name: 'crashed', reason: 'errored', detail: 'Exited errored.', action: 'reset' },
       {
-        name: 'throttled',
-        reason: 'rate-limited',
-        detail: 'Throttled by a provider limit.',
+        name: 'waiting',
+        reason: 'stalled',
+        detail: 'Waiting on active work with no recent activity.',
         action: 'nudge',
       },
       {

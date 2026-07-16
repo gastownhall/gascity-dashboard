@@ -138,6 +138,12 @@ describe('buildAgentSynopsis', () => {
     expect(buildAgentSynopsis(rows)).toContain('1 suspended');
   });
 
+  it('reports supervisor waiting state literally instead of calling it rate-limited', () => {
+    const synopsis = buildAgentSynopsis([mkAgent('waiting')]);
+    expect(synopsis).toBe('1 waiting.');
+    expect(synopsis).not.toContain('rate-limited');
+  });
+
   it('returns the empty-state sentence when no rows', () => {
     expect(buildAgentSynopsis([])).toBe('No agents configured.');
   });

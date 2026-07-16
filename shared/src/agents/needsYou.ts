@@ -9,10 +9,10 @@ import type { AgentResponse } from '../generated/gc-supervisor-client/index.js';
 // the page.
 //
 // "Needs you" is the operator-blocking set ONLY: an agent awaiting an input
-// decision, exited in a failure state, throttled by a provider limit, or
-// claiming to run with no live session backing it. Actively-running, idle,
-// asleep, suspended, and merely-unavailable agents are ambient roster state
-// (surfaced in the page synopsis), never a badge number.
+// decision, exited in a failure state, throttled by a provider limit, waiting
+// on stale active work, or claiming to run with no live session backing it.
+// Actively-running, idle, asleep, suspended, and merely-unavailable agents are
+// ambient roster state (surfaced in the page synopsis), never a badge number.
 
 /** Why an agent needs the operator. Greyscale-safe words, never color-only. */
 export type AgentNeedsYouReason = 'awaiting-input' | 'errored' | 'rate-limited' | 'stalled';
@@ -38,14 +38,11 @@ export interface AgentPendingSignal {
 }
 
 // Free-form supervisor `state` strings (no enum upstream), matched
-// case-insensitively. Aligned with StatusBadge.stateTone and Agents synopsis
-// bucketing so the three readers classify a state the same way.
+// case-insensitively. Keep these sets limited to states whose supervisor
+// semantics match the user-facing reason; `waiting` is stale active work, not
+// evidence of a provider throttle.
 const FAILURE_STATES: ReadonlySet<string> = new Set(['failed', 'errored', 'stuck', 'crashed']);
-const RATE_LIMITED_STATES: ReadonlySet<string> = new Set([
-  'rate-limited',
-  'rate_limited',
-  'waiting',
-]);
+const RATE_LIMITED_STATES: ReadonlySet<string> = new Set(['rate-limited', 'rate_limited']);
 
 const ACTION_BY_REASON: Record<AgentNeedsYouReason, AgentNeedsYouAction> = {
   'awaiting-input': 'respond',
@@ -87,8 +84,9 @@ function needsYouReason(agent: AgentResponse, hasPending: boolean): AgentNeedsYo
   return null;
 }
 
-/** Detached, or claiming to run with no live session backing the claim. */
+/** Stale active work, detached, or claiming to run with no live session. */
 function isStalled(agent: AgentResponse, state: string): boolean {
+  if (state === 'waiting') return true;
   if (state === 'detached') return true;
   return agent.running && agent.session === undefined;
 }
@@ -105,10 +103,11 @@ function needsYouDetail(
       return `Exited ${agent.state}.`;
     case 'rate-limited':
       return 'Throttled by a provider limit.';
-    case 'stalled':
-      return agent.state.toLowerCase() === 'detached'
-        ? 'Detached from its session.'
-        : 'Running with no live session.';
+    case 'stalled': {
+      const state = agent.state.toLowerCase();
+      if (state === 'waiting') return 'Waiting on active work with no recent activity.';
+      return state === 'detached' ? 'Detached from its session.' : 'Running with no live session.';
+    }
   }
 }
 
