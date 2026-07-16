@@ -62,7 +62,7 @@ export interface FishEntity {
   species: FishSpecies;
   isMayor: boolean;
   pose: AquariumPose;
-  /** caption state word, e.g. "working", "awaiting input" */
+  /** caption activity/state word, e.g. "working", "active just now", "awaiting input" */
   poseWord: string;
   /** the provider does not expose authoritative in-turn/idle activity */
   turnActivityUnavailable?: true;

@@ -9,6 +9,8 @@ import type { AquariumPose } from '../contracts';
 
 /** A session idles into 'asleep' once this much time has passed with no activity. */
 export const ASLEEP_THRESHOLD_MS = 3_600_000;
+/** Keep a completed, explicitly observed turn visible through one 30s poll cycle. */
+export const RECENT_ACTIVITY_WINDOW_MS = 60_000;
 
 const POSE_WORD: Readonly<Record<AquariumPose, string>> = {
   working: 'working',
@@ -31,8 +33,13 @@ export function poseWord(pose: AquariumPose): string {
  * session list. An active process with no activity field is not evidence of
  * either an idle or an in-turn agent, so say exactly what is known.
  */
-export function poseWordForSession(pose: AquariumPose, session: PoseSessionFacts): string {
+export function poseWordForSession(
+  pose: AquariumPose,
+  session: PoseSessionFacts,
+  nowMs: number,
+): string {
   if (turnActivityUnavailable(pose, session)) return 'activity unknown';
+  if (pose === 'idle' && wasRecentlyActive(session, nowMs)) return 'active just now';
   return poseWord(pose);
 }
 
@@ -49,6 +56,16 @@ function isLiveWithoutTurnActivity(session: PoseSessionFacts): boolean {
     (activity === undefined || activity.length === 0) &&
     (session.running === true || state === 'active' || state === 'running')
   );
+}
+
+function wasRecentlyActive(session: PoseSessionFacts, nowMs: number): boolean {
+  if (session.activity?.trim().toLowerCase() !== 'idle' || session.last_active === undefined) {
+    return false;
+  }
+  const lastActiveMs = Date.parse(session.last_active);
+  if (Number.isNaN(lastActiveMs)) return false;
+  const elapsedMs = nowMs - lastActiveMs;
+  return elapsedMs >= 0 && elapsedMs < RECENT_ACTIVITY_WINDOW_MS;
 }
 
 const CALM_POSES: ReadonlySet<AquariumPose> = new Set(['working', 'idle', 'asleep']);

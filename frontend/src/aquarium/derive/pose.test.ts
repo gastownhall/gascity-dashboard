@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AgentNeedsYou } from 'gas-city-dashboard-shared';
 import {
   ASLEEP_THRESHOLD_MS,
+  RECENT_ACTIVITY_WINDOW_MS,
   derivePose,
   isDistressPose,
   poseWord,
@@ -52,11 +53,15 @@ describe('derivePose', () => {
       ),
     ).toBe('idle');
     expect(
-      poseWordForSession('idle', {
-        state: 'active',
-        running: true,
-        last_active: '2026-07-12T09:35:49.000Z',
-      }),
+      poseWordForSession(
+        'idle',
+        {
+          state: 'active',
+          running: true,
+          last_active: '2026-07-12T09:35:49.000Z',
+        },
+        NOW,
+      ),
     ).toBe('activity unknown');
   });
 
@@ -107,27 +112,92 @@ describe('poseWord', () => {
 
   it('does not present liveness as a competing work-state when turn activity is unknown', () => {
     expect(
-      poseWordForSession('idle', {
-        state: 'active',
-      }),
+      poseWordForSession(
+        'idle',
+        {
+          state: 'active',
+        },
+        NOW,
+      ),
     ).toBe('activity unknown');
   });
 
   it('uses the same activity-unknown label for a running session with no turn signal', () => {
     expect(
-      poseWordForSession('idle', {
-        state: 'running',
-        running: true,
-      }),
+      poseWordForSession(
+        'idle',
+        {
+          state: 'running',
+          running: true,
+        },
+        NOW,
+      ),
     ).toBe('activity unknown');
   });
 
   it('keeps an explicit provider idle signal authoritative', () => {
     expect(
-      poseWordForSession('idle', {
-        activity: 'idle',
-        state: 'active',
-      }),
+      poseWordForSession(
+        'idle',
+        {
+          activity: 'idle',
+          state: 'active',
+        },
+        NOW,
+      ),
     ).toBe('idle');
+  });
+
+  it('labels an explicitly idle session active just now inside the recency window', () => {
+    expect(
+      poseWordForSession(
+        'idle',
+        {
+          activity: 'idle',
+          state: 'active',
+          last_active: new Date(NOW - RECENT_ACTIVITY_WINDOW_MS + 1).toISOString(),
+        },
+        NOW,
+      ),
+    ).toBe('active just now');
+  });
+
+  it('returns to idle at the recency boundary and rejects future timestamps', () => {
+    expect(
+      poseWordForSession(
+        'idle',
+        {
+          activity: 'idle',
+          state: 'active',
+          last_active: new Date(NOW - RECENT_ACTIVITY_WINDOW_MS).toISOString(),
+        },
+        NOW,
+      ),
+    ).toBe('idle');
+    expect(
+      poseWordForSession(
+        'idle',
+        {
+          activity: 'idle',
+          state: 'active',
+          last_active: new Date(NOW + 1).toISOString(),
+        },
+        NOW,
+      ),
+    ).toBe('idle');
+  });
+
+  it('keeps missing turn telemetry unknown even when last_active is recent', () => {
+    expect(
+      poseWordForSession(
+        'idle',
+        {
+          state: 'active',
+          running: true,
+          last_active: new Date(NOW - 1).toISOString(),
+        },
+        NOW,
+      ),
+    ).toBe('activity unknown');
   });
 });

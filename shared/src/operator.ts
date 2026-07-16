@@ -1,5 +1,6 @@
 export const GC_EVENT_PREFIX = {
   bead: 'bead.',
+  mail: 'mail.',
   session: 'session.',
 } as const;
 

@@ -256,9 +256,13 @@ licenses it; outside this route, nothing here applies.
   drill-down targets.
 - **Provider telemetry is never guessed.** `activity: in-turn` is the only fact
   that may be called working. A live session whose provider omits turn activity
-  is labelled "activity unknown," never idle or working. Its detail card explains that
-  turn activity is not reported by the provider. Its calm visual pose reflects
-  the absence of turn evidence, not a claim that the agent has stopped.
+  is labelled "activity unknown," never idle or working. When the provider
+  explicitly reports idle and `last_active` is less than sixty seconds old, the
+  calm fish is labelled "active just now." This is a recency statement, not a
+  claim that work is still in progress. For an unknown-activity session, the
+  detail card explains that turn activity is not reported by the provider. Its
+  calm visual pose reflects the absence of turn evidence, not a claim that the
+  agent has stopped.
 - **Visible morsels are practical targets.** Every rendered bead is hoverable
   and clickable at a stable screen-space distance at overview, LOD1, and LOD2.
   Hit testing uses the same LOD-thinning predicate as painting, so an invisible

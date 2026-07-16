@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { GC_EVENT_PREFIX } from 'gas-city-dashboard-shared';
 import { invalidate } from '../../api/cache';
 import {
   GC_MUTATION_HEADERS,
@@ -8,6 +9,8 @@ import {
   type SupervisorApi,
 } from '../../supervisor/client';
 import { useAquariumData } from './useAquariumData';
+
+const eventSources: FakeEventSource[] = [];
 
 const baseApi: SupervisorApi = {
   baseUrl: '/gc-supervisor',
@@ -71,9 +74,31 @@ afterEach(() => {
   invalidate('rigs');
   invalidate('aquarium:');
   vi.unstubAllGlobals();
+  eventSources.length = 0;
 });
 
 describe('useAquariumData (live mode)', () => {
+  it('refreshes session activity immediately after a mail event', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const listSessions = vi.fn(async () => ({ items: [], total: 0 }));
+    setSupervisorApiForTests({
+      ...baseApi,
+      listSessions,
+      listBeads: vi.fn(async () => ({ items: [], total: 0 })),
+    });
+
+    const { result } = renderHook(() => useAquariumData(null));
+    await waitFor(() => expect(result.current.dataState).toBe('complete'));
+    expect(listSessions).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      eventSources[0]?.open();
+      eventSources[0]?.emitNamed('event', JSON.stringify({ type: `${GC_EVENT_PREFIX.mail}sent` }));
+    });
+
+    await waitFor(() => expect(listSessions).toHaveBeenCalledTimes(2));
+  });
+
   it('fans out one bounded bead read per canonical rig name into beadsByRig', async () => {
     // No real EventSource in jsdom; useGcEventRefresh degrades to 'closed'
     // without one, which is fine — this test only cares about beadsByRig.
@@ -330,3 +355,44 @@ describe('useAquariumData (fixture mode)', () => {
     expect(result.current.manifest).toBeNull();
   });
 });
+
+class FakeEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  readyState = FakeEventSource.CONNECTING;
+  private readonly listeners = new Map<string, Set<EventListener>>();
+
+  constructor(readonly url: string | URL) {
+    eventSources.push(this);
+  }
+
+  addEventListener(type: string, listener: EventListener): void {
+    const listeners = this.listeners.get(type) ?? new Set<EventListener>();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: EventListener): void {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  close(): void {
+    this.readyState = FakeEventSource.CLOSED;
+  }
+
+  open(): void {
+    this.readyState = FakeEventSource.OPEN;
+    this.onopen?.(new Event('open'));
+  }
+
+  emitNamed(type: string, data: string): void {
+    const event = new MessageEvent<string>(type, { data });
+    this.listeners.get(type)?.forEach((listener) => listener(event));
+    if (type === 'message') this.onmessage?.(event);
+  }
+}
