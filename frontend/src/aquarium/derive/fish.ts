@@ -139,7 +139,7 @@ function fishFromSession(
     species,
     isMayor,
     pose,
-    poseWord: poseWordForSession(pose, session),
+    poseWord: poseWordForSession(pose, session, nowMs),
     ...(turnActivityUnavailable(pose, session) ? { turnActivityUnavailable: true } : {}),
     bellyPct: effectiveContextPct(session),
     homeKey: homeKeyFor(isMayor, session.rig, rigs),

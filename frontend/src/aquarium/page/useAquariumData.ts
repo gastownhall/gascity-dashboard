@@ -119,7 +119,9 @@ export function useAquariumData(fixtureKind: FixtureKind | null): AquariumDataRe
 
   useVisibleRefresh(refresh, ATTENTION_READ_REFRESH_INTERVAL_MS, { enabled: !isFixture });
   const sseState = useGcEventRefresh(
-    isFixture ? [] : [GC_EVENT_PREFIX.session, GC_EVENT_PREFIX.bead, 'agent.'],
+    isFixture
+      ? []
+      : [GC_EVENT_PREFIX.session, GC_EVENT_PREFIX.bead, GC_EVENT_PREFIX.mail, 'agent.'],
     () => void refresh(),
   );
 

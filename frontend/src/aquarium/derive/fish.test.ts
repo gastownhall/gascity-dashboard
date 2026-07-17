@@ -110,6 +110,18 @@ describe('buildFish — session-backed fish', () => {
     expect(fish[0]?.pose).toBe('working');
   });
 
+  it('keeps the calm pose but labels recently completed activity active just now', () => {
+    const s = session({
+      session_name: 'sess-1',
+      id: 'gc-1',
+      activity: 'idle',
+      last_active: new Date(NOW - 30_000).toISOString(),
+    });
+    const { fish } = buildFish(inputs({ sessions: [s] }));
+    expect(fish[0]?.pose).toBe('idle');
+    expect(fish[0]?.poseWord).toBe('active just now');
+  });
+
   it('carries a distress pose verbatim, joined agent<->session via agent.session.name', () => {
     const s = session({ session_name: 'sess-1', id: 'gc-1', activity: 'in-turn' });
     const a = agent({
