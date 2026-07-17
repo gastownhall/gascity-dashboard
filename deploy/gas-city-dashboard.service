@@ -10,11 +10,14 @@ Wants=network-online.target
 # loops forever and never reaches `failed`. systemd's DEFAULT window is 10s,
 # which RestartSec=3 outpaces — 5 restarts span ~15s, so the default limit never
 # trips. Widen the window past that span so 5 attempts fall inside it: a
-# persistent misconfig then hits the limit and lands in `failed`
-# (start-limit-hit) after ~5 tries, while a transient port race still gets its
-# retries. Proven in backend/test/deploy-unit.test.ts (NRestarts bounded, unit
-# reaches failed; deleting these two lines reproduces the unbounded loop and
-# flips the test red).
+# persistent misconfig then stops retrying after ~5 tries, while a transient port
+# race still gets its retries. The observable end state is ActiveState=failed
+# with the journal line "Start request repeated too quickly"; Result carries the
+# underlying failure (e.g. exit-code), NOT a start-limit reason string — systemd
+# 255 reports no such Result here, so do not grep for one. Proven in
+# backend/test/deploy-unit.test.ts (NRestarts bounded AND non-zero, unit reaches
+# failed; deleting these two lines reproduces the unbounded loop and flips the
+# test red).
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
@@ -60,7 +63,7 @@ ExecStartPre=/bin/sh -c 'case "$1" in /*) ;; *) echo "gas-city-dashboard: ADMIN_
 # node and exits 127; this adds the one thing it can't know — which line of
 # this unit to edit.
 ExecStartPre=/bin/sh -c 'command -v node >/dev/null 2>&1 || { echo "gas-city-dashboard: no runnable \"node\" on this unit PATH — install Node.js, or add its directory to the Environment=PATH line in this unit" >&2; exit 1; }'
-# Refuse to start on a Node older than package.json's engines floor (>=24). The
+# Refuse to start on a Node older than package.json's engines floor. The
 # presence guard above only proves node RESOLVES; this proves it is new enough.
 # `npm install` merely warns on an old runtime, so an older `node` first on PATH
 # would build and run in prod undetected. The guard resolves the SAME `node`

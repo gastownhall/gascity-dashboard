@@ -622,11 +622,38 @@ describe(
       new URL('../../deploy/assert-node-version.mjs', import.meta.url),
     );
 
-    function nodeGuardLine(): string {
+    function nodeGuardLine(overrideScript?: string): string {
       const line = EXEC_START_PRE.find((l) => l.includes(NODE_VERSION_GUARD_SCRIPT));
       assert.ok(line, `expected an ExecStartPre running ${NODE_VERSION_GUARD_SCRIPT}`);
       // %h/gascity-dashboard is a different tree; run THIS checkout's guard.
-      return line.replace(/\S*assert-node-version\.mjs/, scriptPath);
+      return line.replace(/\S*assert-node-version\.mjs/, overrideScript ?? scriptPath);
+    }
+
+    /**
+     * Run `body` against a COPY of the shipped guard whose `../package.json`
+     * declares `engines`, so a floor other than this repo's real one can be
+     * exercised.
+     *
+     * The copy keeps the guard's own `../package.json` resolution in the loop
+     * (it reads the file relative to its own URL) rather than stubbing the read
+     * out — the single-source-of-truth wiring is part of what these tests prove.
+     */
+    function withEnginesFloor(engines: unknown, body: (guardScript: string) => void): void {
+      const root = mkdtempSync(join(tmpdir(), 'engines-floor-'));
+      try {
+        writeFileSync(
+          join(root, 'package.json'),
+          JSON.stringify({ name: 'floor-fixture', engines: { node: engines } }),
+          'utf8',
+        );
+        const deployDir = join(root, 'deploy');
+        mkdirSync(deployDir);
+        const copied = join(deployDir, NODE_VERSION_GUARD_SCRIPT);
+        writeFileSync(copied, readFileSync(scriptPath, 'utf8'), 'utf8');
+        body(copied);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     }
 
     /**
@@ -682,6 +709,56 @@ describe(
           runGuardViaRealUnit([nodeGuardLine()], [pathEnv]),
           'success',
           'node-version guard let an older-than-floor node through',
+        );
+      });
+    });
+
+    // The guard enforces the floor package.json DECLARES — the whole point of
+    // reading engines rather than hardcoding a number. These prove it enforces
+    // that floor faithfully, not a major-only approximation of it.
+    test('enforces the full declared floor: >=24.2.0 refuses 24.0.0, passes 24.2.0', () => {
+      withEnginesFloor('>=24.2.0', (guard) => {
+        withFakeNode('24.0.0', (pathEnv) => {
+          assert.notEqual(
+            runGuardViaRealUnit([nodeGuardLine(guard)], [pathEnv]),
+            'success',
+            'a major-only compare passes 24.0.0 against a declared >=24.2.0 floor — that is not the floor package.json states',
+          );
+        });
+        withFakeNode('24.2.0', (pathEnv) => {
+          assert.equal(
+            runGuardViaRealUnit([nodeGuardLine(guard)], [pathEnv]),
+            'success',
+            'guard refused a node exactly AT the declared floor',
+          );
+        });
+      });
+    });
+
+    // Fail-closed, not best-effort. Matching /(\d+)/ anywhere reads every one of
+    // these as "floor 24" and enforces a range nobody declared.
+    for (const bogus of ['banana24', '<24', '^24.1.0', '24.x', '>=24', '']) {
+      test(`fails closed on an engines floor it cannot parse: ${JSON.stringify(bogus)}`, () => {
+        withEnginesFloor(bogus, (guard) => {
+          // A node far ABOVE any plausible floor: the guard must still refuse,
+          // so the refusal can only come from the unparseable range.
+          withFakeNode('99.9.9', (pathEnv) => {
+            assert.notEqual(
+              runGuardViaRealUnit([nodeGuardLine(guard)], [pathEnv]),
+              'success',
+              `guard accepted an engines range it cannot enforce (${JSON.stringify(bogus)}) instead of failing closed`,
+            );
+          });
+        });
+      });
+    }
+
+    test('fails closed when the resolved node prints a version it cannot parse', () => {
+      withFakeNode('24.invalid', (pathEnv) => {
+        assert.notEqual(
+          runGuardViaRealUnit([nodeGuardLine()], [pathEnv]),
+          'success',
+          'guard accepted an unparseable `node --version` output rather than refusing the start',
         );
       });
     });
@@ -809,15 +886,35 @@ describe(
         Number.isInteger(burst),
         'unit must set StartLimitBurst so a persistent failure is bounded',
       );
-      const { activeState, nrestarts } = runRestartProbe();
+      const { activeState, result, nrestarts } = runRestartProbe();
+      // The ACCURATE terminal observable, measured on systemd 255: ActiveState=
+      // failed, Result carrying the underlying failure (exit-code) — NOT a
+      // `start-limit-hit` Result. systemd reports the limit only as the journal
+      // line "Start request repeated too quickly", so asserting a start-limit
+      // reason string here would assert a state this systemd never reaches.
       assert.equal(
         activeState,
         'failed',
         `a permanently-failing start must settle in 'failed', not keep restarting (ActiveState=${activeState}). Deleting StartLimitIntervalSec/StartLimitBurst reproduces the unbounded loop.`,
       );
+      assert.equal(
+        result,
+        'exit-code',
+        `a start bounded by the limit reports the underlying failure as Result (got: ${result})`,
+      );
+      // BOTH bounds. Upper: an unbounded loop climbs past the burst — the AC1
+      // mutation. Lower: NRestarts>0 proves systemd actually RETRIED, i.e. the
+      // other half of AC1 (a transient failure still gets its retries). Without
+      // it, deleting Restart=on-failure entirely would land the unit in `failed`
+      // on the first attempt and read green at NRestarts=0.
       assert.ok(
         Number.isInteger(nrestarts) && nrestarts <= burst + 1,
         `NRestarts (${nrestarts}) must stay within StartLimitBurst (${burst}); an unbounded loop climbs past it`,
+      );
+      assert.ok(
+        nrestarts >= 2,
+        `NRestarts (${nrestarts}) must show the unit actually retried before the limit stopped it; ` +
+          `at 0 the unit never retried at all and a transient failure would get no second chance`,
       );
     });
   },
