@@ -46,6 +46,7 @@ const DIRECTIVES = unit
 // unit file, let the shipping systemd parse it, and read the unit's Result.
 const UNIT_ENV_VAR = 'ADMIN_FRONTEND_DIST';
 const PORT_GUARD_SCRIPT = 'assert-port-free.mjs';
+const NODE_VERSION_GUARD_SCRIPT = 'assert-node-version.mjs';
 
 function systemdUserUnavailable(): string | false {
   const probe = spawnSync(
@@ -352,6 +353,45 @@ describe('deploy: systemd unit path is the real checkout', () => {
       'the port guard must probe the loopback address the app binds',
     );
   });
+
+  test('unit bounds the restart loop so a persistent failure cannot crash-loop (AC1)', () => {
+    // Structural half of the AC1 fix; the behavioral proof (a real unit reaching
+    // `failed`, NRestarts bounded) is in the restart-bound suite below.
+    const interval = Number(/^StartLimitIntervalSec=(\d+)$/m.exec(unit)?.[1] ?? NaN);
+    const burst = Number(/^StartLimitBurst=(\d+)$/m.exec(unit)?.[1] ?? NaN);
+    const restartSec = Number(/^RestartSec=(\d+)$/m.exec(unit)?.[1] ?? NaN);
+    assert.ok(
+      Number.isInteger(interval) && interval > 0,
+      'unit must set a positive StartLimitIntervalSec so the restart loop is bounded',
+    );
+    assert.ok(
+      Number.isInteger(burst) && burst > 0,
+      'unit must set a positive StartLimitBurst so the restart loop is bounded',
+    );
+    assert.ok(
+      Number.isInteger(restartSec) && restartSec > 0,
+      'unit must set RestartSec for the start-limit window to be meaningful',
+    );
+    // The window must outlast a full burst of RestartSec-spaced retries, or the
+    // counter resets before the limit trips — which is the systemd DEFAULT (10s)
+    // that RestartSec=3 outpaces, i.e. the crash-loop this fix closes.
+    assert.ok(
+      interval > burst * restartSec,
+      `StartLimitIntervalSec (${interval}s) must exceed StartLimitBurst*RestartSec (${burst}*${restartSec}=${burst * restartSec}s), or ${burst} retries fall outside the window and the limit never trips`,
+    );
+  });
+
+  test('unit fails fast on a node below the engines floor (AC3)', () => {
+    // Structural half of the AC3 fix; the behavioral proof (a fake older node
+    // refuses, a new one passes) is in the node-version suite below.
+    const line = EXEC_START_PRE.find((l) => l.includes(NODE_VERSION_GUARD_SCRIPT));
+    assert.ok(line, `expected an ExecStartPre running ${NODE_VERSION_GUARD_SCRIPT}`);
+    assert.match(
+      line,
+      /ExecStartPre=\/usr\/bin\/env node \S*assert-node-version\.mjs$/,
+      `the node-version guard must run via /usr/bin/env node so it checks the same node ExecStart resolves — got: ${line}`,
+    );
+  });
 });
 
 // Every test below drives a REAL systemd unit, so it can only run where a
@@ -574,6 +614,215 @@ describe(
   },
 );
 
+describe(
+  'deploy: the Node-version guard refuses an old runtime and passes a new one (AC3/AC4, real unit)',
+  { skip: NO_SYSTEMD_USER },
+  () => {
+    const scriptPath = fileURLToPath(
+      new URL('../../deploy/assert-node-version.mjs', import.meta.url),
+    );
+
+    function nodeGuardLine(): string {
+      const line = EXEC_START_PRE.find((l) => l.includes(NODE_VERSION_GUARD_SCRIPT));
+      assert.ok(line, `expected an ExecStartPre running ${NODE_VERSION_GUARD_SCRIPT}`);
+      // %h/gascity-dashboard is a different tree; run THIS checkout's guard.
+      return line.replace(/\S*assert-node-version\.mjs/, scriptPath);
+    }
+
+    /**
+     * Run `body` with a fake `node` first on PATH that reports `version` for
+     * `--version` but delegates real execution to the actual node binary.
+     *
+     * `/usr/bin/env node` resolves the stub, which execs real node to RUN the
+     * guard; the guard's own `node --version` probe (resolved off the same PATH)
+     * then reads the spoofed version. This is the only way to exercise BOTH the
+     * below-floor and above-floor branches on a host with a single real node —
+     * here that node is v22, itself below the >=24 floor, so "the ambient node
+     * passes" cannot even be assumed. The stub decouples the proof from it.
+     */
+    function withFakeNode(version: string, body: (pathEnv: string) => void): void {
+      const dir = mkdtempSync(join(tmpdir(), 'fake-node-'));
+      try {
+        writeFileSync(
+          join(dir, 'node'),
+          [
+            '#!/bin/sh',
+            'if [ "$1" = "--version" ] || [ "$1" = "-v" ]; then',
+            `  echo "v${version}"`,
+            '  exit 0',
+            'fi',
+            // Anything else (running the guard .mjs) goes to the real node.
+            `exec ${JSON.stringify(process.execPath)} "$@"`,
+            '',
+          ].join('\n'),
+          { mode: 0o755 },
+        );
+        // Fake dir leads so both `env node` and the guard's `node --version`
+        // resolve the stub; /usr/bin:/bin keep `env` and the stub's `/bin/sh`
+        // reachable. No real-node dir is needed — the stub execs it by path.
+        body(`PATH=${dir}:/usr/bin:/bin`);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
+    test('passes when the resolved node meets the floor', () => {
+      withFakeNode('24.9.9', (pathEnv) => {
+        assert.equal(
+          runGuardViaRealUnit([nodeGuardLine()], [pathEnv]),
+          'success',
+          'node-version guard refused a node at/above the engines floor',
+        );
+      });
+    });
+
+    test('refuses when the resolved node is below the floor (mutation: remove the guard → this passes)', () => {
+      withFakeNode('18.20.0', (pathEnv) => {
+        assert.notEqual(
+          runGuardViaRealUnit([nodeGuardLine()], [pathEnv]),
+          'success',
+          'node-version guard let an older-than-floor node through',
+        );
+      });
+    });
+  },
+);
+
+describe(
+  'deploy: a persistent start failure is bounded, not a crash-loop (AC1/AC2, real unit)',
+  { skip: NO_SYSTEMD_USER },
+  () => {
+    // DERIVED from the shipped unit, never transcribed: the probe runs under the
+    // SAME restart + start-limit policy the unit ships. Deleting
+    // StartLimitIntervalSec/StartLimitBurst from the unit re-runs this proof with
+    // no limit — which crash-loops past the deadline and flips the test red, the
+    // mutation AC2 requires. (This is the layer the earlier rounds missed: guards
+    // proven under Type=oneshot with no Restart= at all.)
+    const startLimitDirectives = unit
+      .split('\n')
+      .filter((l) => /^(StartLimitIntervalSec|StartLimitBurst)=/.test(l));
+    const restartDirectives = unit
+      .split('\n')
+      .filter((l) => /^(Restart|RestartSec)=/.test(l));
+
+    interface Settled {
+      activeState: string;
+      result: string;
+      nrestarts: number;
+    }
+
+    /**
+     * Install a probe unit that fails EVERY start (a permanently-failing
+     * ExecStartPre — the persistent-misconfig shape), carrying the shipped
+     * restart + start-limit directives, then poll until it settles in `failed`
+     * or the deadline passes. A bounded unit reaches `failed` in ~burst*RestartSec;
+     * an unbounded one is still auto-restarting when the deadline runs out.
+     */
+    function runRestartProbe(): Settled {
+      const name = `gcd-restart-probe-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+      const unitDir = join(homedir(), '.config', 'systemd', 'user');
+      const unitPath = join(unitDir, `${name}.service`);
+      mkdirSync(unitDir, { recursive: true });
+      writeFileSync(
+        unitPath,
+        [
+          '[Unit]',
+          'Description=gascity-dashboard restart-bound probe (test-generated, disposable)',
+          ...startLimitDirectives,
+          '[Service]',
+          'Type=simple',
+          ...restartDirectives,
+          // Fails on every attempt, as a persistent ExecStartPre misconfig does —
+          // the case Restart=on-failure would otherwise loop on forever.
+          "ExecStartPre=/bin/sh -c 'exit 1'",
+          'ExecStart=/bin/true',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+
+      function show(): Map<string, string> {
+        const shown = spawnSync(
+          'systemctl',
+          [
+            '--user',
+            'show',
+            `${name}.service`,
+            '-p',
+            'ActiveState',
+            '-p',
+            'Result',
+            '-p',
+            'NRestarts',
+            '-p',
+            'LoadState',
+          ],
+          { encoding: 'utf8' },
+        );
+        return new Map(
+          (shown.stdout ?? '')
+            .split('\n')
+            .filter((l) => l.includes('='))
+            .map((l) => {
+              const at = l.indexOf('=');
+              return [l.slice(0, at), l.slice(at + 1).trim()] as const;
+            }),
+        );
+      }
+
+      try {
+        execFileSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'ignore' });
+        // `start` returns once the initial start JOB fails; auto-restart then runs
+        // in the background, so poll ActiveState rather than trust the one job.
+        spawnSync('systemctl', ['--user', 'start', `${name}.service`], { stdio: 'ignore' });
+
+        let props = show();
+        assert.equal(
+          props.get('LoadState'),
+          'loaded',
+          `probe unit did not load (LoadState=${props.get('LoadState')}); its verdict is meaningless`,
+        );
+        // ~48s ceiling: a bounded unit settles in ~burst*RestartSec (~15s); an
+        // unbounded one is still 'activating (auto-restart)' when this runs out.
+        for (let i = 0; i < 24; i++) {
+          const st = props.get('ActiveState');
+          if (st === 'failed' || st === 'inactive') break;
+          spawnSync('sleep', ['2'], { stdio: 'ignore' });
+          props = show();
+        }
+        return {
+          activeState: props.get('ActiveState') ?? '',
+          result: props.get('Result') ?? '',
+          nrestarts: Number(props.get('NRestarts') ?? NaN),
+        };
+      } finally {
+        spawnSync('systemctl', ['--user', 'stop', `${name}.service`], { stdio: 'ignore' });
+        spawnSync('systemctl', ['--user', 'reset-failed', `${name}.service`], { stdio: 'ignore' });
+        rmSync(unitPath, { force: true });
+        spawnSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'ignore' });
+      }
+    }
+
+    test('start-limit stops the retries and lands the unit in failed', () => {
+      const burst = Number(/^StartLimitBurst=(\d+)$/m.exec(unit)?.[1] ?? NaN);
+      assert.ok(
+        Number.isInteger(burst),
+        'unit must set StartLimitBurst so a persistent failure is bounded',
+      );
+      const { activeState, nrestarts } = runRestartProbe();
+      assert.equal(
+        activeState,
+        'failed',
+        `a permanently-failing start must settle in 'failed', not keep restarting (ActiveState=${activeState}). Deleting StartLimitIntervalSec/StartLimitBurst reproduces the unbounded loop.`,
+      );
+      assert.ok(
+        Number.isInteger(nrestarts) && nrestarts <= burst + 1,
+        `NRestarts (${nrestarts}) must stay within StartLimitBurst (${burst}); an unbounded loop climbs past it`,
+      );
+    });
+  },
+);
+
 describe('deploy: README matches the unit', () => {
   test('README references no non-existent ~/gas-city-dashboard path', () => {
     for (const token of HYPHENATED_PATH_TOKENS) {
@@ -647,7 +896,13 @@ describe('deploy: README matches the unit', () => {
       !/Four of those are asserted/.test(readme),
       'README miscounts the ExecStartPre-checked paths (the checkout is a WorkingDirectory failure, not an ExecStartPre one)',
     );
-    const pathGuards = EXEC_START_PRE.filter((l) => !l.includes(PORT_GUARD_SCRIPT));
+    // Count only the `/bin/sh` PATH assertions (node presence, backend output,
+    // frontend bundle). The two runtime probes — assert-port-free.mjs and
+    // assert-node-version.mjs — check a bind and a version, not a path, so they
+    // are excluded from this count exactly as the port probe always was.
+    const pathGuards = EXEC_START_PRE.filter(
+      (l) => !l.includes(PORT_GUARD_SCRIPT) && !l.includes(NODE_VERSION_GUARD_SCRIPT),
+    );
     assert.equal(
       pathGuards.length,
       3,
@@ -677,6 +932,21 @@ describe('deploy: README matches the unit', () => {
     assert.ok(
       !/404/.test(readme),
       'README narrates a 404 failure mode no test proves and the guard makes unreachable',
+    );
+  });
+
+  test('README documents the Node floor, read from package.json engines (AC5)', () => {
+    // Single source of truth: derive the floor from package.json rather than
+    // pinning a literal, so bumping engines.node cannot leave the README behind.
+    const pkg = JSON.parse(
+      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+    ) as { engines?: { node?: string } };
+    const floor = /(\d+)/.exec(pkg.engines?.node ?? '')?.[1];
+    assert.ok(floor, 'package.json must declare a parseable engines.node');
+    assert.match(
+      readme,
+      new RegExp(`Node\\s*>?=?\\s*${floor}`),
+      `README must document the Node >= ${floor} requirement`,
     );
   });
 });

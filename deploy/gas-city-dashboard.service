@@ -4,6 +4,20 @@ Documentation=file://%h/gascity-dashboard/specs/architecture/overview.md
 After=network-online.target
 Wants=network-online.target
 
+# Bound the restart loop. Restart=on-failure / RestartSec=3 (below) retries a
+# failed start every 3s; without a start limit a PERSISTENT ExecStartPre refusal
+# (unbuilt backend/frontend, wrong ADMIN_FRONTEND_DIST, a node below the floor)
+# loops forever and never reaches `failed`. systemd's DEFAULT window is 10s,
+# which RestartSec=3 outpaces — 5 restarts span ~15s, so the default limit never
+# trips. Widen the window past that span so 5 attempts fall inside it: a
+# persistent misconfig then hits the limit and lands in `failed`
+# (start-limit-hit) after ~5 tries, while a transient port race still gets its
+# retries. Proven in backend/test/deploy-unit.test.ts (NRestarts bounded, unit
+# reaches failed; deleting these two lines reproduces the unbounded loop and
+# flips the test red).
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
 # Template via systemd's %h (user home) so the unit works on any operator's host
 # when installed under `systemctl --user`. The repo clones to ~/gascity-dashboard
 # (the gastownhall/gascity-dashboard default); if yours lives elsewhere, repoint
@@ -46,6 +60,14 @@ ExecStartPre=/bin/sh -c 'case "$1" in /*) ;; *) echo "gas-city-dashboard: ADMIN_
 # node and exits 127; this adds the one thing it can't know — which line of
 # this unit to edit.
 ExecStartPre=/bin/sh -c 'command -v node >/dev/null 2>&1 || { echo "gas-city-dashboard: no runnable \"node\" on this unit PATH — install Node.js, or add its directory to the Environment=PATH line in this unit" >&2; exit 1; }'
+# Refuse to start on a Node older than package.json's engines floor (>=24). The
+# presence guard above only proves node RESOLVES; this proves it is new enough.
+# `npm install` merely warns on an old runtime, so an older `node` first on PATH
+# would build and run in prod undetected. The guard resolves the SAME `node`
+# ExecStart runs and reads the floor from package.json, so the version has one
+# source of truth. Rationale and mutation-proof: deploy/README.md and the
+# real-unit test in backend/test/deploy-unit.test.ts.
+ExecStartPre=/usr/bin/env node %h/gascity-dashboard/deploy/assert-node-version.mjs
 # Refuse to start if the address we bind is already held. This probes the bind
 # itself rather than filtering `ss`, because no ss filter is correct here: a wide
 # `sport = :8082` aborts on tailscale's own <tailnet-ip>:8082 (which proxies INTO

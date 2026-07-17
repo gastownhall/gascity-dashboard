@@ -8,6 +8,8 @@ Three are asserted at start by `ExecStartPre` and fail **loudly**, naming what t
 
 The unit runs `node` off its own `Environment=PATH` (`~/.local/bin` first, then the system paths) rather than a hard-coded interpreter location, because a systemd user service does not inherit your login shell's `PATH`. If your Node lives outside those directories — nvm, fnm, and asdf all keep theirs under their own roots — add it to that `Environment=PATH` line.
 
+**Node >= 24 is required.** The floor comes from this repo's `package.json` `engines.node`, and an `ExecStartPre` guard resolves the same `node` `ExecStart` will run and refuses the start if it is below that floor. `npm install` only *warns* on an older runtime, so without this guard a stale node first on `PATH` would build and run the dashboard silently. Install a Node >= 24 and make sure it wins on the `Environment=PATH` line before enabling the unit.
+
 ## One-time install
 
 ```bash
