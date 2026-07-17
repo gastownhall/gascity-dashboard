@@ -29,6 +29,7 @@ const READ_ENDPOINT_TEMPLATES = [
   '/v0/city/{cityName}/health',
   '/v0/city/{cityName}/mail',
   '/v0/city/{cityName}/mail/thread/{id}',
+  '/v0/city/{cityName}/rigs',
   '/v0/city/{cityName}/sessions',
   '/v0/city/{cityName}/session/{id}/pending',
   '/v0/city/{cityName}/session/{id}/stream',

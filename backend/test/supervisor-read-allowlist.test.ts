@@ -19,6 +19,7 @@ describe('supervisor read allowlist', () => {
       '/v0/city/test-city/health',
       '/v0/city/test-city/mail',
       '/v0/city/test-city/mail/thread/m1',
+      '/v0/city/test-city/rigs',
       '/v0/city/test-city/sessions',
       '/v0/city/test-city/session/s1/pending',
       '/v0/city/test-city/session/s1/stream',
