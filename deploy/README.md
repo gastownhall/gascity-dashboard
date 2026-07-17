@@ -8,7 +8,7 @@ Three are asserted at start by `ExecStartPre` and fail **loudly**, naming what t
 
 The unit runs `node` off its own `Environment=PATH` (`~/.local/bin` first, then the system paths) rather than a hard-coded interpreter location, because a systemd user service does not inherit your login shell's `PATH`. If your Node lives outside those directories — nvm, fnm, and asdf all keep theirs under their own roots — add it to that `Environment=PATH` line.
 
-**Node >= 24 is required.** The floor comes from this repo's `package.json` `engines.node`, and an `ExecStartPre` guard resolves the same `node` `ExecStart` will run and refuses the start if it is below that floor. `npm install` only *warns* on an older runtime, so without this guard a stale node first on `PATH` would build and run the dashboard silently. Install a Node >= 24 and make sure it wins on the `Environment=PATH` line before enabling the unit.
+**Node >= 24 is required.** The floor comes from this repo's `package.json` `engines.node`, and an `ExecStartPre` guard resolves the same `node` `ExecStart` will run and refuses the start if it is below that floor. `npm install` only _warns_ on an older runtime, so without this guard a stale node first on `PATH` would build and run the dashboard silently. Install a Node >= 24 and make sure it wins on the `Environment=PATH` line before enabling the unit.
 
 ## One-time install
 
@@ -42,8 +42,13 @@ npm run build
 # effect on restart.
 cp deploy/gas-city-dashboard.service ~/.config/systemd/user/
 systemctl --user daemon-reload
+
+# Clear a tripped start limit before restarting; a no-op if nothing failed.
+systemctl --user reset-failed gas-city-dashboard.service
 systemctl --user restart gas-city-dashboard.service
 ```
+
+That `reset-failed` earns its place when the version you are replacing was crash-looping. After `StartLimitBurst` (5) failed starts inside the `StartLimitIntervalSec` (60s) window, the unit stops retrying and systemd **refuses** further starts — including the `restart` above — so a redeploy that fixes the fault still leaves the dashboard down. The refusal is easy to misread: `systemctl` reports `Job for gas-city-dashboard.service failed because the control process exited with error code`, naming a process that never ran on that attempt, and only the journal says `Start request repeated too quickly`. `reset-failed` clears that state immediately, so the corrected build starts on the first try.
 
 ## Diagnostics
 

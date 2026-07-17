@@ -95,15 +95,21 @@ PrivateTmp=true
 # drop, which needs CAP_SETPCAP *effective* — no unprivileged `systemctl --user`
 # manager has it, so systemd rejects the unit at 218/CAPABILITIES before
 # ExecStart. They drop caps an unprivileged process never had. System units only.
+# Re-proven every run against a real --user unit, A/B against an identical
+# control (backend/test/deploy-unit.test.ts): setting either one back reproduces
+# the 218 and flips that suite red.
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_UNIX AF_INET
 RestrictNamespaces=true
 LockPersonality=true
 # NO MemoryDenyWriteExecute: it blocks the mprotect() V8's JIT needs, so node
-# SIGTRAPs at startup (code=dumped/status=TRAP) before running a line of the
-# server. Re-add only alongside `node --jitless`. This same fault was reported
-# and fixed independently by Tudor Saitoc in gastownhall/gascity-dashboard#174.
+# SIGTRAPs at startup (status=TRAP) before running a line of the server —
+# proven on a real --user unit in backend/test/deploy-unit.test.ts. Whether that
+# crash also dumps core is the host's core-limit policy, not this switch, so the
+# test pins the signal and not a dump. Re-add only alongside `node --jitless`.
+# This same fault was reported and fixed independently by Tudor Saitoc in
+# gastownhall/gascity-dashboard#174.
 SystemCallArchitectures=native
 
 [Install]

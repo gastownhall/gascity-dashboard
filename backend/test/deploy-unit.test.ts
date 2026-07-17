@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { homedir, networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { load as loadYaml } from 'js-yaml';
 
 // Regression guard for the shipped systemd unit and its runbook. An earlier copy
 // hard-coded `~/gas-city-dashboard`, which exists on no host — the unit silently
@@ -76,15 +77,51 @@ const NO_SYSTEMD_USER = systemdUserUnavailable();
 // skip. A test that cannot run must never read as a test that passed.
 const REQUIRE_SYSTEMD_USER = process.env.REQUIRE_SYSTEMD_USER === '1';
 
+/** systemd's own answers for `name`, as a Key->Value map. */
+function showUnitProps(name: string, props: readonly string[]): Map<string, string> {
+  const shown = spawnSync(
+    'systemctl',
+    ['--user', 'show', `${name}.service`, ...props.flatMap((p) => ['-p', p])],
+    { encoding: 'utf8' },
+  );
+  return new Map(
+    (shown.stdout ?? '')
+      .split('\n')
+      .filter((l) => l.includes('='))
+      .map((l) => {
+        const at = l.indexOf('=');
+        return [l.slice(0, at), l.slice(at + 1).trim()] as const;
+      }),
+  );
+}
+
+interface ProbeUnitSpec {
+  readonly execStartPre?: readonly string[];
+  /** Unit-file `Environment=` lines. */
+  readonly environment?: readonly string[];
+  /** Extra `[Service]` directives, e.g. a hardening switch under test. */
+  readonly serviceDirectives?: readonly string[];
+  /** Defaults to /bin/true. Explicit `undefined` means the same as omitted. */
+  readonly execStart?: string | undefined;
+}
+
+interface UnitOutcome {
+  /** systemd's own verdict. `success` means the unit ran to completion. */
+  readonly result: string;
+  /** Exit status, or the signal number when the process was killed. */
+  readonly execMainStatus: string;
+}
+
 /**
- * Install a throwaway unit carrying `execStartPreLines` verbatim, start it, and
- * return systemd's own verdict. `success` means every ExecStartPre passed.
+ * Install a throwaway unit built from `spec`, start it, and return systemd's own
+ * verdict. The point is the LAYER: systemd parses these directives and does its
+ * own ${VAR} substitution, which no `sh -c` stand-in reproduces.
  *
  * `environment` becomes unit-file `Environment=` lines. Those are safe for plain
  * values (systemd's unit parser escapes and word-splits them), which is why the
  * frontend guard's payloads cannot go through here — see runFrontendGuard.
  */
-function runGuardViaRealUnit(execStartPreLines: string[], environment: string[] = []): string {
+function runProbeUnit(spec: ProbeUnitSpec = {}): UnitOutcome {
   const name = `gcd-guard-probe-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
   const unitDir = join(homedir(), '.config', 'systemd', 'user');
   const unitPath = join(unitDir, `${name}.service`);
@@ -96,9 +133,10 @@ function runGuardViaRealUnit(execStartPreLines: string[], environment: string[] 
       'Description=gascity-dashboard guard probe (test-generated, disposable)',
       '[Service]',
       'Type=oneshot',
-      ...environment.map((e) => `Environment=${e}`),
-      ...execStartPreLines,
-      'ExecStart=/bin/true',
+      ...(spec.serviceDirectives ?? []),
+      ...(spec.environment ?? []).map((e) => `Environment=${e}`),
+      ...(spec.execStartPre ?? []),
+      `ExecStart=${spec.execStart ?? '/bin/true'}`,
       '',
     ].join('\n'),
     'utf8',
@@ -106,19 +144,21 @@ function runGuardViaRealUnit(execStartPreLines: string[], environment: string[] 
   try {
     execFileSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'ignore' });
     spawnSync('systemctl', ['--user', 'start', `${name}.service`], { stdio: 'ignore' });
-    const shown = spawnSync(
-      'systemctl',
-      ['--user', 'show', `${name}.service`, '-p', 'Result', '--value'],
-      {
-        encoding: 'utf8',
-      },
-    );
-    return (shown.stdout ?? '').trim();
+    const props = showUnitProps(name, ['Result', 'ExecMainStatus']);
+    return {
+      result: props.get('Result') ?? '',
+      execMainStatus: props.get('ExecMainStatus') ?? '',
+    };
   } finally {
     spawnSync('systemctl', ['--user', 'reset-failed', `${name}.service`], { stdio: 'ignore' });
     rmSync(unitPath, { force: true });
     spawnSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'ignore' });
   }
+}
+
+/** systemd's Result for a unit carrying `execStartPreLines`. */
+function runGuardViaRealUnit(execStartPreLines: string[], environment: string[] = []): string {
+  return runProbeUnit({ execStartPre: execStartPreLines, environment }).result;
 }
 
 // A test-scoped variable name, so this suite never reads, writes, or unsets the
@@ -168,16 +208,86 @@ const HYPHENATED_PATH_TOKENS = [
   '/gas-city-dashboard/',
 ];
 
+// systemd's own exit statuses (systemd.exec(5), "Process Exit Codes"), named so
+// the assertions below read as the mechanism rather than as magic numbers.
+const EXIT_CAPABILITIES = '218';
+const SIGTRAP = '5';
+
+interface UnstartableSwitch {
+  /** Why the unit omits it — the causal claim the real-unit probe must back. */
+  readonly why: string;
+  /** ExecStart the switch needs in order to bite. Defaults to /bin/true. */
+  readonly execStart?: string;
+  /** ExecMainStatus systemd reports when the switch stops the start. */
+  readonly expectedStatus: string;
+}
+
 // Switches that read like free hardening but leave the unit unable to start.
-// Each was bisected through its own probe unit; the value is the failure.
-const UNSTARTABLE_SWITCHES: Record<string, string> = {
-  PrivateDevices:
-    'implies a CapabilityBoundingSet drop needing CAP_SETPCAP, which a --user manager lacks: 218/CAPABILITIES before ExecStart',
-  ProtectKernelModules:
-    'implies a CapabilityBoundingSet drop needing CAP_SETPCAP, which a --user manager lacks: 218/CAPABILITIES before ExecStart',
-  MemoryDenyWriteExecute:
-    "blocks the mprotect() V8's JIT needs; node SIGTRAPs at startup before running a line of the server",
+// Each was bisected through its own probe unit; `why` is the failure, and the
+// probe suite below re-proves it against the shipping layer on every run.
+const UNSTARTABLE_SWITCHES: Record<string, UnstartableSwitch> = {
+  PrivateDevices: {
+    why: 'implies a CapabilityBoundingSet drop needing CAP_SETPCAP, which a --user manager lacks: 218/CAPABILITIES before ExecStart',
+    expectedStatus: EXIT_CAPABILITIES,
+  },
+  ProtectKernelModules: {
+    why: 'implies a CapabilityBoundingSet drop needing CAP_SETPCAP, which a --user manager lacks: 218/CAPABILITIES before ExecStart',
+    expectedStatus: EXIT_CAPABILITIES,
+  },
+  MemoryDenyWriteExecute: {
+    why: "blocks the mprotect() V8's JIT needs; node SIGTRAPs at startup before running a line of the server",
+    // /bin/true sails straight through this one: only a real V8 start touches
+    // the mprotect() it blocks. Probe with the SAME interpreter ExecStart runs.
+    execStart: `${process.execPath} -e 'process.exit(0)'`,
+    expectedStatus: SIGTRAP,
+  },
 };
+
+interface WorkflowStep {
+  readonly run?: string;
+  readonly env?: Readonly<Record<string, unknown>>;
+}
+
+interface CiJob {
+  readonly jobId: string;
+  readonly steps: readonly WorkflowStep[];
+  /** Index of the step that runs the backend suite. */
+  readonly index: number;
+}
+
+// The step that actually carries the proofs, keyed on what it RUNS rather than
+// its display name: the name is cosmetic and renaming it must not silently
+// unpin the gate's configuration.
+const BACKEND_TEST_RUN = /npm\s+--workspace\s+backend\s+test/;
+const LINGER_RUN = /enable-linger/;
+
+/**
+ * The CI job that runs the backend test suite, parsed from the workflow.
+ *
+ * Parsed, not grepped. A grep for `REQUIRE_SYSTEMD_USER` / `enable-linger`
+ * anywhere in the file passes even when they sit on steps that have nothing to
+ * do with the backend suite — the assertion would claim to prove the wiring
+ * while proving only the strings' presence.
+ */
+function ciJobRunningBackendTests(): CiJob {
+  const parsed: unknown = loadYaml(ci);
+  assert.ok(
+    parsed !== null && typeof parsed === 'object',
+    'ci.yml did not parse to a YAML mapping',
+  );
+  const jobs = (parsed as { jobs?: unknown }).jobs;
+  assert.ok(jobs !== null && typeof jobs === 'object', 'ci.yml declares no `jobs:` mapping');
+  for (const [jobId, job] of Object.entries(jobs as Record<string, unknown>)) {
+    const steps: unknown = (job as { steps?: unknown } | null)?.steps;
+    if (!Array.isArray(steps)) continue;
+    const typed = steps as readonly WorkflowStep[];
+    const index = typed.findIndex(
+      (s) => typeof s?.run === 'string' && BACKEND_TEST_RUN.test(s.run),
+    );
+    if (index !== -1) return { jobId, steps: typed, index };
+  }
+  assert.fail('no CI job runs the backend test suite (`npm --workspace backend test`)');
+}
 
 // These two run EVERYWHERE, including where no --user manager exists. They are
 // the reason a green gate now means the proofs actually ran.
@@ -195,20 +305,40 @@ describe('deploy: the shipping-layer proofs reach the merge gate', () => {
     );
   });
 
-  test('CI runs the backend tests with REQUIRE_SYSTEMD_USER=1', () => {
+  test('CI sets REQUIRE_SYSTEMD_USER=1 ON the step that runs the backend suite', () => {
     // Without this the suites skip, and node:test counts a skipped SUITE as a
     // passing `ok` — "# skipped 0" prints whether the proofs ran or not, so only
     // the test TOTAL (18 vs 25) discriminates and nothing watches a total. That
     // is how these proofs sat outside the gate for two rounds. Pin the gate's own
     // configuration here: deleting the CI wiring must fail a test, not go quiet.
-    assert.match(
-      ci,
-      /REQUIRE_SYSTEMD_USER:\s*['"]?1['"]?/,
-      'ci.yml must set REQUIRE_SYSTEMD_USER=1 for the backend tests, or a host without a --user manager silently skips every real-unit proof',
+    //
+    // Scoped to the step's own `env:`, so moving the var to any other step fails
+    // this rather than passing on its mere presence somewhere in the file.
+    const { steps, index } = ciJobRunningBackendTests();
+    const env = steps[index]?.env ?? {};
+    assert.equal(
+      String(env.REQUIRE_SYSTEMD_USER ?? ''),
+      '1',
+      'the CI step running `npm --workspace backend test` must set REQUIRE_SYSTEMD_USER=1 in its own env:, or a host without a --user manager silently skips every real-unit proof',
+    );
+  });
+
+  test('CI provisions the --user manager BEFORE that step, in the same job', () => {
+    // Order and job matter: REQUIRE_SYSTEMD_USER=1 without a manager provisioned
+    // ahead of it in the SAME job just fails the run. A different job would not
+    // share the runner at all.
+    const { jobId, steps, index } = ciJobRunningBackendTests();
+    const provisioning = steps.findIndex(
+      (s) => typeof s?.run === 'string' && LINGER_RUN.test(s.run),
+    );
+    assert.notEqual(
+      provisioning,
+      -1,
+      `job '${jobId}' must provision a systemd --user manager (loginctl enable-linger) in the same job as the backend suite`,
     );
     assert.ok(
-      /enable-linger/.test(ci),
-      'ci.yml must provision a systemd --user manager (loginctl enable-linger), or REQUIRE_SYSTEMD_USER=1 just fails the job',
+      provisioning < index,
+      `the enable-linger step (index ${provisioning}) must run BEFORE the backend suite (index ${index}) in job '${jobId}'`,
     );
   });
 });
@@ -339,7 +469,7 @@ describe('deploy: systemd unit path is the real checkout', () => {
   });
 
   test('unit sets no hardening switch that prevents it from starting', () => {
-    for (const [opt, why] of Object.entries(UNSTARTABLE_SWITCHES)) {
+    for (const [opt, { why }] of Object.entries(UNSTARTABLE_SWITCHES)) {
       assert.ok(!new RegExp(`^${opt}=(true|yes|1)$`, 'm').test(unit), `${opt} ${why}`);
     }
   });
@@ -778,9 +908,7 @@ describe(
     const startLimitDirectives = unit
       .split('\n')
       .filter((l) => /^(StartLimitIntervalSec|StartLimitBurst)=/.test(l));
-    const restartDirectives = unit
-      .split('\n')
-      .filter((l) => /^(Restart|RestartSec)=/.test(l));
+    const restartDirectives = unit.split('\n').filter((l) => /^(Restart|RestartSec)=/.test(l));
 
     interface Settled {
       activeState: string;
@@ -818,34 +946,8 @@ describe(
         'utf8',
       );
 
-      function show(): Map<string, string> {
-        const shown = spawnSync(
-          'systemctl',
-          [
-            '--user',
-            'show',
-            `${name}.service`,
-            '-p',
-            'ActiveState',
-            '-p',
-            'Result',
-            '-p',
-            'NRestarts',
-            '-p',
-            'LoadState',
-          ],
-          { encoding: 'utf8' },
-        );
-        return new Map(
-          (shown.stdout ?? '')
-            .split('\n')
-            .filter((l) => l.includes('='))
-            .map((l) => {
-              const at = l.indexOf('=');
-              return [l.slice(0, at), l.slice(at + 1).trim()] as const;
-            }),
-        );
-      }
+      const show = (): Map<string, string> =>
+        showUnitProps(name, ['ActiveState', 'Result', 'NRestarts', 'LoadState']);
 
       try {
         execFileSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'ignore' });
@@ -917,6 +1019,129 @@ describe(
           `at 0 the unit never retried at all and a transient failure would get no second chance`,
       );
     });
+
+    /**
+     * Trip the start limit, then CORRECT the fault and try the runbook's restart.
+     *
+     * The correction is the whole point. A probe that can never start proves
+     * nothing here: "the limit refused the start" and "the command failed again"
+     * look identical from the outside. Gating ExecStartPre on a marker file makes
+     * the two separable — once the marker exists the unit would start, so a unit
+     * that still will not run was refused, not broken.
+     */
+    function runRefusalProbe(): { correctedThenRestarted: string; afterResetFailed: string } {
+      const name = `gcd-refusal-probe-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+      const unitDir = join(homedir(), '.config', 'systemd', 'user');
+      const unitPath = join(unitDir, `${name}.service`);
+      const markerDir = mkdtempSync(join(tmpdir(), 'gcd-refusal-'));
+      const marker = join(markerDir, 'fault-cleared');
+      mkdirSync(unitDir, { recursive: true });
+      writeFileSync(
+        unitPath,
+        [
+          '[Unit]',
+          'Description=gascity-dashboard start-limit refusal probe (test-generated, disposable)',
+          ...startLimitDirectives,
+          '[Service]',
+          'Type=simple',
+          ...restartDirectives,
+          `ExecStartPre=/bin/sh -c 'test -f ${marker}'`,
+          'ExecStart=/bin/sleep 300',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+
+      const activeState = (): string =>
+        showUnitProps(name, ['ActiveState']).get('ActiveState') ?? '';
+
+      try {
+        execFileSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'ignore' });
+        spawnSync('systemctl', ['--user', 'start', `${name}.service`], { stdio: 'ignore' });
+        for (let i = 0; i < 24 && activeState() !== 'failed'; i++) {
+          spawnSync('sleep', ['2'], { stdio: 'ignore' });
+        }
+        assert.equal(
+          activeState(),
+          'failed',
+          'probe never reached `failed`, so its start limit never tripped and the refusal below is untested',
+        );
+
+        // The fixed deployment: from here on the unit WOULD start.
+        writeFileSync(marker, '', 'utf8');
+        spawnSync('systemctl', ['--user', 'restart', `${name}.service`], { stdio: 'ignore' });
+        spawnSync('sleep', ['2'], { stdio: 'ignore' });
+        const correctedThenRestarted = activeState();
+
+        spawnSync('systemctl', ['--user', 'reset-failed', `${name}.service`], { stdio: 'ignore' });
+        spawnSync('systemctl', ['--user', 'restart', `${name}.service`], { stdio: 'ignore' });
+        spawnSync('sleep', ['2'], { stdio: 'ignore' });
+        return { correctedThenRestarted, afterResetFailed: activeState() };
+      } finally {
+        spawnSync('systemctl', ['--user', 'stop', `${name}.service`], { stdio: 'ignore' });
+        spawnSync('systemctl', ['--user', 'reset-failed', `${name}.service`], { stdio: 'ignore' });
+        rmSync(unitPath, { force: true });
+        rmSync(markerDir, { recursive: true, force: true });
+        spawnSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'ignore' });
+      }
+    }
+
+    test('a tripped start limit refuses the runbook restart until reset-failed clears it', () => {
+      // This is what puts `systemctl --user reset-failed` in deploy/README.md
+      // ahead of the restart. Without it the runbook has this bead's own defect:
+      // a documented step that silently does not do what it says.
+      const { correctedThenRestarted, afterResetFailed } = runRefusalProbe();
+      assert.notEqual(
+        correctedThenRestarted,
+        'active',
+        'a CORRECTED unit restarted cleanly while the start limit was tripped — systemd no longer refuses it, so the README paragraph and the reset-failed step now describe a hazard that does not exist. Delete them rather than leave prose no test backs.',
+      );
+      assert.equal(
+        afterResetFailed,
+        'active',
+        `reset-failed did not clear the refusal (ActiveState=${afterResetFailed}); the runbook's recovery step does not recover`,
+      );
+    });
+  },
+);
+
+describe(
+  'deploy: the hardening switches this unit omits really do prevent a start (AC5, real unit)',
+  { skip: NO_SYSTEMD_USER },
+  () => {
+    // The omissions are otherwise asserted by string ABSENCE, with the causal
+    // claim sitting in a unit-file comment. That proves the directive is gone —
+    // not that it had to go. A sibling claim asserted with equal confidence in
+    // this same unit ("a missing ReadWritePaths entry fails the start at
+    // 226/NAMESPACE") was already falsified by live testing, so these get the
+    // same treatment as every other guard here: prove it on the layer that
+    // ships. If systemd ever stops rejecting one of these under a --user
+    // manager, the omission has lost its reason and this suite says so.
+    for (const [opt, { why, execStart, expectedStatus }] of Object.entries(UNSTARTABLE_SWITCHES)) {
+      test(`${opt}=true is what stops the start, and it stops it before ExecStart`, () => {
+        // A/B on one variable. The control is not ceremony: without it, an
+        // assertion that the switched unit "fails" passes just as well when the
+        // probe shape is broken for some unrelated reason, and proves nothing.
+        const control = runProbeUnit({ execStart });
+        assert.equal(
+          control.result,
+          'success',
+          `control unit (identical, minus ${opt}) did not start — this probe cannot attribute anything to ${opt}`,
+        );
+
+        const switched = runProbeUnit({ serviceDirectives: [`${opt}=true`], execStart });
+        assert.notEqual(
+          switched.result,
+          'success',
+          `${opt}=true started cleanly, so the unit's stated reason for omitting it no longer holds (${why}). Re-check the omission rather than trusting this comment.`,
+        );
+        assert.equal(
+          switched.execMainStatus,
+          expectedStatus,
+          `${opt}=true failed, but not by the mechanism the unit claims (${why}): expected ExecMainStatus ${expectedStatus}, got ${switched.execMainStatus} (Result=${switched.result})`,
+        );
+      });
+    }
   },
 );
 
@@ -1029,6 +1254,44 @@ describe('deploy: README matches the unit', () => {
     assert.ok(
       !/404/.test(readme),
       'README narrates a 404 failure mode no test proves and the guard makes unreachable',
+    );
+  });
+
+  test('README clears a tripped start limit BEFORE the documented restart', () => {
+    // Order is the whole fix: reset-failed after the restart recovers nothing on
+    // that attempt, which is the same "documented step that quietly does not do
+    // what it says" defect this bead exists to remove. The refusal it works
+    // around is proven on a real unit in the restart-bound suite above.
+    const resetAt = readme.indexOf('reset-failed gas-city-dashboard.service');
+    const restartAt = readme.indexOf('restart gas-city-dashboard.service');
+    assert.notEqual(
+      resetAt,
+      -1,
+      'README must document `systemctl --user reset-failed gas-city-dashboard.service`, or a redeploy that fixes the fault is still refused after a crash-loop',
+    );
+    assert.notEqual(restartAt, -1, 'README must document the restart');
+    assert.ok(
+      resetAt < restartAt,
+      'README must reset the tripped start limit BEFORE restarting; afterwards it cannot help the restart it follows',
+    );
+  });
+
+  test("README quotes the unit's own start-limit numbers, not literals of its own", () => {
+    // Same single-source rule the Node floor follows: the runbook explains the
+    // refusal in concrete numbers, so retuning the unit must not leave the prose
+    // behind. Derive them from the unit or the README drifts silently.
+    const burst = /^StartLimitBurst=(\d+)$/m.exec(unit)?.[1];
+    const interval = /^StartLimitIntervalSec=(\d+)$/m.exec(unit)?.[1];
+    assert.ok(burst && interval, 'unit must declare StartLimitBurst and StartLimitIntervalSec');
+    assert.match(
+      readme,
+      new RegExp(`StartLimitBurst\`? \\(${burst}\\)`),
+      `README must quote the unit's StartLimitBurst (${burst}); it currently names a different number`,
+    );
+    assert.match(
+      readme,
+      new RegExp(`StartLimitIntervalSec\`? \\(${interval}s\\)`),
+      `README must quote the unit's StartLimitIntervalSec (${interval}s); it currently names a different number`,
     );
   });
 

@@ -16,6 +16,20 @@
 # The job is single + sequential. Split into a matrix later if the wall-clock
 # time becomes a problem; for the current size it runs comfortably under
 # two minutes.
+#
+# No `paths:` filter, and the systemd-user provisioning step below is
+# unconditional — so a deploy-only step gates every PR, including ones that
+# touch no deploy file. That coupling is a DELIBERATE call, not an oversight.
+# Scoping it behind a changed-files filter would mean the deploy proofs stop
+# running whenever that filter says "no deploy change" — and a filter that
+# misfires (merge queue, force-push, a rename) drops the proofs from a real
+# deploy change while the job still reports green. This gate exists precisely
+# because those proofs silently sat outside it for two rounds; a false GREEN is
+# the failure this workflow must not have. The coupling's failure mode is the
+# opposite and strictly cheaper: a flaky step turns an unrelated PR red, which
+# is loud, re-runnable, and cannot ship a broken unit.
+# Revisit if real runs prove the step flaky — and scope it fail-closed then
+# (run the proofs unless a diff positively proves no deploy path changed).
 
 name: CI
 
