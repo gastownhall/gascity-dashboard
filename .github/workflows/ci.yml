@@ -16,6 +16,20 @@
 # The job is single + sequential. Split into a matrix later if the wall-clock
 # time becomes a problem; for the current size it runs comfortably under
 # two minutes.
+#
+# No `paths:` filter, and the systemd-user provisioning step below is
+# unconditional — so a deploy-only step gates every PR, including ones that
+# touch no deploy file. That coupling is a DELIBERATE call, not an oversight.
+# Scoping it behind a changed-files filter would mean the deploy proofs stop
+# running whenever that filter says "no deploy change" — and a filter that
+# misfires (merge queue, force-push, a rename) drops the proofs from a real
+# deploy change while the job still reports green. This gate exists precisely
+# because those proofs silently sat outside it for two rounds; a false GREEN is
+# the failure this workflow must not have. The coupling's failure mode is the
+# opposite and strictly cheaper: a flaky step turns an unrelated PR red, which
+# is loud, re-runnable, and cannot ship a broken unit.
+# Revisit if real runs prove the step flaky — and scope it fail-closed then
+# (run the proofs unless a diff positively proves no deploy path changed).
 
 name: CI
 
@@ -102,8 +116,44 @@ jobs:
       - name: Build frontend
         run: npm --workspace frontend run build
 
+      # The deploy guards are ExecStartPre= directives, and the only honest way
+      # to test them is against real units — systemd does its own ${VAR}
+      # substitution into the command line, which no `sh -c` stand-in reproduces.
+      # A GitHub runner has systemd as PID 1 but no --user manager: no login
+      # session, no lingering. Without one, deploy-unit.test.ts skips those
+      # proofs, and node:test reports a skipped SUITE as a passing `ok` — the
+      # summary reads "# skipped 0" either way, so the gate went green for two
+      # rounds on 7 tests that never ran.
+      #
+      # Linger starts user@<uid>.service without a session. If it does not come
+      # up, this step FAILS the job: a missing manager must never be a silent skip.
+      - name: Start a systemd user manager (deploy guards are proven on real units)
+        run: |
+          set -euo pipefail
+          uid="$(id -u)"
+          sudo loginctl enable-linger "$(id -un)"
+          echo "XDG_RUNTIME_DIR=/run/user/${uid}" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${uid}/bus" >> "$GITHUB_ENV"
+          export XDG_RUNTIME_DIR="/run/user/${uid}"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus"
+          for i in $(seq 1 30); do
+            if systemd-run --user --wait --collect --quiet /bin/true >/dev/null 2>&1; then
+              echo "systemd --user manager up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::no systemd --user manager after 30s; the deploy real-unit proofs cannot run"
+          systemctl --user status 2>&1 | head -20 || true
+          exit 1
+
+      # REQUIRE_SYSTEMD_USER=1 makes deploy-unit.test.ts FAIL rather than skip if
+      # the manager is missing, so a regression in the step above cannot quietly
+      # drop the proofs from the gate again.
       - name: Backend tests
         run: npm --workspace backend test
+        env:
+          REQUIRE_SYSTEMD_USER: '1'
 
       # Coverage variant of `vitest run`: same tests, plus the v8 coverage
       # ratchet thresholds in frontend/vitest.config.ts (set ~5 points below
