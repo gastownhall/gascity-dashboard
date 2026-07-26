@@ -48,7 +48,12 @@ ProtectControlGroups=true
 RestrictAddressFamilies=AF_UNIX AF_INET
 RestrictNamespaces=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
+# NOT MemoryDenyWriteExecute=true: V8's JIT allocates writable-then-executable
+# pages at isolate init (v8::base::OS::SetPermissions), so MDWE core-dumps node
+# before main() — "Check failed: 12 == (*__errno_location ())" and
+# status=5/TRAP on Node 24. W^X for the dashboard would require a JITless
+# node build; until then this directive must stay off.
+MemoryDenyWriteExecute=false
 SystemCallArchitectures=native
 
 [Install]
