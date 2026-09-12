@@ -10,7 +10,10 @@ interface RunNodeSessionPanelProps {
 }
 
 export function RunNodeSessionPanel({ node, visible }: RunNodeSessionPanelProps) {
-  const instances = useMemo(() => node?.executionInstances.sort(compareInstances) ?? [], [node]);
+  const instances = useMemo(
+    () => [...(node?.executionInstances ?? [])].sort(compareInstances),
+    [node],
+  );
   const defaultInstance = useMemo(
     () => preferredInstance(instances, node?.visibleExecutionInstanceId),
     [instances, node?.visibleExecutionInstanceId],

@@ -120,6 +120,30 @@ describe('RunNodeSessionPanel — visible-instance alignment', () => {
   });
 });
 
+describe('RunNodeSessionPanel — prop immutability', () => {
+  it('does not mutate the executionInstances array on the RunDisplayNode prop during render', () => {
+    // Instances are deliberately out of compareInstances order (by attempt
+    // value: 3, 1, 2). Array.prototype.sort mutates in place, so sorting the
+    // prop array directly would reorder it to 1, 2, 3 as a side effect of
+    // rendering. The node object is a prop owned by the caller; render must
+    // not reorder it underneath them.
+    const node = baseNode({
+      id: 'sort-safety',
+      visibleExecutionInstanceId: 'attempt-3',
+      executionInstances: [
+        instance({ id: 'attempt-3', attempt: { kind: 'attempt', value: 3 } }),
+        instance({ id: 'attempt-1', attempt: { kind: 'attempt', value: 1 } }),
+        instance({ id: 'attempt-2', attempt: { kind: 'attempt', value: 2 } }),
+      ],
+    });
+    const originalOrder = node.executionInstances.map((entry) => entry.id);
+
+    render(<RunNodeSessionPanel node={node} visible />);
+
+    expect(node.executionInstances.map((entry) => entry.id)).toEqual(originalOrder);
+  });
+});
+
 function instance(overrides: Partial<RunExecutionInstance> & { id: string }): RunExecutionInstance {
   return {
     semanticNodeId: 'node',
