@@ -31,6 +31,15 @@ vi.mock('../runs/runSummarySubscription', () => ({
   useRunSummary: () => ({ sseState: 'open' }),
 }));
 
+// QuickJump's own data-fetching/keyboard/fuzzy-match behavior is covered by
+// QuickJump.test.tsx. Here Header is only responsible for the open/close
+// wiring (trigger button + global hotkey), so a bare open-state stub keeps
+// this file from re-mocking beadReads/agentReads/mailReads.
+vi.mock('./QuickJump', () => ({
+  QuickJump: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" aria-label="Quick jump" /> : null,
+}));
+
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
@@ -198,6 +207,76 @@ describe('Header mobile nav', () => {
       }
     });
 
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('Header quick jump', () => {
+  it('exposes a Jump trigger button, closed by default', () => {
+    renderHeader();
+    expect(screen.getByRole('button', { name: /jump/i })).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('opens quick jump when the trigger button is clicked', () => {
+    renderHeader();
+    fireEvent.click(screen.getByRole('button', { name: /jump/i }));
+    expect(screen.getByRole('dialog', { name: /quick jump/i })).toBeTruthy();
+  });
+
+  // This is the hotkey-handler regression test: deleting Header's global
+  // keydown listener (or its Cmd/Ctrl-K + `setQuickJumpOpen(true)` guard)
+  // makes this fail, since the trigger-button test above passes independently
+  // of that listener.
+  it('opens quick jump on Cmd-K / Ctrl-K from anywhere in the document', () => {
+    renderHeader();
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.keyDown(document, { key: 'k', metaKey: true });
+    expect(screen.getByRole('dialog', { name: /quick jump/i })).toBeTruthy();
+  });
+
+  it('opens quick jump on Ctrl-K for non-Mac keyboards', () => {
+    renderHeader();
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true });
+    expect(screen.getByRole('dialog', { name: /quick jump/i })).toBeTruthy();
+  });
+
+  it('ignores a bare "k" keypress with no modifier', () => {
+    renderHeader();
+    fireEvent.keyDown(document, { key: 'k' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('closes quick jump on route change, same as the mobile menu', () => {
+    function Harness() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button onClick={() => navigate('/agents')}>navigate elsewhere</button>
+          <Header />
+        </>
+      );
+    }
+    render(
+      <ThemeProvider>
+        <ViewingAsProvider>
+          <NowProvider>
+            <AttentionProvider contributors={[]}>
+              <MemoryRouter
+                initialEntries={['/runs']}
+                future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+              >
+                <Harness />
+              </MemoryRouter>
+            </AttentionProvider>
+          </NowProvider>
+        </ViewingAsProvider>
+      </ThemeProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /jump/i }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /navigate elsewhere/i }));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

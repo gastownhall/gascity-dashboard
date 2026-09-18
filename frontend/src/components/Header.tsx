@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Modal } from './Modal';
+import { QuickJump } from './QuickJump';
 import { api } from '../api/client';
 import { getActiveCity } from '../api/cityBase';
 import { NavAttentionIndicator } from '../attention/NavAttentionIndicator';
@@ -106,6 +107,7 @@ export function Header() {
   // behind a hamburger that opens the routes in the shared Modal. Both layouts
   // render the same routes through navItem so they cannot drift.
   const [menuOpen, setMenuOpen] = useState(false);
+  const [quickJumpOpen, setQuickJumpOpen] = useState(false);
 
   // The Header lives in Layout, outside <Routes>, so its state survives SPA
   // navigation. Menu-link clicks close the menu themselves, but a back/forward
@@ -113,7 +115,21 @@ export function Header() {
   // leave the dialog + scrim stranded over the next page. Close on route change.
   useEffect(() => {
     setMenuOpen(false);
+    setQuickJumpOpen(false);
   }, [pathname]);
+
+  // #117 client-side slice: Cmd-K (Ctrl-K off Mac) opens quick-jump from
+  // anywhere in the app, mirroring the reserved-shortcut convention of
+  // GitHub/Linear/VS Code rather than a page-scoped search box.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      setQuickJumpOpen(true);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // The hamburger is `sm:hidden`, but `menuOpen` is React state, not CSS — so a
   // viewport that widens past the sm: breakpoint while the menu is open brings
@@ -226,6 +242,16 @@ export function Header() {
 
         <button
           type="button"
+          onClick={() => setQuickJumpOpen(true)}
+          aria-haspopup="dialog"
+          aria-keyshortcuts="Meta+K Control+K"
+          className="text-label uppercase tracking-wider text-fg-muted hover:text-fg transition-colors duration-150 ease-out-quart focus-mark"
+        >
+          Jump <span aria-hidden="true">⌘K</span>
+        </button>
+
+        <button
+          type="button"
           onClick={toggle}
           aria-label={`Switch to ${resolved === 'dark' ? 'light' : 'dark'} theme`}
           className="text-label uppercase tracking-wider text-fg-muted hover:text-fg transition-colors duration-150 ease-out-quart focus-mark"
@@ -241,6 +267,8 @@ export function Header() {
           </ul>
         </nav>
       </Modal>
+
+      <QuickJump open={quickJumpOpen} onClose={() => setQuickJumpOpen(false)} />
     </header>
   );
 }
