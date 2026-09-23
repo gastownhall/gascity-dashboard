@@ -349,9 +349,14 @@ describe('BeadsPage', () => {
     fireEvent.change(within(dialog).getByLabelText(/body/i), {
       target: { value: 'Please investigate the failed deployment.' },
     });
+    fireEvent.change(within(dialog).getByLabelText(/^rig$/i), {
+      target: { value: 'west' },
+    });
     fireEvent.click(within(dialog).getByRole('button', { name: /create and sling/i }));
 
-    expect(await screen.findByText(/created gascity-0002 and slung to mayor/i)).toBeTruthy();
+    expect(
+      await screen.findByText(/created gascity-0002 and slung to west\/mechanic/i),
+    ).toBeTruthy();
     expect(supervisorWrites).toEqual([
       {
         method: 'POST',
@@ -359,6 +364,7 @@ describe('BeadsPage', () => {
         body: {
           title: 'Route failing work',
           description: 'Please investigate the failed deployment.',
+          rig: 'west',
         },
       },
       {
@@ -366,8 +372,8 @@ describe('BeadsPage', () => {
         path: '/gc-supervisor/v0/city/test-city/sling',
         body: {
           bead: 'gascity-0002',
-          rig: 'east',
-          target: 'mayor',
+          rig: 'west',
+          target: 'west/mechanic',
         },
       },
     ]);
