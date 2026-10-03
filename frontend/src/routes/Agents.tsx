@@ -255,7 +255,7 @@ export function AgentsPage() {
       attentionDataProps(resourceAttentionSeverity(attention, 'agents', agent.name)),
     [attention],
   );
-  const rosterUnavailable = error !== null && rows.length === 0;
+  const rosterUnavailable = (error !== null || data?.partial === true) && rows.length === 0;
   const emptyMessage = rosterUnavailable
     ? 'Agent roster unavailable.'
     : rows.length === 0

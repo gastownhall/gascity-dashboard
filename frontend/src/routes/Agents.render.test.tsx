@@ -327,6 +327,29 @@ describe('AgentsPage (post-ay6 regressions)', () => {
     expect(container.textContent).not.toContain('No agents configured.');
   });
 
+  it('renders an empty partial supervisor roster as unavailable, not as a complete empty roster', async () => {
+    stubFetch({
+      agentsPayload: {
+        items: [],
+        partial: true,
+        partial_errors: ['agent backend unavailable'],
+      },
+    });
+
+    const { container } = render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <NowProvider intervalMs={1_000_000}>
+          <AgentsPage />
+        </NowProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('Agent roster unavailable.');
+    });
+    expect(container.textContent).not.toContain('No agents configured.');
+  });
+
   it('Peek resolves agent.session.name -> session.id via direct supervisor sessions and fetches the right transcript', async () => {
     render(
       <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
