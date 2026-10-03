@@ -23,12 +23,19 @@ export function parseOklch(color: string): Oklch {
   if (m === null || m[1] === undefined || m[2] === undefined || m[3] === undefined) {
     throw new Error(`render/oklch: not a canonical oklch() string: ${JSON.stringify(color)}`);
   }
-  return {
-    l: Number(m[1]),
-    c: Number(m[2]),
-    h: Number(m[3]),
-    alpha: m[4] === undefined ? 1 : Number(m[4]),
-  };
+  const l = Number(m[1]);
+  const c = Number(m[2]);
+  const h = Number(m[3]);
+  const alpha = m[4] === undefined ? 1 : Number(m[4]);
+  if (
+    !Number.isFinite(l) ||
+    !Number.isFinite(c) ||
+    !Number.isFinite(h) ||
+    !Number.isFinite(alpha)
+  ) {
+    throw new Error(`render/oklch: not a canonical oklch() string: ${JSON.stringify(color)}`);
+  }
+  return { l, c, h, alpha };
 }
 
 export function formatOklch(o: Oklch): string {
