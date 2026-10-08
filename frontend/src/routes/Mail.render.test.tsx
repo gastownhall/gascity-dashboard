@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invalidate } from '../api/cache';
@@ -16,6 +16,7 @@ interface FetchCall {
 }
 
 const fetchCalls: FetchCall[] = [];
+const pendingResponses = new Map<string, Promise<Response>>();
 
 // Stateful read-state overrides so a mark-read/unread POST is reflected by the
 // next mailbox GET — lets the bulk-mark tests assert the needs-you count (the
@@ -61,6 +62,8 @@ function stubFetch() {
         body: await requestBody(input, init),
         gcRequest: requestHeader(input, init, 'X-GC-Request'),
       });
+      const pending = pendingResponses.get(`${method} ${url}`);
+      if (pending !== undefined) return pending;
       if (url === '/gc-supervisor/v0/city/test-city/mail?limit=100') {
         return jsonResponse({
           items: [
@@ -283,6 +286,7 @@ function mail(overrides: Record<string, unknown>): Record<string, unknown> {
 
 beforeEach(() => {
   fetchCalls.length = 0;
+  pendingResponses.clear();
   markedRead.clear();
   invalidate('mail');
   stubFetch();
@@ -588,6 +592,247 @@ describe('MailPage supervisor reads', () => {
     const threadArticle = (await screen.findByText('oldest in thread')).closest('article');
     expect(threadArticle?.getAttribute('data-attention-severity')).toBe('attention');
   });
+});
+
+function deferResponse(method: string, path: string) {
+  let resolve!: (response: Response) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<Response>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  pendingResponses.set(`${method} /gc-supervisor/v0/city/test-city/mail/${path}`, promise);
+  return { resolve, reject };
+}
+
+function threadResponse(body: string) {
+  return jsonResponse({ items: [mail({ id: body, body })], total: 1 });
+}
+
+async function switchToFirehose() {
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  fireEvent.click(screen.getByText('worker firehose noise'));
+  await waitFor(() => {
+    expect(fetchCalls.some((call) => call.url.endsWith('/thread/thread-firehose'))).toBe(true);
+  });
+}
+
+describe('MailPage dialog response ownership', () => {
+  it('keeps the newly opened thread messages, title and action target after a stale success', async () => {
+    const first = deferResponse('GET', 'thread/thread-direct');
+    const second = deferResponse('GET', 'thread/thread-firehose');
+    renderMailPage();
+    fireEvent.click(await screen.findByText('direct supervisor inbox'));
+    await switchToFirehose();
+    await act(async () => second.resolve(threadResponse('second thread body')));
+    await act(async () => first.resolve(threadResponse('stale first body')));
+
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByRole('heading', { name: 'worker firehose noise' })).toBeTruthy();
+    expect(dialog.getByText('second thread body')).toBeTruthy();
+    expect(dialog.queryByText('stale first body')).toBeNull();
+    fireEvent.click(dialog.getByRole('button', { name: 'Mark read' }));
+    await waitFor(() => {
+      expect(
+        fetchCalls.some(
+          (call) => call.method === 'POST' && call.url.endsWith('/mail-firehose/read'),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it.each(['success', 'error'])(
+    'keeps the new thread loading when the old request finishes with %s',
+    async (outcome) => {
+      const first = deferResponse('GET', 'thread/thread-direct');
+      const second = deferResponse('GET', 'thread/thread-firehose');
+      renderMailPage();
+      fireEvent.click(await screen.findByText('direct supervisor inbox'));
+      await switchToFirehose();
+      await act(async () => {
+        if (outcome === 'success') first.resolve(threadResponse('stale first body'));
+        else first.reject(new Error('stale first error'));
+      });
+      expect(within(screen.getByRole('dialog')).getByText('Loading thread.')).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
+      await act(async () => second.resolve(threadResponse('second thread body')));
+      expect(await screen.findByText('second thread body')).toBeTruthy();
+    },
+  );
+
+  it('preserves the new thread error when the old request fails later', async () => {
+    const first = deferResponse('GET', 'thread/thread-direct');
+    const second = deferResponse('GET', 'thread/thread-firehose');
+    renderMailPage();
+    fireEvent.click(await screen.findByText('direct supervisor inbox'));
+    await switchToFirehose();
+    await act(async () => second.reject(new Error('second thread error')));
+    await act(async () => first.reject(new Error('stale first error')));
+    expect(screen.getByRole('alert').textContent).toBe('second thread error');
+  });
+
+  it('invalidates pending requests on close, including when reopening the same message', async () => {
+    const first = deferResponse('GET', 'thread/thread-direct');
+    renderMailPage();
+    fireEvent.click(await screen.findByText('direct supervisor inbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await act(async () => first.reject(new Error('closed thread error')));
+    expect(screen.queryByRole('alert')).toBeNull();
+    const reopened = deferResponse('GET', 'thread/thread-direct');
+    fireEvent.click(screen.getByText('direct supervisor inbox'));
+    await act(async () => reopened.resolve(threadResponse('reopened body')));
+    expect(await screen.findByText('reopened body')).toBeTruthy();
+  });
+
+  it('distinguishes two openings of the same message', async () => {
+    const first = deferResponse('GET', 'thread/thread-direct');
+    renderMailPage();
+    fireEvent.click(await screen.findByText('direct supervisor inbox'));
+    await waitFor(() =>
+      expect(fetchCalls.some((call) => call.url.endsWith('/thread/thread-direct'))).toBe(true),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    const second = deferResponse('GET', 'thread/thread-direct');
+    fireEvent.click(screen.getByText('direct supervisor inbox'));
+    await act(async () => second.resolve(threadResponse('reopened body')));
+    await act(async () => first.resolve(threadResponse('old opening body')));
+    expect(within(screen.getByRole('dialog')).getByText('reopened body')).toBeTruthy();
+    expect(screen.queryByText('old opening body')).toBeNull();
+  });
+
+  it('clears loading when the next message has no thread', async () => {
+    const first = deferResponse('GET', 'thread/thread-direct');
+    pendingResponses.set(
+      'GET /gc-supervisor/v0/city/test-city/mail?limit=100',
+      Promise.resolve(
+        jsonResponse({
+          items: [
+            mail({
+              id: 'mail-inbox',
+              subject: 'direct supervisor inbox',
+              thread_id: 'thread-direct',
+            }),
+            mail({ id: 'standalone', subject: 'standalone message', body: 'standalone body' }),
+          ],
+          total: 2,
+        }),
+      ),
+    );
+    renderMailPage();
+    fireEvent.click(await screen.findByText('direct supervisor inbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByText('standalone message'));
+    expect(within(screen.getByRole('dialog')).getByText('standalone body')).toBeTruthy();
+    await act(async () => first.resolve(threadResponse('stale first body')));
+    expect(within(screen.getByRole('dialog')).getByText('standalone body')).toBeTruthy();
+    expect(screen.queryByText('stale first body')).toBeNull();
+  });
+
+  it.each(['success', 'error'])(
+    'preserves a new action in flight after an old action %s',
+    async (outcome) => {
+      const firstThread = deferResponse('GET', 'thread/thread-direct');
+      const firstAction = deferResponse('POST', 'mail-inbox/read');
+      const secondAction = deferResponse('POST', 'mail-firehose/read');
+      renderMailPage();
+      fireEvent.click(await screen.findByText('direct supervisor inbox'));
+      await act(async () => firstThread.resolve(threadResponse('first thread body')));
+      fireEvent.click(screen.getByRole('button', { name: 'Mark read' }));
+      await waitFor(() =>
+        expect(fetchCalls.some((call) => call.url.endsWith('/mail-inbox/read'))).toBe(true),
+      );
+      const secondThread = deferResponse('GET', 'thread/thread-firehose');
+      await switchToFirehose();
+      await act(async () => secondThread.resolve(threadResponse('second thread body')));
+      const button = screen.getByRole('button', { name: 'Mark read' });
+      expect(button).toHaveProperty('disabled', false);
+      fireEvent.click(button);
+      await waitFor(() =>
+        expect(fetchCalls.some((call) => call.url.endsWith('/mail-firehose/read'))).toBe(true),
+      );
+      await act(async () => {
+        if (outcome === 'success') firstAction.resolve(jsonResponse({ status: 'ok' }));
+        else firstAction.reject(new Error('stale action error'));
+      });
+      expect(screen.getByRole('button', { name: 'Mark read' })).toHaveProperty('disabled', true);
+      expect(screen.queryByRole('alert')).toBeNull();
+      await act(async () => secondAction.reject(new Error('current action error')));
+      expect(screen.getByRole('alert').textContent).toBe('current action error');
+      expect(screen.getByRole('button', { name: 'Mark read' })).toHaveProperty('disabled', false);
+    },
+  );
+
+  it('ignores a reply thread refresh that finishes after another dialog opens', async () => {
+    const firstThread = deferResponse('GET', 'thread/thread-direct');
+    renderMailPage();
+    fireEvent.click(await screen.findByText('direct supervisor inbox'));
+    await act(async () => firstThread.resolve(threadResponse('first thread body')));
+    const replyThread = deferResponse('GET', 'thread/thread-direct');
+    fireEvent.change(screen.getByLabelText('Reply'), { target: { value: 'first reply' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    await waitFor(() =>
+      expect(fetchCalls.filter((call) => call.url.endsWith('/thread/thread-direct'))).toHaveLength(
+        2,
+      ),
+    );
+    const secondThread = deferResponse('GET', 'thread/thread-firehose');
+    await switchToFirehose();
+    await act(async () => secondThread.resolve(threadResponse('second thread body')));
+    fireEvent.change(screen.getByLabelText('Reply'), { target: { value: 'second draft' } });
+    await act(async () => replyThread.resolve(threadResponse('stale reply thread')));
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByText('second thread body')).toBeTruthy();
+    expect(dialog.queryByText('stale reply thread')).toBeNull();
+    expect((dialog.getByLabelText('Reply') as HTMLTextAreaElement).value).toBe('second draft');
+  });
+
+  it.each(['read', 'unread', 'archive', 'reply'])(
+    'keeps a new dialog after the old %s action completes',
+    async (action) => {
+      const firstThread = deferResponse('GET', 'thread/thread-direct');
+      const firstAction = deferResponse(
+        'POST',
+        `mail-inbox/${action === 'unread' ? 'mark-unread' : action}`,
+      );
+      renderMailPage();
+      fireEvent.click(await screen.findByText('direct supervisor inbox'));
+      await act(async () => firstThread.resolve(threadResponse('first thread body')));
+      if (action === 'unread') {
+        // Change the current read state using the existing route fixture.
+        pendingResponses.delete('POST /gc-supervisor/v0/city/test-city/mail/mail-inbox/read');
+        fireEvent.click(screen.getByRole('button', { name: 'Mark read' }));
+        await screen.findByRole('button', { name: 'Mark unread' });
+      }
+      if (action === 'reply')
+        fireEvent.change(screen.getByLabelText('Reply'), { target: { value: 'first reply' } });
+      const label =
+        action === 'read'
+          ? 'Mark read'
+          : action === 'unread'
+            ? 'Mark unread'
+            : action === 'archive'
+              ? 'Archive'
+              : 'Reply';
+      fireEvent.click(screen.getByRole('button', { name: label }));
+      await waitFor(() =>
+        expect(
+          fetchCalls.some((call) =>
+            call.url.endsWith(`mail-inbox/${action === 'unread' ? 'mark-unread' : action}`),
+          ),
+        ).toBe(true),
+      );
+      const secondThread = deferResponse('GET', 'thread/thread-firehose');
+      await switchToFirehose();
+      await act(async () => secondThread.resolve(threadResponse('second thread body')));
+      fireEvent.change(screen.getByLabelText('Reply'), { target: { value: 'second draft' } });
+      await act(async () => firstAction.resolve(jsonResponse({ status: 'ok' })));
+      const dialog = within(screen.getByRole('dialog'));
+      expect(dialog.getByRole('heading', { name: 'worker firehose noise' })).toBeTruthy();
+      expect(dialog.getByText('second thread body')).toBeTruthy();
+      expect((dialog.getByLabelText('Reply') as HTMLTextAreaElement).value).toBe('second draft');
+      expect(dialog.getByRole('button', { name: 'Mark read' })).toHaveProperty('disabled', false);
+    },
+  );
 });
 
 describe('MailPage bulk read-state selection (gascity-dashboard-mp3g)', () => {
