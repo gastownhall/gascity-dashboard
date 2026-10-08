@@ -101,6 +101,40 @@ describe('projectConvoyView', () => {
     assert.deepEqual(stepB?.blockedBy, ['c']);
   });
 
+  for (const status of ['closed', 'completed', 'done', 'CLOSED', ' Completed ', '\tDoNe\n']) {
+    test(`treats ${JSON.stringify(status)} as closed for dependencies and derived progress`, () => {
+      const view = projectConvoyView(
+        bead('root', { status }),
+        [bead('finished', { status }), bead('waiting', { needs: ['root', 'finished', 'absent'] })],
+        null,
+      );
+      if (view.exposure.kind !== 'exposed') throw new Error('expected exposed');
+      const waiting = view.exposure.steps.find((step) => step.bead.id === 'waiting');
+
+      assert.deepEqual(
+        { blockedBy: waiting?.blockedBy, progress: view.progress },
+        { blockedBy: [], progress: { closed: 1, total: 2 } },
+      );
+    });
+  }
+
+  for (const status of ['open', 'in_progress', 'active', 'failed', 'skipped', 'unknown', '']) {
+    test(`keeps ${JSON.stringify(status)} dependencies blocking and excludes them from closed progress`, () => {
+      const view = projectConvoyView(
+        bead('root'),
+        [bead('unfinished', { status }), bead('waiting', { needs: ['unfinished', 'absent'] })],
+        null,
+      );
+      if (view.exposure.kind !== 'exposed') throw new Error('expected exposed');
+      const waiting = view.exposure.steps.find((step) => step.bead.id === 'waiting');
+
+      assert.deepEqual(
+        { blockedBy: waiting?.blockedBy, progress: view.progress },
+        { blockedBy: ['unfinished'], progress: { closed: 0, total: 2 } },
+      );
+    });
+  }
+
   test('surfaces gc.step_ref on materialized formula steps', () => {
     const view = projectConvoyView(
       bead('root'),
