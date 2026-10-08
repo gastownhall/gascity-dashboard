@@ -431,6 +431,86 @@ describe('loadSupervisorRunSummarySource', () => {
     expect(source.data.runCounts.total).toBe(1);
   });
 
+  it.each([
+    { partial: true },
+    { partial_errors: ['session backend unavailable'] },
+    { next_cursor: 'more-sessions' },
+    { total: 1 },
+  ])(
+    'retains a stale latch when an incomplete session list cannot prove absence (%j)',
+    async (incomplete) => {
+      setSupervisorApiForTests({
+        ...baseApi,
+        listBeads: vi.fn(async () => beadList([staleLatch()])),
+        formulaFeed: vi.fn(async () => feed([])),
+        listSessions: vi.fn(async () => ({ ...sessionList(), ...incomplete })),
+      });
+
+      const source = await loadSupervisorRunSummarySource();
+
+      expect(source.status).toBe('fresh');
+      if (source.status === 'error') throw new Error(source.error);
+      expect(source.data.lanes.map((lane) => lane.id)).toEqual(['gc-1920']);
+      expect(source.data.totalActive).toBe(1);
+      expect(source.data.lanes[0]?.health.status).toBe('unavailable');
+      expect(source.data.runCounts.total).toBe(1);
+    },
+  );
+
+  it.each([
+    { partial: true, expectedIds: ['gc-1920', 'gc-missing'] },
+    { partial: false, expectedIds: ['gc-1920'] },
+  ])(
+    'preserves resolved session health with partial=$partial',
+    async ({ partial, expectedIds }) => {
+      setSupervisorApiForTests({
+        ...baseApi,
+        listBeads: vi.fn(async () =>
+          beadList([
+            { ...staleLatch(), assignee: 'rig-a/codex' },
+            { ...staleLatch(), id: 'gc-missing', assignee: 'rig-a/other' },
+          ]),
+        ),
+        formulaFeed: vi.fn(async () => feed([])),
+        listSessions: vi.fn(async () => ({
+          items: [
+            {
+              id: 'gc-worker',
+              session_name: 'rig-a/codex',
+              alias: 'rig-a/codex',
+              template: 'codex',
+              title: 'codex worker',
+              state: 'active',
+              running: true,
+              attached: false,
+              provider: 'codex',
+              created_at: '2026-06-01T11:00:00.000Z',
+              last_active: '2026-06-01T11:59:00.000Z',
+            },
+          ],
+          total: 1,
+          partial,
+        })),
+      });
+
+      const source = await loadSupervisorRunSummarySource();
+
+      expect(source.status).toBe('fresh');
+      if (source.status === 'error') throw new Error(source.error);
+      expect(source.data.lanes.map((lane) => lane.id).sort()).toEqual(expectedIds);
+      const known = source.data.lanes.find((lane) => lane.id === 'gc-1920');
+      expect(known?.health).toMatchObject({
+        status: 'available',
+        data: { session: { status: 'resolved', running: { status: 'available', value: true } } },
+      });
+      if (partial) {
+        expect(source.data.lanes.find((lane) => lane.id === 'gc-missing')?.health.status).toBe(
+          'unavailable',
+        );
+      }
+    },
+  );
+
   it('keeps a session-less recent latch in the Active set (gascity-dashboard-s4rp)', async () => {
     // Same shape as the stale latch but written 30 minutes ago — a recent
     // session-less latch must still appear as Active (not demoted by liveness).

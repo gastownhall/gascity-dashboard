@@ -480,6 +480,7 @@ export function AgentsPage() {
         sessions={sessionsCache.data?.items ?? []}
         sessionsLoading={sessionsCache.loading}
         sessionsError={sessionsCache.error}
+        sessionsPartial={sessionsCache.data?.partial === true}
       />
 
       {/* The bottom roster is the "available agents" view — the mayor, PLs, and

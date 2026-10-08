@@ -5,7 +5,9 @@ import type { ListBodyBead } from 'gas-city-dashboard-shared/gc-supervisor';
 // incomplete when the supervisor flags it partial OR when the upstream total
 // exceeds what one bounded page returned.
 
-export function listIsPartial(list: ListBodyBead): boolean {
+type ListCompleteness = Pick<ListBodyBead, 'partial' | 'partial_errors' | 'next_cursor' | 'total'>;
+
+export function listIsPartial(list: ListCompleteness): boolean {
   // `partial`/`partial_errors` signal a backend-side failure, but the supervisor
   // also truncates at the fetch limit and reports more via `next_cursor` without
   // setting `partial` (gascity-dashboard-4xcv). Treat a present cursor as partial
@@ -18,6 +20,6 @@ export function listIsPartial(list: ListBodyBead): boolean {
   );
 }
 
-export function listIsIncomplete(list: ListBodyBead, fetchedCount: number): boolean {
+export function listIsIncomplete(list: ListCompleteness, fetchedCount: number): boolean {
   return listIsPartial(list) || (typeof list.total === 'number' && list.total > fetchedCount);
 }

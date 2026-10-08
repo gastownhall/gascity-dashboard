@@ -36,6 +36,7 @@ const fetchUrls = () => fetchCalls.map((call) => call.url);
 interface StubFetchOptions {
   agentsPayload?: unknown;
   agentsStatus?: number;
+  sessionsPayload?: unknown;
 }
 
 // Minimal fetch stub that mimics the surface the AgentsPage hits: dashboard
@@ -90,23 +91,25 @@ function stubFetch(options: StubFetchOptions = {}) {
         );
       }
       if (url === '/gc-supervisor/v0/city/test-city/sessions' && method === 'GET') {
-        return jsonResponse({
-          items: [
-            {
-              id: 'gc-2568',
-              session_name: 'mayor',
-              state: 'active',
-              template: 'mayor',
-              alias: 'mayor',
-              provider: 'claude-5',
-              running: true,
-              attached: true,
-              created_at: '2026-05-30T00:00:00Z',
-              title: 'mayor',
-            },
-          ],
-          total: 1,
-        });
+        return jsonResponse(
+          options.sessionsPayload ?? {
+            items: [
+              {
+                id: 'gc-2568',
+                session_name: 'mayor',
+                state: 'active',
+                template: 'mayor',
+                alias: 'mayor',
+                provider: 'claude-5',
+                running: true,
+                attached: true,
+                created_at: '2026-05-30T00:00:00Z',
+                title: 'mayor',
+              },
+            ],
+            total: 1,
+          },
+        );
       }
       if (url === '/gc-supervisor/v0/city/test-city/session/gc-2568/pending' && method === 'GET') {
         return jsonResponse({
@@ -211,6 +214,20 @@ afterEach(() => {
 });
 
 describe('AgentsPage (post-ay6 regressions)', () => {
+  it('shows unavailable worker status for an empty partial session response', async () => {
+    stubFetch({ sessionsPayload: { items: [], partial: true } });
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <NowProvider intervalMs={1_000_000}>
+          <AgentsPage />
+        </NowProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Worker status unavailable.')).toBeTruthy();
+    expect(screen.queryByText('No workers active right now.')).toBeNull();
+  });
+
   it('renders the alias as primary label and display_name as secondary (Orchestration shows "mayor", not "Claude (Account 5)")', async () => {
     render(
       <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
