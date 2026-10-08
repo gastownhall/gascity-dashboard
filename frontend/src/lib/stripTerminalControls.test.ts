@@ -40,6 +40,24 @@ describe('stripTerminalControls', () => {
     expect(stripTerminalControls(dirty)).toBe('\x1b[32mgreen\x1b[0m');
   });
 
+  it.each([
+    ['cursor style with a space intermediate', '\x1b[2 q'],
+    ['soft reset with an exclamation intermediate', '\x1b[!p'],
+    ['secondary device attributes with a private parameter', '\x1b[>0c'],
+    ['private mode with an equals parameter', '\x1b[=1h'],
+    ['insert character with the first final byte', '\x1b[1@'],
+    ['delete columns with the last final byte', "\x1b[1'~"],
+    ['private control ending in m', '\x1b[>4m'],
+    ['control with an intermediate ending in m', '\x1b[0 m'],
+  ])('strips CSI %s without consuming adjacent text', (_name, csi) => {
+    expect(stripTerminalControls(`a${csi}b`)).toBe('ab');
+  });
+
+  it('strips extended CSI controls alongside SGR, OSC, and whitespace', () => {
+    const dirty = 'a\x1b[2 q\t\x1b[31mred\x1b[0m\n\x1b[>0c\x1b]0;title\x07b\r';
+    expect(stripTerminalControls(dirty)).toBe('a\t\x1b[31mred\x1b[0m\nb\r');
+  });
+
   it('preserves SGR sequences untouched', () => {
     const sgr = '\x1b[0m\x1b[1;31mbold-red\x1b[0m';
     expect(stripTerminalControls(sgr)).toBe(sgr);

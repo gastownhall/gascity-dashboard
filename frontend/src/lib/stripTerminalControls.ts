@@ -23,10 +23,11 @@
 // with the \x9c terminator so a complete OSC is consumed in one pass rather
 // than leaving the \x9c for the C1 strip.
 const OSC_RE = /\x1b\][^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)/g;
-// CSI that is NOT an SGR (colour) sequence: ESC [ params <final> where the
-// final byte is anything except `m`. SGR (`…m`) is left for ansi_up to turn
-// into coloured spans. Covers cursor moves, erase, scroll-region, etc.
-const CSI_NON_SGR_RE = /\x1b\[[?0-9;]*[a-ln-zA-Z]/g;
+// CSI: ESC [ parameter bytes (0x30–0x3f), intermediate bytes (0x20–0x2f),
+// and a final byte (0x40–0x7e). Preserve the SGR forms also kept by LONE_ESC_RE
+// for ansi_up; remove all other complete CSI, including private controls and
+// controls with intermediates even when their final byte is `m`.
+const CSI_NON_SGR_RE = /\x1b\[(?![?0-9;]*m)[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g;
 // Any ESC that does NOT introduce a surviving SGR sequence. Runs after the
 // OSC and non-SGR-CSI passes have consumed those forms, so the only ESC worth
 // keeping is a valid SGR (`\x1b[ params m`); the negative lookahead preserves
