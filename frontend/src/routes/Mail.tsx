@@ -235,8 +235,7 @@ export function MailPage() {
         }
         await refresh();
       } catch (err) {
-        if (generation === dialogGeneration.current)
-          setError(formatApiError(err, `${action} failed`));
+        setError(formatApiError(err, `${action} failed`));
       } finally {
         if (generation === dialogGeneration.current) setActionInFlight(null);
       }

@@ -755,7 +755,9 @@ describe('MailPage dialog response ownership', () => {
         else firstAction.reject(new Error('stale action error'));
       });
       expect(screen.getByRole('button', { name: 'Mark read' })).toHaveProperty('disabled', true);
-      expect(screen.queryByRole('alert')).toBeNull();
+      if (outcome === 'error')
+        expect(screen.getByRole('alert').textContent).toBe('stale action error');
+      else expect(screen.queryByRole('alert')).toBeNull();
       await act(async () => secondAction.reject(new Error('current action error')));
       expect(screen.getByRole('alert').textContent).toBe('current action error');
       expect(screen.getByRole('button', { name: 'Mark read' })).toHaveProperty('disabled', false);
@@ -786,9 +788,13 @@ describe('MailPage dialog response ownership', () => {
     expect((dialog.getByLabelText('Reply') as HTMLTextAreaElement).value).toBe('second draft');
   });
 
-  it.each(['read', 'unread', 'archive', 'reply'])(
-    'keeps a new dialog after the old %s action completes',
-    async (action) => {
+  it.each(
+    ['read', 'unread', 'archive', 'reply'].flatMap((action) =>
+      ['success', 'error'].map((outcome) => ({ action, outcome })),
+    ),
+  )(
+    'keeps a new dialog after the old $action action finishes with $outcome',
+    async ({ action, outcome }) => {
       const firstThread = deferResponse('GET', 'thread/thread-direct');
       const firstAction = deferResponse(
         'POST',
@@ -825,7 +831,12 @@ describe('MailPage dialog response ownership', () => {
       await switchToFirehose();
       await act(async () => secondThread.resolve(threadResponse('second thread body')));
       fireEvent.change(screen.getByLabelText('Reply'), { target: { value: 'second draft' } });
-      await act(async () => firstAction.resolve(jsonResponse({ status: 'ok' })));
+      await act(async () => {
+        if (outcome === 'success') firstAction.resolve(jsonResponse({ status: 'ok' }));
+        else firstAction.reject(new Error(`${action} write failed`));
+      });
+      if (outcome === 'error')
+        expect(screen.getByRole('alert').textContent).toBe(`${action} write failed`);
       const dialog = within(screen.getByRole('dialog'));
       expect(dialog.getByRole('heading', { name: 'worker firehose noise' })).toBeTruthy();
       expect(dialog.getByText('second thread body')).toBeTruthy();
@@ -833,6 +844,53 @@ describe('MailPage dialog response ownership', () => {
       expect(dialog.getByRole('button', { name: 'Mark read' })).toHaveProperty('disabled', false);
     },
   );
+
+  it.each(['read', 'unread', 'archive', 'reply'] as const)(
+    'reports a failed %s write after closing the dialog',
+    async (action) => {
+      const firstThread = deferResponse('GET', 'thread/thread-direct');
+      const actionPath = `mail-inbox/${action === 'unread' ? 'mark-unread' : action}`;
+      const firstAction = deferResponse('POST', actionPath);
+      renderMailPage();
+      fireEvent.click(await screen.findByText('direct supervisor inbox'));
+      await act(async () => firstThread.resolve(threadResponse('first thread body')));
+      if (action === 'unread') {
+        fireEvent.click(screen.getByRole('button', { name: 'Mark read' }));
+        await screen.findByRole('button', { name: 'Mark unread' });
+      }
+      if (action === 'reply')
+        fireEvent.change(screen.getByLabelText('Reply'), { target: { value: 'first reply' } });
+      const labels = {
+        read: 'Mark read',
+        unread: 'Mark unread',
+        archive: 'Archive',
+        reply: 'Reply',
+      };
+      fireEvent.click(screen.getByRole('button', { name: labels[action] }));
+      await waitFor(() =>
+        expect(
+          fetchCalls.some((call) => call.method === 'POST' && call.url.endsWith(actionPath)),
+        ).toBe(true),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await act(async () => firstAction.reject(new Error(`${action} write failed`)));
+      expect(screen.getByRole('alert').textContent).toBe(`${action} write failed`);
+      expect(screen.queryByRole('dialog')).toBeNull();
+    },
+  );
+
+  it('reports a mailbox refresh failure after a successful archive closes the dialog', async () => {
+    renderMailPage();
+    fireEvent.click(await screen.findByText('direct supervisor inbox'));
+    await screen.findByText('oldest in thread');
+    pendingResponses.set(
+      'GET /gc-supervisor/v0/city/test-city/mail?limit=100',
+      Promise.resolve(jsonResponse({ error: 'mailbox refresh failed' }, 500)),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('mailbox refresh failed');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
 });
 
 describe('MailPage bulk read-state selection (gascity-dashboard-mp3g)', () => {
