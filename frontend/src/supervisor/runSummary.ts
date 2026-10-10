@@ -95,7 +95,7 @@ interface LoadedRunBeads {
 type RecentFetchOutcome = { ok: true; items: DashboardBead[]; partial: boolean } | { ok: false };
 
 type RunSessionsLookup =
-  | { kind: 'available'; sessions: DashboardSession[] }
+  | { kind: 'available' | 'partial'; sessions: DashboardSession[] }
   | { kind: 'unavailable'; sessions: DashboardSession[] };
 
 interface ProgressState {
@@ -624,7 +624,7 @@ async function loadRunSessions(cityName: string, budgetMs: number): Promise<RunS
       budgetMs,
     );
     return {
-      kind: 'available',
+      kind: listIsIncomplete(list, list.items?.length ?? 0) ? 'partial' : 'available',
       sessions: normalizeSessions(list),
     };
   } catch (err) {
@@ -662,13 +662,25 @@ function enrichRunSummary(
     progressStateByCity.set(cityName, { marks, fetchedAt: source.fetchedAt });
   }
 
-  const sessionsAvailable = sessionsLookup.kind === 'available';
-  const { lanes } = deriveRunHealth({
+  const sessionsComplete = sessionsLookup.kind === 'available';
+  const health = deriveRunHealth({
     lanes: inFlight,
     sessions: sessionsLookup.sessions,
-    sessionsAvailable,
+    sessionsAvailable: sessionsLookup.kind !== 'unavailable',
     marks,
   });
+
+  // Partial lists prove presence, but cannot establish health for missing sessions.
+  const lanes = health.lanes.map((lane) =>
+    sessionsLookup.kind === 'partial' &&
+    lane.health.status === 'available' &&
+    lane.health.data.session.status === 'unresolved'
+      ? {
+          ...lane,
+          health: { status: 'unavailable' as const, error: 'run session list incomplete' },
+        }
+      : lane,
+  );
 
   // gascity-dashboard-pxvb: re-split with stranded precedence so every lane
   // lands in exactly one partition. Stranded is keyed on `registration`, not
@@ -690,14 +702,14 @@ function enrichRunSummary(
   // recomputed from the survivors; staleness is judged against the snapshot
   // generation time, not a live clock, so the result is stable per snapshot.
   const liveActive = activeEnriched.filter(
-    (lane) => !isStaleSessionlessLatch(lane, generationMs, sessionsAvailable),
+    (lane) => !isStaleSessionlessLatch(lane, generationMs, sessionsComplete),
   );
   // gascity-dashboard-pxvb: a stranded lane is sessionless with no in_progress
   // step, so the same stale-latch demotion applies — documented precedence on
   // isStrandedRun: a day-old orphan leaves the board with the rest of the stale
   // latches rather than accumulating in the Stranded section forever.
   const liveStranded = strandedEnriched.filter(
-    (lane) => !isStaleSessionlessLatch(lane, generationMs, sessionsAvailable),
+    (lane) => !isStaleSessionlessLatch(lane, generationMs, sessionsComplete),
   );
   // Stranded runs never executed and never will, so they are excluded from the
   // in-flight census entirely (byPhase / totalInFlight) — the bug pxvb fixes was

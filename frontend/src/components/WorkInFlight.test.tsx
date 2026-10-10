@@ -39,7 +39,7 @@ function session(partial: Partial<SupervisorSession> & { id: string }): Supervis
 function renderSection(
   beads: SupervisorBead[],
   sessions: SupervisorSession[],
-  opts: { loading?: boolean; error?: string | null } = {},
+  opts: { loading?: boolean; error?: string | null; partial?: boolean } = {},
 ) {
   return render(
     <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
@@ -49,6 +49,7 @@ function renderSection(
           sessions={sessions}
           sessionsLoading={opts.loading ?? false}
           sessionsError={opts.error ?? null}
+          sessionsPartial={opts.partial ?? false}
         />
       </NowProvider>
     </MemoryRouter>,
@@ -231,6 +232,32 @@ describe('WorkInFlight (Workers active)', () => {
     renderSection([], [], { error: 'sessions backend unavailable' });
     expect(screen.getByText('Worker status unavailable.')).toBeTruthy();
     expect(screen.queryByText('No workers active right now.')).toBeNull();
+  });
+
+  it('shows unavailable status for an empty partial session list', () => {
+    renderSection([], [], { partial: true });
+    expect(screen.getByText('Worker status unavailable.')).toBeTruthy();
+    expect(screen.queryByText('No workers active right now.')).toBeNull();
+  });
+
+  it('shows unavailable status when a partial list contains only orchestration sessions', () => {
+    renderSection([], [session({ id: 'gc-m', template: 'mayor', rig: '' })], { partial: true });
+    expect(screen.getByText('Worker status unavailable.')).toBeTruthy();
+    expect(screen.queryByText('No workers active right now.')).toBeNull();
+  });
+
+  it('shows the calm empty state for a complete empty session list', () => {
+    renderSection([], []);
+    expect(screen.getByText('No workers active right now.')).toBeTruthy();
+    expect(screen.queryByText('Worker status unavailable.')).toBeNull();
+  });
+
+  it('keeps known workers visible when the session list is partial', () => {
+    renderSection([], [session({ id: 'gc-1', template: 'polecat', rig: 'gascity' })], {
+      partial: true,
+    });
+    expect(screen.getByText('1 worker active across gascity (1).')).toBeTruthy();
+    expect(screen.queryByText('Worker status unavailable.')).toBeNull();
   });
 
   it('renders a loading state (not the all-clear) while the initial sessions fetch is in flight', () => {

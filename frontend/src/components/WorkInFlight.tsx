@@ -37,14 +37,15 @@ interface WorkInFlightProps {
   sessions: readonly SupervisorSession[];
   // The "Workers active" count is SESSION-driven, so the section's honesty
   // depends on the sessions fetch having actually delivered. Thread its
-  // loading/error state through: when sessions data is absent (initial load or
-  // a fetch that never succeeded) the section must render an explicit
+  // loading/error/partial state through: when sessions data is absent
+  // (initial load or a fetch that never succeeded) the section must render an explicit
   // unavailable/loading state — never the calm "No workers active" all-clear,
   // which would mask a dead aggregator (the fail-safe invariant: failure must
   // read as explicit unavailable, never silent all-clear). Beads are
   // best-effort secondary context and do not gate this signal.
   sessionsLoading: boolean;
   sessionsError: string | null;
+  sessionsPartial: boolean;
 }
 
 function WorkerRow({
@@ -135,6 +136,7 @@ export function WorkInFlight({
   sessions,
   sessionsLoading,
   sessionsError,
+  sessionsPartial,
 }: WorkInFlightProps) {
   // Memoized on the fetched inputs: the parent AgentsPage re-renders every
   // second on the useNow tick, and the derivation walks the full bead +
@@ -159,13 +161,12 @@ export function WorkInFlight({
   );
 
   // Fail-safe: the all-clear ("No workers active") is only honest once the
-  // sessions fetch has delivered data. With no data yet, distinguish a failed
-  // fetch (explicit "unavailable") from an in-flight one (loading) — the mirror
-  // of the Agents roster's rosterUnavailable pattern. useCachedData retains
-  // stale data across a re-fetch error, so this window is only the initial-load
-  // / never-succeeded case; a prior success keeps rendering its workers.
+  // sessions fetch has delivered complete data. With no data, distinguish a
+  // partial or failed fetch (explicit "unavailable") from an in-flight one
+  // (loading). Retained workers remain visible across failed or partial reads.
   const sessionsAbsent = sessions.length === 0;
-  const sessionsUnavailable = sessionsError !== null && sessionsAbsent;
+  const sessionsUnavailable =
+    (sessionsError !== null && sessionsAbsent) || (sessionsPartial && active.total === 0);
   const sessionsPending = sessionsLoading && sessionsAbsent;
   const countLabel = sessionsUnavailable || sessionsPending ? '—' : active.total;
 
