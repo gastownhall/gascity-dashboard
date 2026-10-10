@@ -8,6 +8,7 @@ import { invalidate } from '../api/cache';
 import { NowProvider } from '../contexts/NowContext';
 import { ReadOnlyProvider } from '../contexts/ReadOnlyContext';
 import { resetSupervisorApiForTests } from '../supervisor/client';
+import type { SupervisorSession, SupervisorSessionList } from '../supervisor/sessionReads';
 
 // Regression tests for two bugs that shipped with the ay6 Agents-view rewrite
 // (PR #45, surfaced post-deploy):
@@ -37,6 +38,7 @@ interface StubFetchOptions {
   agentsPayload?: unknown;
   agentsStatus?: number;
   sessionsPayload?: unknown;
+  sessionsStatus?: number;
 }
 
 // Minimal fetch stub that mimics the surface the AgentsPage hits: dashboard
@@ -109,6 +111,7 @@ function stubFetch(options: StubFetchOptions = {}) {
             ],
             total: 1,
           },
+          options.sessionsStatus === undefined ? undefined : { status: options.sessionsStatus },
         );
       }
       if (url === '/gc-supervisor/v0/city/test-city/session/gc-2568/pending' && method === 'GET') {
@@ -213,21 +216,135 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('AgentsPage (post-ay6 regressions)', () => {
-  it('shows unavailable worker status for an empty partial session response', async () => {
-    stubFetch({ sessionsPayload: { items: [], partial: true } });
-    render(
-      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-        <NowProvider intervalMs={1_000_000}>
-          <AgentsPage />
-        </NowProvider>
-      </MemoryRouter>,
-    );
+function renderWorkersPage() {
+  render(
+    <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+      <NowProvider intervalMs={1_000_000}>
+        <AgentsPage />
+      </NowProvider>
+    </MemoryRouter>,
+  );
+  return within(screen.getByRole('region', { name: 'Workers active' }));
+}
 
-    expect(await screen.findByText('Worker status unavailable.')).toBeTruthy();
-    expect(screen.queryByText('No workers active right now.')).toBeNull();
+const knownWorker: SupervisorSession = {
+  id: 'gc-worker-1',
+  session_name: 'dashboard-polecat',
+  template: 'polecat',
+  rig: 'dashboard',
+  state: 'active',
+  running: true,
+  attached: true,
+  provider: 'codex',
+  title: 'Worker session',
+  created_at: '2026-05-30T00:00:00Z',
+};
+
+const orchestrationSession: SupervisorSession = {
+  id: 'gc-2568',
+  session_name: 'mayor',
+  template: 'mayor',
+  state: 'active',
+  running: true,
+  attached: true,
+  provider: 'codex',
+  title: 'Mayor session',
+  created_at: '2026-05-30T00:00:00Z',
+};
+
+const incompleteSessionSignals: {
+  name: string;
+  metadata: Partial<
+    Pick<SupervisorSessionList, 'partial' | 'partial_errors' | 'next_cursor' | 'total'>
+  >;
+}[] = [
+  { name: 'partial flag', metadata: { partial: true } },
+  { name: 'backend errors', metadata: { partial: false, partial_errors: ['rig unavailable'] } },
+  { name: 'next-page cursor', metadata: { partial: false, next_cursor: 'next-page' } },
+  { name: 'total exceeds fetched count', metadata: { partial: false, total: 2 } },
+];
+
+describe.each(incompleteSessionSignals)('AgentsPage workers with $name', ({ metadata }) => {
+  it.each([
+    { name: 'empty', items: [] },
+    { name: 'orchestration-only', items: [orchestrationSession] },
+  ])('shows unavailable worker status for an incomplete $name response', async ({ items }) => {
+    stubFetch({ sessionsPayload: { items, total: items.length, ...metadata } });
+    const workers = renderWorkersPage();
+
+    expect(await workers.findByText('Worker status unavailable.')).toBeTruthy();
+    expect(workers.getByText('—')).toBeTruthy();
+    expect(workers.queryByText('No workers active right now.')).toBeNull();
   });
 
+  it('keeps known worker rows visible for an incomplete response', async () => {
+    stubFetch({ sessionsPayload: { items: [knownWorker], total: 1, ...metadata } });
+    const workers = renderWorkersPage();
+
+    expect(await workers.findByText('1 worker active across dashboard (1).')).toBeTruthy();
+    expect(workers.getByTitle('Open dashboard · polecat transcript')).toBeTruthy();
+    expect(workers.queryByText('Worker status unavailable.')).toBeNull();
+  });
+});
+
+describe('AgentsPage worker status controls', () => {
+  it.each([
+    { name: 'empty', items: [] },
+    { name: 'orchestration-only', items: [orchestrationSession] },
+  ])('shows no active workers for a complete $name response', async ({ items }) => {
+    stubFetch({
+      sessionsPayload: {
+        items,
+        total: items.length,
+        partial: false,
+        partial_errors: [],
+        next_cursor: '',
+      },
+    });
+    const workers = renderWorkersPage();
+
+    expect(await workers.findByText('No workers active right now.')).toBeTruthy();
+    expect(workers.getByText('0')).toBeTruthy();
+    expect(workers.queryByText('Worker status unavailable.')).toBeNull();
+  });
+
+  it('shows known worker rows for a complete response', async () => {
+    stubFetch({ sessionsPayload: { items: [knownWorker], total: 1 } });
+    const workers = renderWorkersPage();
+
+    expect(await workers.findByText('1 worker active across dashboard (1).')).toBeTruthy();
+    expect(workers.getByTitle('Open dashboard · polecat transcript')).toBeTruthy();
+    expect(workers.queryByText('Worker status unavailable.')).toBeNull();
+  });
+
+  it('shows checking worker status before session data arrives', async () => {
+    stubFetch({ sessionsPayload: { items: [], total: 0 } });
+    const workers = renderWorkersPage();
+
+    expect(workers.getByText('Checking worker status…')).toBeTruthy();
+    expect(workers.getByText('—')).toBeTruthy();
+    expect(workers.queryByText('No workers active right now.')).toBeNull();
+    expect(await workers.findByText('No workers active right now.')).toBeTruthy();
+  });
+
+  it('shows unavailable worker status when the session fetch fails without data', async () => {
+    stubFetch({
+      sessionsStatus: 503,
+      sessionsPayload: {
+        title: 'Service Unavailable',
+        status: 503,
+        detail: 'supervisor unavailable',
+      },
+    });
+    const workers = renderWorkersPage();
+
+    expect(await workers.findByText('Worker status unavailable.')).toBeTruthy();
+    expect(workers.getByText('—')).toBeTruthy();
+    expect(workers.queryByText('No workers active right now.')).toBeNull();
+  });
+});
+
+describe('AgentsPage (post-ay6 regressions)', () => {
   it('renders the alias as primary label and display_name as secondary (Orchestration shows "mayor", not "Claude (Account 5)")', async () => {
     render(
       <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>

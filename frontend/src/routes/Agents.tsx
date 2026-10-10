@@ -35,6 +35,7 @@ import {
   type AgentPendingInteraction,
 } from '../supervisor/agentPending';
 import { listSupervisorSessions } from '../supervisor/sessionReads';
+import { listIsIncomplete } from '../supervisor/listPartial';
 import { listSupervisorBeads } from '../supervisor/beadReads';
 import { listSupervisorAgents, type SupervisorAgent } from '../supervisor/agentReads';
 import {
@@ -480,7 +481,10 @@ export function AgentsPage() {
         sessions={sessionsCache.data?.items ?? []}
         sessionsLoading={sessionsCache.loading}
         sessionsError={sessionsCache.error}
-        sessionsPartial={sessionsCache.data?.partial === true}
+        sessionsPartial={
+          sessionsCache.data !== undefined &&
+          listIsIncomplete(sessionsCache.data, sessionsCache.data.items?.length ?? 0)
+        }
       />
 
       {/* The bottom roster is the "available agents" view — the mayor, PLs, and
