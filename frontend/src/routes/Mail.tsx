@@ -127,6 +127,7 @@ export function MailPage() {
   const [threadItems, setThreadItems] = useState<SupervisorMailItem[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const openedMessageParam = useRef<string | null>(null);
+  const dialogGeneration = useRef(0);
   const [replyBody, setReplyBody] = useState('');
   const [actionInFlight, setActionInFlight] = useState<MailAction | null>(null);
 
@@ -140,8 +141,26 @@ export function MailPage() {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [bulkInFlight, setBulkInFlight] = useState<'read' | 'unread' | null>(null);
 
+  const closeThread = useCallback(() => {
+    dialogGeneration.current += 1;
+    setThreadFor(null);
+    setThreadItems([]);
+    setThreadLoading(false);
+    setActionInFlight(null);
+  }, []);
+
+  useEffect(
+    () => () => {
+      dialogGeneration.current += 1;
+    },
+    [],
+  );
+
   const openThread = useCallback(
     async (mail: SupervisorMailItem) => {
+      const generation = ++dialogGeneration.current;
+      setThreadLoading(false);
+      setActionInFlight(null);
       setThreadFor(mail);
       setThreadItems([]);
       setReplyBody('');
@@ -155,11 +174,13 @@ export function MailPage() {
           operator,
           historyLimit,
         );
-        setThreadItems(data.items);
+        if (generation === dialogGeneration.current) setThreadItems(data.items);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'thread failed');
+        if (generation === dialogGeneration.current) {
+          setError(err instanceof Error ? err.message : 'thread failed');
+        }
       } finally {
-        setThreadLoading(false);
+        if (generation === dialogGeneration.current) setThreadLoading(false);
       }
     },
     [historyLimit, viewingAs.alias, operator],
@@ -184,42 +205,42 @@ export function MailPage() {
       // Defense-in-depth: the disabled buttons already block this, but a
       // keyboard/programmatic path must never reach a write the server 405s.
       if (readOnly) return;
+      const generation = dialogGeneration.current;
       setActionInFlight(action);
       setError(null);
       try {
         if (action === 'read') {
           await markSupervisorMailRead(message);
-          setThreadFor({ ...message, read: true });
+          if (generation === dialogGeneration.current) setThreadFor({ ...message, read: true });
         } else if (action === 'unread') {
           await markSupervisorMailUnread(message);
-          setThreadFor({ ...message, read: false });
+          if (generation === dialogGeneration.current) setThreadFor({ ...message, read: false });
         } else if (action === 'archive') {
           await archiveSupervisorMail(message);
-          setThreadFor(null);
-          setThreadItems([]);
+          if (generation === dialogGeneration.current) closeThread();
         } else {
           const body = replyBody.trim();
           if (body.length === 0) return;
           await replySupervisorMail(message, { body }, operator.operatorWireAlias);
-          setReplyBody('');
-          if (message.thread_id) {
+          if (generation === dialogGeneration.current) setReplyBody('');
+          if (generation === dialogGeneration.current && message.thread_id) {
             const data = await fetchSupervisorMailThread(
               message.thread_id,
               viewingAs.alias,
               operator,
               historyLimit,
             );
-            setThreadItems(data.items);
+            if (generation === dialogGeneration.current) setThreadItems(data.items);
           }
         }
         await refresh();
       } catch (err) {
         setError(formatApiError(err, `${action} failed`));
       } finally {
-        setActionInFlight(null);
+        if (generation === dialogGeneration.current) setActionInFlight(null);
       }
     },
-    [historyLimit, readOnly, refresh, replyBody, threadFor, viewingAs.alias, operator],
+    [closeThread, historyLimit, readOnly, refresh, replyBody, threadFor, viewingAs.alias, operator],
   );
 
   const columns = useMemo<ReadonlyArray<TableColumn<SupervisorMailItem>>>(
@@ -530,7 +551,7 @@ export function MailPage() {
 
       <Modal
         open={threadFor !== null}
-        onClose={() => setThreadFor(null)}
+        onClose={closeThread}
         title={threadFor?.subject ?? 'Thread'}
         caption={`Reading as ${aliasLabel}, ${threadItems.length} message(s)`}
         widthClass="max-w-3xl"
