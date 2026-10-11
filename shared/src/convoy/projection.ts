@@ -1,6 +1,7 @@
 import type { DashboardBead } from '../dashboard-beads.js';
 import type { RunFormulaSource } from '../run-detail.js';
 import { resolveRunFormulaIdentity } from '../runs/formula-name.js';
+import { isClosedStatus } from '../runs/status.js';
 
 // Dashboard-owned projection of a convoy (an end-to-end unit of work keyed by a
 // root bead) into the shape the /convoy/:rootBead route renders. It composes a
@@ -9,7 +10,6 @@ import { resolveRunFormulaIdentity } from '../runs/formula-name.js';
 // supervisor wire shape, and stays pure so the route's branching (materialized
 // steps vs the honest graph.v2 degradation) is unit-testable without the DOM.
 
-const CLOSED_STATUS = 'closed';
 const GRAPH_V2_CONTRACT = 'graph.v2';
 const FORMULA_CONTRACT_KEY = 'gc.formula_contract';
 const RUN_TARGET_KEY = 'gc.run_target';
@@ -142,13 +142,13 @@ function computeExposure(
 function toStep(bead: DashboardBead, statusById: ReadonlyMap<string, string>): ConvoyStep {
   const blockedBy = (bead.needs ?? []).filter((id) => {
     const status = statusById.get(id);
-    return status !== undefined && status !== CLOSED_STATUS;
+    return status !== undefined && !isClosedStatus(status);
   });
   return { bead, blockedBy, stepRef: metaString(bead, 'gc.step_ref') ?? null };
 }
 
 function deriveProgress(steps: readonly ConvoyStep[]): ConvoyProgressCounts {
-  const closed = steps.filter((step) => step.bead.status === CLOSED_STATUS).length;
+  const closed = steps.filter((step) => isClosedStatus(step.bead.status)).length;
   return { closed, total: steps.length };
 }
 
