@@ -14,9 +14,9 @@
   },
   "dependencies": {
     "@hey-api/client-fetch": "^0.13.1",
-    "express": "^4.21.2",
+    "express": "^4.22.3",
     "gas-city-dashboard-shared": "*",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
